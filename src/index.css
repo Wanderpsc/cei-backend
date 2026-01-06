@@ -1,0 +1,87 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+/* Importar fonte Inter do Google Fonts */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+body {
+  margin: 0;
+  font-family: 'Inter', 'Roboto', 'Segoe UI', 'Helvetica Neue', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background: linear-gradient(135deg, #f5f7fa 0%, #e8ecf1 100%);
+}
+
+#root {
+  min-height: 100vh;
+}
+
+/* Scrollbar personalizada */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+}
+
+/* Estilos de impressão para o diagrama do sistema */
+@media print {
+  /* Ocultar elementos de navegação e botões */
+  header,
+  nav,
+  .MuiAppBar-root,
+  .MuiDrawer-root,
+  button,
+  .no-print {
+    display: none !important;
+  }
+
+  /* Ajustar layout para impressão */
+  body {
+    background-color: white !important;
+  }
+
+  /* Forçar quebra de página antes de seções importantes */
+  .page-break {
+    page-break-before: always;
+  }
+
+  /* Evitar quebra de página dentro de elementos */
+  .MuiCard-root,
+  .MuiPaper-root {
+    page-break-inside: avoid;
+  }
+
+  /* Ajustar cores para impressão */
+  .MuiPaper-root {
+    box-shadow: none !important;
+    border: 1px solid #ddd !important;
+  }
+
+  /* Ajustar tamanho de fonte */
+  pre {
+    font-size: 10px !important;
+  }
+
+  /* Garantir que o conteúdo use toda a página */
+  .MuiContainer-root {
+    max-width: 100% !important;
+    padding: 0 !important;
+  }
+}
+

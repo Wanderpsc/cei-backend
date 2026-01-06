@@ -1,0 +1,180 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# .gitignore - Sistema CEI
+# © 2026 Wander Pires Silva Coelho - Todos os direitos reservados
+# ═══════════════════════════════════════════════════════════════════════════
+
+# ═══════════════════════════════════════════════════════════════════════════
+# ARQUIVOS SENSÍVEIS - NUNCA COMMITAR
+# ═══════════════════════════════════════════════════════════════════════════
+
+# Variáveis de ambiente
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Chaves e credenciais
+*.key
+*.pem
+*.p12
+*.pfx
+credentials.json
+secrets.json
+
+# ═══════════════════════════════════════════════════════════════════════════
+# NODE.JS
+# ═══════════════════════════════════════════════════════════════════════════
+
+# Dependências
+node_modules/
+jspm_packages/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+
+# Cache
+.npm
+.eslintcache
+.stylelintcache
+.node_repl_history
+
+# ═══════════════════════════════════════════════════════════════════════════
+# REACT
+# ═══════════════════════════════════════════════════════════════════════════
+
+# Build
+build/
+dist/
+.cache/
+
+# Testing
+coverage/
+.nyc_output/
+
+# Misc
+.DS_Store
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# ═══════════════════════════════════════════════════════════════════════════
+# IDEs E EDITORES
+# ═══════════════════════════════════════════════════════════════════════════
+
+# Visual Studio Code
+.vscode/
+!.vscode/extensions.json
+!.vscode/settings.json (público)
+*.code-workspace
+
+# IntelliJ IDEA
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# Eclipse
+.project
+.classpath
+.settings/
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# ═══════════════════════════════════════════════════════════════════════════
+# SISTEMA OPERACIONAL
+# ═══════════════════════════════════════════════════════════════════════════
+
+# MacOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+*~
+.directory
+
+# ═══════════════════════════════════════════════════════════════════════════
+# BACKUPS E TEMPORÁRIOS
+# ═══════════════════════════════════════════════════════════════════════════
+
+# Backups
+*.backup
+*.bak
+*.swp
+*.swo
+*.tmp
+*~
+.backup/
+
+# Arquivos temporários
+temp/
+tmp/
+*.temp
+
+# ═══════════════════════════════════════════════════════════════════════════
+# BANCO DE DADOS
+# ═══════════════════════════════════════════════════════════════════════════
+
+# SQLite
+*.sqlite
+*.sqlite3
+*.db
+
+# Dumps
+*.sql
+*.dump
+
+# ═══════════════════════════════════════════════════════════════════════════
+# DOCUMENTOS PESSOAIS (NÃO COMMITAR)
+# ═══════════════════════════════════════════════════════════════════════════
+
+# Documentos com dados pessoais
+*CPF*
+*RG*
+*CNH*
+documentos_pessoais/
+contratos_confidenciais/
+
+# ═══════════════════════════════════════════════════════════════════════════
+# ARQUIVOS GERADOS AUTOMATICAMENTE
+# ═══════════════════════════════════════════════════════════════════════════
+
+# Package managers
+package-lock.json (opcional - descomentar se não quiser versionar)
+yarn.lock (opcional)
+pnpm-lock.yaml (opcional)
+
+# ═══════════════════════════════════════════════════════════════════════════
+# NOTAS
+# ═══════════════════════════════════════════════════════════════════════════
+
+# Este .gitignore protege arquivos sensíveis e dados pessoais
+# Sempre revisar antes de fazer commit
+# Use 'git status' para ver o que será commitado
+# Use 'git add -p' para adicionar arquivos interativamente
+
+# Em caso de commit acidental de dados sensíveis:
+# 1. git rm --cached arquivo_sensivel.ext
+# 2. git commit -m "Remove arquivo sensível"
+# 3. git push
+# 4. Trocar todas as credenciais expostas imediatamente
+
+# ═══════════════════════════════════════════════════════════════════════════
