@@ -30,14 +30,17 @@ export const LicenseProvider = ({ children }) => {
 
   // Verificar autorização ao carregar
   useEffect(() => {
-    checkAuthorization();
+    // LICENCIAMENTO DESABILITADO TEMPORARIAMENTE
+    // Sistema configurado como sempre autorizado
+    setIsAuthorized(true);
+    setIsLoading(false);
     
-    // Verificar periodicamente (a cada 5 minutos)
-    const interval = setInterval(() => {
-      checkAuthorization(true); // silent check
-    }, 5 * 60 * 1000);
-
-    return () => clearInterval(interval);
+    // Comentado: checkAuthorization();
+    // Comentado: Verificar periodicamente (a cada 5 minutos)
+    // const interval = setInterval(() => {
+    //   checkAuthorization(true); // silent check
+    // }, 5 * 60 * 1000);
+    // return () => clearInterval(interval);
   }, []);
 
   /**
