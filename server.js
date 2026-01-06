@@ -28,7 +28,19 @@ app.use(cors({
 app.use(express.json());
 app.use(securityMiddleware); // Middleware de segurança
 
+// Verificar variáveis de ambiente críticas
+console.log('🔧 Verificando configurações...');
+console.log('MERCADOPAGO_ACCESS_TOKEN:', process.env.MERCADOPAGO_ACCESS_TOKEN ? '✅ Configurado' : '❌ FALTANDO');
+console.log('MERCADOPAGO_PUBLIC_KEY:', process.env.MERCADOPAGO_PUBLIC_KEY ? '✅ Configurado' : '❌ FALTANDO');
+console.log('FRONTEND_URL:', process.env.FRONTEND_URL || 'Não configurado');
+console.log('NODE_ENV:', process.env.NODE_ENV || 'development');
+
 // Configurar Mercado Pago SDK v2
+if (!process.env.MERCADOPAGO_ACCESS_TOKEN) {
+  console.error('❌ ERRO CRÍTICO: MERCADOPAGO_ACCESS_TOKEN não está configurado!');
+  console.error('Configure as variáveis de ambiente no Render.');
+}
+
 const client = new MercadoPagoConfig({ 
   accessToken: process.env.MERCADOPAGO_ACCESS_TOKEN,
   options: { timeout: 5000 }
@@ -341,6 +353,17 @@ app.post('/api/create-pix-payment', async (req, res) => {
     console.log('📱 Criando pagamento PIX...');
     console.log('Valor:', amount);
     console.log('Email:', email);
+    console.log('Token configurado:', !!process.env.MERCADOPAGO_ACCESS_TOKEN);
+
+    // Verificar se o Mercado Pago está configurado
+    if (!process.env.MERCADOPAGO_ACCESS_TOKEN) {
+      console.error('❌ MERCADOPAGO_ACCESS_TOKEN não configurado');
+      return res.status(500).json({ 
+        success: false, 
+        error: 'Mercado Pago não configurado. Configure as variáveis de ambiente no Render.',
+        details: 'MERCADOPAGO_ACCESS_TOKEN ausente'
+      });
+    }
 
     const body = {
       transaction_amount: parseFloat(amount),
@@ -358,6 +381,7 @@ app.post('/api/create-pix-payment', async (req, res) => {
       external_reference: instituicaoId // Para identificar depois
     };
 
+    console.log('📤 Enviando para Mercado Pago...');
     const response = await payment.create({ body });
 
     console.log('✅ PIX criado:', response.id);
@@ -374,9 +398,12 @@ app.post('/api/create-pix-payment', async (req, res) => {
 
   } catch (error) {
     console.error('❌ Erro ao criar PIX:', error);
+    console.error('Detalhes do erro:', error.message);
+    console.error('Stack:', error.stack);
     res.status(500).json({ 
       success: false, 
-      error: error.message 
+      error: error.message,
+      details: error.cause?.message || 'Erro desconhecido'
     });
   }
 });
@@ -421,6 +448,17 @@ app.post('/api/create-card-payment', async (req, res) => {
     console.log('💳 Criando pagamento com cartão...');
     console.log('Valor:', amount);
     console.log('Parcelas:', installments);
+    console.log('Token configurado:', !!process.env.MERCADOPAGO_ACCESS_TOKEN);
+
+    // Verificar se o Mercado Pago está configurado
+    if (!process.env.MERCADOPAGO_ACCESS_TOKEN) {
+      console.error('❌ MERCADOPAGO_ACCESS_TOKEN não configurado');
+      return res.status(500).json({ 
+        success: false, 
+        error: 'Mercado Pago não configurado. Configure as variáveis de ambiente no Render.',
+        details: 'MERCADOPAGO_ACCESS_TOKEN ausente'
+      });
+    }
 
     const body = {
       transaction_amount: parseFloat(amount),
@@ -440,6 +478,7 @@ app.post('/api/create-card-payment', async (req, res) => {
       external_reference: instituicaoId
     };
 
+    console.log('📤 Enviando para Mercado Pago...');
     const response = await payment.create({ body });
 
     console.log('✅ Pagamento criado:', response.id);
@@ -457,9 +496,12 @@ app.post('/api/create-card-payment', async (req, res) => {
 
   } catch (error) {
     console.error('❌ Erro ao processar cartão:', error);
+    console.error('Detalhes do erro:', error.message);
+    console.error('Stack:', error.stack);
     res.status(500).json({ 
       success: false, 
-      error: error.message 
+      error: error.message,
+      details: error.cause?.message || 'Erro desconhecido'
     });
   }
 });
