@@ -377,9 +377,15 @@ app.post('/api/create-pix-payment', async (req, res) => {
           number: cpf
         }
       },
-      notification_url: `${process.env.BACKEND_URL}/api/webhooks`,
       external_reference: instituicaoId // Para identificar depois
     };
+
+    // Adicionar notification_url apenas se estiver configurado
+    const backendUrl = process.env.BACKEND_URL || 'https://cei-backend-nst1.onrender.com';
+    if (backendUrl && backendUrl.startsWith('http')) {
+      body.notification_url = `${backendUrl}/api/webhooks`;
+      console.log('Notification URL:', body.notification_url);
+    }
 
     console.log('📤 Enviando para Mercado Pago...');
     const response = await payment.create({ body });
@@ -474,9 +480,15 @@ app.post('/api/create-card-payment', async (req, res) => {
           number: cpf
         }
       },
-      notification_url: `${process.env.BACKEND_URL}/api/webhooks`,
       external_reference: instituicaoId
     };
+
+    // Adicionar notification_url apenas se estiver configurado
+    const backendUrl = process.env.BACKEND_URL || 'https://cei-backend-nst1.onrender.com';
+    if (backendUrl && backendUrl.startsWith('http')) {
+      body.notification_url = `${backendUrl}/api/webhooks`;
+      console.log('Notification URL:', body.notification_url);
+    }
 
     console.log('📤 Enviando para Mercado Pago...');
     const response = await payment.create({ body });
