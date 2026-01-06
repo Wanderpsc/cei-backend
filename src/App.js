@@ -56,17 +56,13 @@ function PrivateRoute({ children }) {
 function AppRoutes() {
   return (
     <Routes>
-      {/* Rotas públicas (sem proteção) */}
+      {/* Rotas públicas (sem proteção de licença) */}
+      <Route path="/login" element={<LoginPage />} />
       <Route path="/ativar-licenca" element={<AtivarLicencaPage />} />
       <Route path="/termos-de-uso" element={<TermosDeUsoPage />} />
-      
-      {/* Rotas de cadastro/pagamento (com proteção de licença) */}
-      <Route path="/cadastro-escola" element={<ProtectedRoute><CadastroEscolaPage /></ProtectedRoute>} />
-      <Route path="/pagamento" element={<ProtectedRoute><PagamentoPage /></ProtectedRoute>} />
-      <Route path="/pagamento-sucesso" element={<ProtectedRoute><PagamentoSucessoPage /></ProtectedRoute>} />
-      
-      {/* Login (com proteção de licença) */}
-      <Route path="/login" element={<ProtectedRoute><LoginPage /></ProtectedRoute>} />
+      <Route path="/cadastro-escola" element={<CadastroEscolaPage />} />
+      <Route path="/pagamento" element={<PagamentoPage />} />
+      <Route path="/pagamento-sucesso" element={<PagamentoSucessoPage />} />
       
       {/* Rotas privadas (requerem login + licença) */}
       <Route path="/" element={<PrivateRoute><DashboardPage /></PrivateRoute>} />
