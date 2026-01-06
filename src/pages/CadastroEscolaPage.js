@@ -30,6 +30,7 @@ export default function CadastroEscolaPage() {
     // Dados da Instituição
     nomeInstituicao: '',
     cnpj: '',
+    inep: '',
     telefone: '',
     email: '',
     endereco: '',
@@ -418,6 +419,17 @@ export default function CadastroEscolaPage() {
                   placeholder="99.999.999/9999-99"
                   helperText="Formato: 99.999.999/9999-99"
                   inputProps={{ maxLength: 18 }}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  label="Código INEP"
+                  fullWidth
+                  value={formData.inep}
+                  onChange={handleChange('inep')}
+                  placeholder="12345678"
+                  helperText="Código de 8 dígitos (opcional)"
+                  inputProps={{ maxLength: 8 }}
                 />
               </Grid>
               <Grid item xs={12} sm={6}>
