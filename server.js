@@ -377,15 +377,11 @@ app.post('/api/create-pix-payment', async (req, res) => {
           number: cpf
         }
       },
-      external_reference: instituicaoId // Para identificar depois
+      external_reference: instituicaoId
     };
 
-    // Adicionar notification_url apenas se estiver configurado
-    const backendUrl = process.env.BACKEND_URL || 'https://cei-backend-nst1.onrender.com';
-    if (backendUrl && backendUrl.startsWith('http')) {
-      body.notification_url = `${backendUrl}/api/webhooks`;
-      console.log('Notification URL:', body.notification_url);
-    }
+    // notification_url removido temporariamente para evitar erros
+    // O webhook pode ser configurado no painel do Mercado Pago
 
     console.log('📤 Enviando para Mercado Pago...');
     const response = await payment.create({ body });
@@ -471,7 +467,7 @@ app.post('/api/create-card-payment', async (req, res) => {
       token: cardToken,
       description: `Sistema CEI - ${plano}`,
       installments: parseInt(installments),
-      payment_method_id: 'visa', // Será detectado automaticamente pelo token
+      payment_method_id: 'visa',
       payer: {
         email: email,
         first_name: nome,
@@ -483,12 +479,8 @@ app.post('/api/create-card-payment', async (req, res) => {
       external_reference: instituicaoId
     };
 
-    // Adicionar notification_url apenas se estiver configurado
-    const backendUrl = process.env.BACKEND_URL || 'https://cei-backend-nst1.onrender.com';
-    if (backendUrl && backendUrl.startsWith('http')) {
-      body.notification_url = `${backendUrl}/api/webhooks`;
-      console.log('Notification URL:', body.notification_url);
-    }
+    // notification_url removido temporariamente para evitar erros
+    // O webhook pode ser configurado no painel do Mercado Pago
 
     console.log('📤 Enviando para Mercado Pago...');
     const response = await payment.create({ body });
