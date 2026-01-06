@@ -557,6 +557,31 @@ app.get('/api/health', (req, res) => {
 });
 
 // ==========================================
+// DIAGNÓSTICO - Verificar configuração
+// ==========================================
+app.get('/api/diagnostico', (req, res) => {
+  const diagnostico = {
+    status: 'OK',
+    timestamp: new Date().toISOString(),
+    environment: {
+      NODE_ENV: process.env.NODE_ENV || 'não configurado',
+      BACKEND_PORT: process.env.BACKEND_PORT || 'não configurado',
+      FRONTEND_URL: process.env.FRONTEND_URL || 'não configurado',
+      MERCADOPAGO_ACCESS_TOKEN: process.env.MERCADOPAGO_ACCESS_TOKEN ? '✅ Configurado (começa com: ' + process.env.MERCADOPAGO_ACCESS_TOKEN.substring(0, 10) + '...)' : '❌ FALTANDO',
+      MERCADOPAGO_PUBLIC_KEY: process.env.MERCADOPAGO_PUBLIC_KEY ? '✅ Configurado (começa com: ' + process.env.MERCADOPAGO_PUBLIC_KEY.substring(0, 10) + '...)' : '❌ FALTANDO'
+    },
+    mercadoPagoSDK: {
+      configured: !!process.env.MERCADOPAGO_ACCESS_TOKEN,
+      ready: typeof payment !== 'undefined'
+    }
+  };
+
+  console.log('🔍 Diagnóstico solicitado:', diagnostico);
+  
+  res.json(diagnostico);
+});
+
+// ==========================================
 // INICIAR SERVIDOR
 // ==========================================
 const PORT = process.env.BACKEND_PORT || 3001;
