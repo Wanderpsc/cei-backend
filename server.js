@@ -467,26 +467,41 @@ app.post('/api/create-card-payment', async (req, res) => {
       token: cardToken,
       description: `Sistema CEI - ${plano}`,
       installments: parseInt(installments),
-      payment_method_id: 'visa',
+      // payment_method_id será detectado automaticamente pelo token
       payer: {
         email: email,
-        first_name: nome,
+        first_name: nome.split(' ')[0] || nome,
+        last_name: nome.split(' ').slice(1).join(' ') || nome,
         identification: {
           type: 'CPF',
-          number: cpf
+          number: cpf.replace(/\D/g, '')
         }
       },
-      external_reference: instituicaoId
+      external_reference: instituicaoId,
+      statement_descriptor: 'SISTEMA CEI'
     };
 
-    // notification_url removido temporariamente para evitar erros
-    // O webhook pode ser configurado no painel do Mercado Pago
-
     console.log('📤 Enviando para Mercado Pago...');
+    console.log('Body (sem token):', JSON.stringify({...body, token: 'HIDDEN'}, null, 2));
+    
     const response = await payment.create({ body });
 
     console.log('✅ Pagamento criado:', response.id);
     console.log('Status:', response.status);
+    console.log('Status Detail:', response.status_detail);
+    
+    if (response.status === 'rejected') {
+      console.log('❌ Pagamento rejeitado:', response.status_detail);
+      return res.json({
+        success: false,
+        payment: {
+          id: response.id,
+          status: response.status,
+          status_detail: response.status_detail
+        },
+        error: getErrorMessage(response.status_detail)
+      });
+    }
 
     res.json({
       success: true,
@@ -494,21 +509,57 @@ app.post('/api/create-card-payment', async (req, res) => {
         id: response.id,
         status: response.status,
         status_detail: response.status_detail,
-        installments: response.installments
+        installments: response.installments,
+        amount: response.transaction_amount
       }
     });
 
   } catch (error) {
     console.error('❌ Erro ao processar cartão:', error);
     console.error('Detalhes do erro:', error.message);
-    console.error('Stack:', error.stack);
+    
+    // Extrair mensagem mais específica do erro do Mercado Pago
+    let errorMessage = 'Erro ao processar pagamento';
+    let errorDetails = error.message;
+    
+    if (error.cause) {
+      console.error('Causa:', JSON.stringify(error.cause, null, 2));
+      errorDetails = error.cause.message || JSON.stringify(error.cause);
+    }
+    
+    if (error.message.includes('invalid_token')) {
+      errorMessage = 'Token do cartão inválido. Verifique os dados e tente novamente.';
+    } else if (error.message.includes('amount')) {
+      errorMessage = 'Valor inválido. Tente novamente.';
+    } else if (error.message.includes('card')) {
+      errorMessage = 'Dados do cartão inválidos. Verifique as informações.';
+    }
+    
     res.status(500).json({ 
       success: false, 
-      error: error.message,
-      details: error.cause?.message || 'Erro desconhecido'
+      error: errorMessage,
+      details: errorDetails
     });
   }
 });
+
+// Função auxiliar para mensagens de erro mais amigáveis
+function getErrorMessage(statusDetail) {
+  const messages = {
+    'cc_rejected_insufficient_amount': 'Cartão sem saldo suficiente',
+    'cc_rejected_bad_filled_card_number': 'Número do cartão incorreto',
+    'cc_rejected_bad_filled_date': 'Data de validade incorreta',
+    'cc_rejected_bad_filled_security_code': 'Código de segurança incorreto',
+    'cc_rejected_call_for_authorize': 'Entre em contato com sua operadora',
+    'cc_rejected_card_disabled': 'Cartão desabilitado',
+    'cc_rejected_duplicated_payment': 'Pagamento duplicado',
+    'cc_rejected_high_risk': 'Pagamento recusado por segurança',
+    'cc_rejected_invalid_installments': 'Parcelamento não disponível',
+    'cc_rejected_max_attempts': 'Número máximo de tentativas excedido'
+  };
+  
+  return messages[statusDetail] || 'Pagamento recusado. Verifique os dados do cartão.';
+}
 
 // ==========================================
 // WEBHOOK - NOTIFICAÇÕES DO MERCADO PAGO
