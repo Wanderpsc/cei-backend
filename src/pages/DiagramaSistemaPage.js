@@ -78,7 +78,7 @@ export default function DiagramaSistemaPage() {
               CEI - Controle Escolar Inteligente
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              Versão 1.0.0 | Data: 05 de Janeiro de 2026
+              Versão 2.2.0 | Data: 07 de Janeiro de 2026
             </Typography>
             
             {/* Aviso de Autenticidade */}
@@ -209,6 +209,8 @@ export default function DiagramaSistemaPage() {
                   </Typography>
                   <Typography variant="body2">
                     <strong>Mercado Pago:</strong> Gateway de pagamento (PIX, Cartão, Boleto)<br />
+                    <strong>Google Books API:</strong> Busca automática de dados de livros por ISBN<br />
+                    <strong>html5-qrcode:</strong> Leitura de QR Code e códigos de barras<br />
                     <strong>E-mail:</strong> Notificações automáticas (futuro)<br />
                     <strong>Webhooks:</strong> Confirmação de pagamentos
                   </Typography>
@@ -238,6 +240,8 @@ export default function DiagramaSistemaPage() {
                       <Chip label="React 19.2.3" color="primary" size="small" />
                       <Chip label="React Router 7.11.0" color="primary" size="small" />
                       <Chip label="Material-UI 7.3.6" color="primary" size="small" />
+                      <Chip label="html5-qrcode 2.3.8" color="primary" size="small" />
+                      <Chip label="axios (HTTP Client)" color="primary" size="small" />
                       <Chip label="JavaScript ES6+" color="primary" size="small" />
                       <Chip label="HTML5 + CSS3" color="primary" size="small" />
                     </Stack>
@@ -406,7 +410,9 @@ export default function DiagramaSistemaPage() {
 ├── 📂 src/                        # Código-fonte React
 │   ├── 📂 components/             # Componentes reutilizáveis
 │   │   ├── Layout.js              # Layout principal (menu)
-│   │   └── ContratoModal.js       # Modal de contrato
+│   │   ├── ContratoModal.js       # Modal de contrato
+│   │   ├── BarcodeScannerDialog.js # Scanner QR/Barcode
+│   │   └── TermoDoacao.js         # Termo doação livros
 │   │
 │   ├── 📂 context/                # Context API (Estado global)
 │   │   └── DataContext.js         # Gerenciamento de dados
@@ -414,12 +420,15 @@ export default function DiagramaSistemaPage() {
 │   ├── 📂 pages/                  # Páginas da aplicação
 │   │   ├── LoginPage.js           # Tela de login
 │   │   ├── DashboardPage.js       # Dashboard principal
-│   │   ├── LivrosPage.js          # Gestão de livros
+│   │   ├── LivrosPage.js          # Gestão de livros + Scanner
+│   │   ├── RelatoriosLivrosPage.js # Relatórios didáticos/paradidáticos
+│   │   ├── ClubeDeLeituraPage.js  # Clube leitura + Ranking
 │   │   ├── ClientesPage.js        # Cadastro de alunos
 │   │   ├── EmprestimosPage.js     # Controle empréstimos
 │   │   ├── PatrimonioPage.js      # Controle patrimônio
-│   │   ├── RelatoriosPage.js      # Relatórios
+│   │   ├── RelatoriosPage.js      # Relatórios gerais
 │   │   ├── FinanceiroPage.js      # Financeiro escola
+│   │   ├── NotaFiscalPage.js      # Emissão NF-e ISS
 │   │   ├── CadastroEscolaPage.js  # Cadastro instituição
 │   │   ├── PagamentoPage.js       # Processamento pagamento
 │   │   ├── TermosDeUsoPage.js     # Termos e políticas
@@ -475,7 +484,15 @@ export default function DiagramaSistemaPage() {
                 },
                 {
                   modulo: 'Livros',
-                  funcoes: ['Cadastro completo de acervo', 'ISBN, autor, editora', 'Categorização por gênero', 'Controle de exemplares']
+                  funcoes: ['Cadastro completo de acervo', 'Scanner QR/Barcode (ISBN)', 'Google Books API integrada', 'Tipos: Didático/Paradidático', 'Controle de vigência', 'Sistema de baixa (doação/término)']
+                },
+                {
+                  modulo: 'Clube de Leitura',
+                  funcoes: ['Gamificação de leitura', 'Registro com foto do aluno', '3 perguntas de compreensão', 'Sistema de avaliação (estrelas)', 'Ranking de leitores', 'Medalhas (🥇🥈🥉)', 'Histórico completo']
+                },
+                {
+                  modulo: 'Relatórios de Livros',
+                  funcoes: ['Separação didáticos/paradidáticos', 'Controle de vigência', 'Alertas de vencimento', 'Histórico de baixas', 'Estatísticas por tipo']
                 },
                 {
                   modulo: 'Empréstimos',
@@ -496,6 +513,10 @@ export default function DiagramaSistemaPage() {
                 {
                   modulo: 'Financeiro',
                   funcoes: ['Controle de multas', 'Receitas e despesas', 'Planos de assinatura', 'Integração Mercado Pago']
+                },
+                {
+                  modulo: 'Notas Fiscais (ISS)',
+                  funcoes: ['Emissão de NF-e de serviço', 'Cálculo automático de ISS', 'Dados da instituição (CNPJ)', 'Dados do tomador (cliente)', 'Documento formatado', 'Impressão profissional', 'Controle municipal de impostos']
                 },
                 {
                   modulo: 'Busca',
@@ -552,7 +573,7 @@ export default function DiagramaSistemaPage() {
               <Grid item xs={12} md={4}>
                 <Card variant="outlined" sx={{ textAlign: 'center', p: 2 }}>
                   <Typography variant="h3" color="primary" fontWeight="bold">
-                    15+
+                    18+
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
                     Páginas Funcionais
@@ -594,6 +615,163 @@ export default function DiagramaSistemaPage() {
 
           <Divider sx={{ my: 4 }} />
 
+          {/* 8. INOVAÇÕES TECNOLÓGICAS - VERSÃO 2.2 */}
+          <Box sx={{ mb: 4 }}>
+            <Typography variant="h4" fontWeight="bold" gutterBottom sx={{ color: 'success.main' }}>
+              ⭐ 8. INOVAÇÕES TECNOLÓGICAS (Versão 2.2.0)
+            </Typography>
+
+            <Alert severity="success" sx={{ mb: 3 }}>
+              <Typography variant="subtitle1" fontWeight="bold">
+                🚀 Atualizações Recentes - Janeiro 2026
+              </Typography>
+              <Typography variant="body2">
+                O sistema foi expandido com funcionalidades avançadas de gamificação, automação e gestão fiscal.
+              </Typography>
+            </Alert>
+
+            <Grid container spacing={3}>
+              {/* Scanner de Códigos */}
+              <Grid item xs={12} md={6}>
+                <Card variant="outlined" sx={{ height: '100%', borderColor: 'primary.main', borderWidth: 2 }}>
+                  <CardContent>
+                    <Typography variant="h6" fontWeight="bold" gutterBottom color="primary">
+                      📷 Scanner QR Code / Código de Barras
+                    </Typography>
+                    <Typography variant="body2" paragraph>
+                      <strong>Tecnologia:</strong> html5-qrcode 2.3.8 + Google Books API
+                    </Typography>
+                    <Typography variant="body2" component="div">
+                      <strong>Funcionalidades:</strong>
+                      <ul style={{ marginTop: 8, paddingLeft: 20 }}>
+                        <li>Leitura de QR Code em tempo real</li>
+                        <li>Leitura de códigos de barras EAN-13/EAN-8</li>
+                        <li>Busca automática por ISBN na Google Books</li>
+                        <li>Preenchimento automático de dados do livro</li>
+                        <li>Acesso direto à câmera do dispositivo</li>
+                        <li>Interface responsiva mobile-first</li>
+                      </ul>
+                    </Typography>
+                    <Chip label="NOVO" color="success" size="small" sx={{ mt: 1 }} />
+                  </CardContent>
+                </Card>
+              </Grid>
+
+              {/* Clube de Leitura */}
+              <Grid item xs={12} md={6}>
+                <Card variant="outlined" sx={{ height: '100%', borderColor: 'warning.main', borderWidth: 2 }}>
+                  <CardContent>
+                    <Typography variant="h6" fontWeight="bold" gutterBottom color="warning.dark">
+                      🏆 Clube de Leitura (Gamificação)
+                    </Typography>
+                    <Typography variant="body2" paragraph>
+                      <strong>Conceito:</strong> Sistema de premiação e engajamento de leitores
+                    </Typography>
+                    <Typography variant="body2" component="div">
+                      <strong>Recursos:</strong>
+                      <ul style={{ marginTop: 8, paddingLeft: 20 }}>
+                        <li>Registro de leitura com foto do aluno</li>
+                        <li>3 perguntas de compreensão textual</li>
+                        <li>Sistema de avaliação com estrelas (1-5)</li>
+                        <li>Ranking dinâmico de leitores</li>
+                        <li>Medalhas para TOP 3 (🥇🥈🥉)</li>
+                        <li>Histórico completo de leituras</li>
+                        <li>Incentivo à leitura através de premiação</li>
+                      </ul>
+                    </Typography>
+                    <Chip label="NOVO" color="success" size="small" sx={{ mt: 1 }} />
+                  </CardContent>
+                </Card>
+              </Grid>
+
+              {/* Gestão Avançada de Livros */}
+              <Grid item xs={12} md={6}>
+                <Card variant="outlined" sx={{ height: '100%', borderColor: 'info.main', borderWidth: 2 }}>
+                  <CardContent>
+                    <Typography variant="h6" fontWeight="bold" gutterBottom color="info.dark">
+                      📚 Gestão Avançada de Livros
+                    </Typography>
+                    <Typography variant="body2" paragraph>
+                      <strong>Classificação:</strong> Didáticos vs. Paradidáticos
+                    </Typography>
+                    <Typography variant="body2" component="div">
+                      <strong>Novos Controles:</strong>
+                      <ul style={{ marginTop: 8, paddingLeft: 20 }}>
+                        <li><strong>Tipo:</strong> Didático ou Paradidático</li>
+                        <li><strong>Vigência:</strong> Ano de validade (didáticos)</li>
+                        <li><strong>Alertas:</strong> Livros vencidos ou vencendo</li>
+                        <li><strong>Baixa:</strong> Doação ou término de vigência</li>
+                        <li><strong>Termo de Doação:</strong> Documento legal formatado</li>
+                        <li><strong>Relatórios:</strong> Separados por tipo</li>
+                        <li><strong>Rastreabilidade:</strong> Histórico completo</li>
+                      </ul>
+                    </Typography>
+                    <Chip label="NOVO" color="success" size="small" sx={{ mt: 1 }} />
+                  </CardContent>
+                </Card>
+              </Grid>
+
+              {/* Notas Fiscais ISS */}
+              <Grid item xs={12} md={6}>
+                <Card variant="outlined" sx={{ height: '100%', borderColor: 'error.main', borderWidth: 2 }}>
+                  <CardContent>
+                    <Typography variant="h6" fontWeight="bold" gutterBottom color="error.dark">
+                      🧾 Emissão de Notas Fiscais (ISS)
+                    </Typography>
+                    <Typography variant="body2" paragraph>
+                      <strong>Finalidade:</strong> Controle fiscal e emissão de NF de serviço
+                    </Typography>
+                    <Typography variant="body2" component="div">
+                      <strong>Características:</strong>
+                      <ul style={{ marginTop: 8, paddingLeft: 20 }}>
+                        <li>Dados automáticos da instituição (CNPJ)</li>
+                        <li>Seleção de cliente/tomador</li>
+                        <li>Cálculo automático de ISS municipal</li>
+                        <li>Alíquota configurável (padrão 2%)</li>
+                        <li>Discriminação detalhada do serviço</li>
+                        <li>Documento formatado profissionalmente</li>
+                        <li>Impressão e controle de receitas</li>
+                        <li>Dashboard com total de ISS retido</li>
+                      </ul>
+                    </Typography>
+                    <Chip label="NOVO" color="success" size="small" sx={{ mt: 1 }} />
+                  </CardContent>
+                </Card>
+              </Grid>
+            </Grid>
+
+            {/* Resumo Técnico das Inovações */}
+            <Paper elevation={3} sx={{ mt: 3, p: 3, bgcolor: '#e8f5e9' }}>
+              <Typography variant="h6" fontWeight="bold" gutterBottom color="success.dark">
+                📊 Resumo Técnico das Inovações
+              </Typography>
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={6} md={3}>
+                  <Typography variant="body2" align="center">
+                    <strong>4</strong><br />Módulos Novos
+                  </Typography>
+                </Grid>
+                <Grid item xs={12} sm={6} md={3}>
+                  <Typography variant="body2" align="center">
+                    <strong>2</strong><br />APIs Integradas
+                  </Typography>
+                </Grid>
+                <Grid item xs={12} sm={6} md={3}>
+                  <Typography variant="body2" align="center">
+                    <strong>3</strong><br />Componentes React
+                  </Typography>
+                </Grid>
+                <Grid item xs={12} sm={6} md={3}>
+                  <Typography variant="body2" align="center">
+                    <strong>+30</strong><br />Novas Funcionalidades
+                  </Typography>
+                </Grid>
+              </Grid>
+            </Paper>
+          </Box>
+
+          <Divider sx={{ my: 4 }} />
+
           {/* Rodapé com Autenticidade */}
           <Box sx={{ mt: 6, p: 3, bgcolor: '#f5f5f5', borderRadius: 2, border: '2px solid #1976d2' }}>
             <Typography variant="h5" fontWeight="bold" align="center" color="primary" gutterBottom>
@@ -606,7 +784,7 @@ export default function DiagramaSistemaPage() {
               <Grid item xs={12} md={6}>
                 <Typography variant="body2">
                   <strong>Sistema:</strong> CEI - Controle Escolar Inteligente<br />
-                  <strong>Versão:</strong> 1.0.0<br />
+                  <strong>Versão:</strong> 2.2.0<br />
                   <strong>Data de Criação:</strong> Janeiro de 2026<br />
                   <strong>Tipo:</strong> Software Proprietário (SaaS)<br />
                   <strong>Modalidade:</strong> Web Application

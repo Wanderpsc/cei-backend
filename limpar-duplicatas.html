@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Limpeza de Duplicatas - CEI</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            padding: 40px;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            max-width: 600px;
+            width: 100%;
+        }
+        
+        h1 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+        
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+        
+        .info-box {
+            background: #f0f4ff;
+            border-left: 4px solid #667eea;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+        }
+        
+        .info-box h3 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 16px;
+        }
+        
+        .stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin: 20px 0;
+        }
+        
+        .stat-card {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
+        }
+        
+        .stat-card .label {
+            color: #666;
+            font-size: 12px;
+            margin-bottom: 5px;
+        }
+        
+        .stat-card .value {
+            color: #667eea;
+            font-size: 32px;
+            font-weight: bold;
+        }
+        
+        .stat-card.danger .value {
+            color: #e74c3c;
+        }
+        
+        .stat-card.success .value {
+            color: #27ae60;
+        }
+        
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        
+        button {
+            flex: 1;
+            padding: 15px;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+        
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+        
+        .btn-danger {
+            background: #e74c3c;
+            color: white;
+        }
+        
+        .btn-success {
+            background: #27ae60;
+            color: white;
+        }
+        
+        .btn-secondary {
+            background: #95a5a6;
+            color: white;
+        }
+        
+        .log {
+            background: #2c3e50;
+            color: #2ecc71;
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 20px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            max-height: 200px;
+            overflow-y: auto;
+            display: none;
+        }
+        
+        .log.show {
+            display: block;
+        }
+        
+        .log-line {
+            margin: 5px 0;
+        }
+        
+        .warning {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 8px;
+            color: #856404;
+        }
+        
+        .success-message {
+            background: #d4edda;
+            border-left: 4px solid #28a745;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 8px;
+            color: #155724;
+            display: none;
+        }
+        
+        .success-message.show {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧹 Limpeza de Duplicatas</h1>
+        <p class="subtitle">Sistema CEI - Controle Escolar Inteligente</p>
+        
+        <div class="info-box">
+            <h3>📊 Estatísticas Atuais</h3>
+            <div class="stats">
+                <div class="stat-card danger">
+                    <div class="label">Total de Instituições</div>
+                    <div class="value" id="totalInst">-</div>
+                </div>
+                <div class="stat-card">
+                    <div class="label">Duplicatas Detectadas</div>
+                    <div class="value" id="duplicatas">-</div>
+                </div>
+                <div class="stat-card">
+                    <div class="label">Usuários</div>
+                    <div class="value" id="totalUsers">-</div>
+                </div>
+                <div class="stat-card success">
+                    <div class="label">Após Limpeza</div>
+                    <div class="value" id="afterClean">-</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="warning">
+            ⚠️ <strong>Atenção:</strong> Esta operação irá remover TODAS as instituições duplicadas, mantendo apenas instituições com pagamento confirmado ou a primeira registrada.
+        </div>
+        
+        <div class="button-group">
+            <button class="btn-primary" onclick="analisarDados()">
+                🔍 Analisar Dados
+            </button>
+            <button class="btn-danger" onclick="limparDuplicatas()">
+                🧹 Limpar Duplicatas
+            </button>
+        </div>
+        
+        <div class="button-group">
+            <button class="btn-success" onclick="manterApenasValidas()">
+                ✅ Manter Apenas Válidas
+            </button>
+            <button class="btn-secondary" onclick="limparTudo()">
+                🗑️ Limpar Tudo
+            </button>
+        </div>
+        
+        <div class="success-message" id="successMsg">
+            ✅ <strong>Limpeza concluída com sucesso!</strong> Recarregue o sistema para ver as alterações.
+        </div>
+        
+        <div class="log" id="log"></div>
+    </div>
+
+    <script>
+        function log(message, type = 'info') {
+            const logElement = document.getElementById('log');
+            logElement.classList.add('show');
+            const line = document.createElement('div');
+            line.className = 'log-line';
+            const icon = type === 'success' ? '✅' : type === 'error' ? '❌' : type === 'warning' ? '⚠️' : 'ℹ️';
+            line.textContent = `${icon} ${new Date().toLocaleTimeString()} - ${message}`;
+            logElement.appendChild(line);
+            logElement.scrollTop = logElement.scrollHeight;
+        }
+
+        function getData() {
+            const dataStr = localStorage.getItem('cei_data');
+            if (!dataStr) {
+                log('Nenhum dado encontrado no localStorage', 'warning');
+                return null;
+            }
+            return JSON.parse(dataStr);
+        }
+
+        function saveData(data) {
+            localStorage.setItem('cei_data', JSON.stringify(data));
+            log('Dados salvos no localStorage', 'success');
+        }
+
+        function analisarDados() {
+            log('Iniciando análise de dados...');
+            const data = getData();
+            
+            if (!data) {
+                alert('Nenhum dado encontrado!');
+                return;
+            }
+
+            const totalInst = data.instituicoes?.length || 0;
+            const totalUsers = data.usuarios?.length || 0;
+            
+            // Detectar duplicatas por CNPJ
+            const cnpjMap = {};
+            data.instituicoes?.forEach(inst => {
+                if (!cnpjMap[inst.cnpj]) cnpjMap[inst.cnpj] = [];
+                cnpjMap[inst.cnpj].push(inst);
+            });
+            
+            let duplicatas = 0;
+            Object.values(cnpjMap).forEach(insts => {
+                if (insts.length > 1) duplicatas += (insts.length - 1);
+            });
+            
+            // Contar válidas (com pagamento confirmado)
+            const validas = data.instituicoes?.filter(i => i.pagamentoConfirmado === true).length || 0;
+            
+            document.getElementById('totalInst').textContent = totalInst;
+            document.getElementById('duplicatas').textContent = duplicatas;
+            document.getElementById('totalUsers').textContent = totalUsers;
+            document.getElementById('afterClean').textContent = validas > 0 ? validas : 1;
+            
+            log(`Total de instituições: ${totalInst}`, 'info');
+            log(`Duplicatas detectadas: ${duplicatas}`, 'warning');
+            log(`Instituições válidas: ${validas}`, 'success');
+            log(`Total de usuários: ${totalUsers}`, 'info');
+            
+            if (totalInst > 100) {
+                log('⚠️ ALERTA: Quantidade anormal de instituições detectada!', 'error');
+            }
+        }
+
+        function limparDuplicatas() {
+            if (!confirm('⚠️ Tem certeza que deseja limpar as duplicatas?\n\nSerão mantidas apenas instituições únicas (primeira de cada CNPJ).')) {
+                return;
+            }
+
+            log('Iniciando limpeza de duplicatas...');
+            const data = getData();
+            
+            if (!data) return;
+
+            const cnpjMap = {};
+            const instituicoesLimpas = [];
+            
+            // Manter apenas a primeira de cada CNPJ
+            data.instituicoes?.forEach(inst => {
+                if (!cnpjMap[inst.cnpj]) {
+                    cnpjMap[inst.cnpj] = true;
+                    instituicoesLimpas.push(inst);
+                    log(`Mantida: ${inst.nomeInstituicao} (${inst.cnpj})`, 'success');
+                } else {
+                    log(`Removida duplicata: ${inst.nomeInstituicao} (${inst.cnpj})`, 'warning');
+                }
+            });
+
+            // Ajustar usuários
+            const idsValidos = instituicoesLimpas.map(i => i.id);
+            const usuariosLimpos = data.usuarios?.filter(u => 
+                u.perfil === 'SuperAdmin' || idsValidos.includes(u.instituicaoId)
+            ) || [];
+
+            data.instituicoes = instituicoesLimpas;
+            data.usuarios = usuariosLimpos;
+            
+            // Limpar outros dados relacionados
+            if (data.livros) {
+                data.livros = data.livros.filter(l => idsValidos.includes(l.instituicaoId));
+            }
+            if (data.clientes) {
+                data.clientes = data.clientes.filter(c => idsValidos.includes(c.instituicaoId));
+            }
+            if (data.emprestimos) {
+                data.emprestimos = data.emprestimos.filter(e => idsValidos.includes(e.instituicaoId));
+            }
+            if (data.patrimonio) {
+                data.patrimonio = data.patrimonio.filter(p => idsValidos.includes(p.instituicaoId));
+            }
+
+            saveData(data);
+            
+            log(`✅ Limpeza concluída!`, 'success');
+            log(`Instituições restantes: ${instituicoesLimpas.length}`, 'success');
+            log(`Usuários restantes: ${usuariosLimpos.length}`, 'success');
+            
+            document.getElementById('successMsg').classList.add('show');
+            
+            setTimeout(() => {
+                if (confirm('Deseja recarregar a página agora?')) {
+                    location.reload();
+                }
+            }, 2000);
+        }
+
+        function manterApenasValidas() {
+            if (!confirm('⚠️ Manter apenas instituições com PAGAMENTO CONFIRMADO?\n\nTodas as outras serão removidas!')) {
+                return;
+            }
+
+            log('Mantendo apenas instituições válidas...');
+            const data = getData();
+            
+            if (!data) return;
+
+            // Manter apenas instituições com pagamento confirmado
+            const instituicoesValidas = data.instituicoes?.filter(inst => 
+                inst.pagamentoConfirmado === true
+            ) || [];
+
+            if (instituicoesValidas.length === 0) {
+                if (!confirm('⚠️ NENHUMA instituição com pagamento confirmado foi encontrada!\n\nDeseja manter a primeira instituição como válida?')) {
+                    return;
+                }
+                // Manter pelo menos a primeira
+                instituicoesValidas.push(data.instituicoes[0]);
+            }
+
+            log(`Instituições válidas encontradas: ${instituicoesValidas.length}`, 'success');
+
+            // Ajustar usuários
+            const idsValidos = instituicoesValidas.map(i => i.id);
+            const usuariosLimpos = data.usuarios?.filter(u => 
+                u.perfil === 'SuperAdmin' || idsValidos.includes(u.instituicaoId)
+            ) || [];
+
+            data.instituicoes = instituicoesValidas;
+            data.usuarios = usuariosLimpos;
+            
+            // Limpar outros dados
+            if (data.livros) {
+                data.livros = data.livros.filter(l => idsValidos.includes(l.instituicaoId));
+            }
+            if (data.clientes) {
+                data.clientes = data.clientes.filter(c => idsValidos.includes(c.instituicaoId));
+            }
+            if (data.emprestimos) {
+                data.emprestimos = data.emprestimos.filter(e => idsValidos.includes(e.instituicaoId));
+            }
+            if (data.patrimonio) {
+                data.patrimonio = data.patrimonio.filter(p => idsValidos.includes(p.instituicaoId));
+            }
+
+            saveData(data);
+            
+            log(`✅ Concluído! Mantidas ${instituicoesValidas.length} instituições válidas`, 'success');
+            
+            document.getElementById('successMsg').classList.add('show');
+            
+            setTimeout(() => {
+                if (confirm('Deseja recarregar a página agora?')) {
+                    location.reload();
+                }
+            }, 2000);
+        }
+
+        function limparTudo() {
+            if (!confirm('⚠️⚠️⚠️ ATENÇÃO ⚠️⚠️⚠️\n\nIsto irá APAGAR TODOS OS DADOS DO SISTEMA!\n\nTem CERTEZA ABSOLUTA?')) {
+                return;
+            }
+
+            if (!confirm('Última confirmação: Apagar TUDO?')) {
+                return;
+            }
+
+            log('Removendo TODOS os dados...', 'error');
+            localStorage.removeItem('cei_data');
+            log('Dados removidos!', 'success');
+            
+            document.getElementById('successMsg').classList.add('show');
+            
+            setTimeout(() => {
+                location.reload();
+            }, 2000);
+        }
+
+        // Carregar estatísticas ao abrir a página
+        window.onload = function() {
+            analisarDados();
+        };
+    </script>
+</body>
+</html>

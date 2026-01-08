@@ -6,7 +6,7 @@
   "scripts": {
     "start": "react-scripts start",
     "build": "react-scripts build",
-    "postbuild": "copy build\\index.html build\\200.html",
+    "postbuild": "copy build\\index.html build\\200.html && copy public\\service-worker.js build\\service-worker.js",
     "test": "react-scripts test",
     "eject": "react-scripts eject",
     "deploy": "npm run build && surge build cei-controle-escolar.surge.sh"
@@ -33,6 +33,7 @@
     "@mui/icons-material": "^7.3.6",
     "@mui/material": "^7.3.6",
     "@mui/x-date-pickers": "^8.22.0",
+    "axios": "^1.13.2",
     "cors": "^2.8.5",
     "date-fns": "^4.1.0",
     "dotenv": "^16.6.1",

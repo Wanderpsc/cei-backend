@@ -1,4 +1,5 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
+import apiService from '../utils/apiService';
 
 const DataContext = createContext();
 
@@ -11,7 +12,37 @@ export const useData = () => {
 };
 
 export const DataProvider = ({ children }) => {
-  // Usuários padrão - SUPER ADMIN DA MATRIZ
+  // Instituições pré-cadastradas
+  const instituicoesPadrao = [
+    {
+      id: 1,
+      nomeInstituicao: 'CETI Desembargador Amaral',
+      cnpj: '00.000.000/0001-00',
+      email: 'contato@cetidesamaral.edu.br',
+      telefone: '(86) 3221-0000',
+      endereco: 'Rua exemplo, 123',
+      cidade: 'Teresina',
+      estado: 'PI',
+      cep: '64000-000',
+      nomeResponsavel: 'Wander Pires Silva Coelho',
+      cargoResponsavel: 'Diretor',
+      emailResponsavel: 'wander@cetidesamaral.edu.br',
+      telefoneResponsavel: '(86) 99999-0000',
+      loginAdmin: 'cetidesamaral',
+      senhaAdmin: 'Ceti@2026',
+      plano: '1 Ano (365 dias)',
+      diasLicenca: 365,
+      valorMensal: 970.00,
+      status: 'ativo',
+      dataCadastro: new Date('2024-01-01T00:00:00').toISOString(),
+      dataAtivacao: new Date('2024-01-01T00:00:00').toISOString(),
+      dataExpiracao: new Date('2027-01-01T23:59:59').toISOString(), // Válido até 2027
+      licenca: 'CETI-2024-AMAR-AL01',
+      statusFinanceiro: 'em_dia'
+    }
+  ];
+
+  // Usuários padrão - SUPER ADMIN DA MATRIZ + Admin da CETI
   const usuariosPadrao = [
     {
       id: 1,
@@ -20,6 +51,16 @@ export const DataProvider = ({ children }) => {
       senha: 'matriz@2025',
       perfil: 'SuperAdmin', // Controle total da matriz
       instituicaoId: 0 // 0 = Matriz
+    },
+    {
+      id: 2,
+      nome: 'Wander Pires Silva Coelho',
+      login: 'cetidesamaral',
+      senha: 'Ceti@2026',
+      perfil: 'Admin',
+      instituicaoId: 1, // CETI Desembargador Amaral
+      email: 'wander@cetidesamaral.edu.br',
+      status: 'ativo'
     }
   ];
 
@@ -38,34 +79,169 @@ export const DataProvider = ({ children }) => {
   const [patrimonio, setPatrimonio] = useState([]);
   const [clientes, setClientes] = useState([]);
   const [emprestimos, setEmprestimos] = useState([]);
-  const [usuarios, setUsuarios] = useState(usuariosPadrao);
+  const [usuarios, setUsuarios] = useState([]);
   const [usuarioLogado, setUsuarioLogado] = useState(null);
   const [instituicaoAtiva, setInstituicaoAtiva] = useState(null);
   const [planos, setPlanos] = useState(planosPadrao);
+  const [notasFiscais, setNotasFiscais] = useState([]);
+  const [sincronizando, setSincronizando] = useState(false);
+  const [dadosCarregados, setDadosCarregados] = useState(false);
+
+  // Função para sincronizar dados com o servidor
+  const sincronizarDados = async () => {
+    if (sincronizando || !dadosCarregados) {
+      console.log('⏸️ Sincronização ignorada:', sincronizando ? 'Já sincronizando' : 'Dados ainda não carregados');
+      return;
+    }
+    
+    try {
+      setSincronizando(true);
+      window.dispatchEvent(new Event('sync-start'));
+      
+      const dadosAtuais = {
+        instituicoes,
+        livros,
+        patrimonio,
+        clientes,
+        emprestimos,
+        usuarios,
+        planos,
+        notasFiscais
+      };
+
+      const dadosSincronizados = await apiService.sincronizarDados(dadosAtuais);
+
+      // Atualizar estados com dados sincronizados
+      if (dadosSincronizados) {
+        setInstituicoes(dadosSincronizados.instituicoes || []);
+        setLivros(dadosSincronizados.livros || []);
+        setPatrimonio(dadosSincronizados.patrimonio || []);
+        setClientes(dadosSincronizados.clientes || []);
+        setEmprestimos(dadosSincronizados.emprestimos || []);
+        setPlanos(dadosSincronizados.planos || planosPadrao);
+        setNotasFiscais(dadosSincronizados.notasFiscais || []);
+        
+        // Manter usuários com SuperAdmin
+        if (dadosSincronizados.usuarios) {
+          const temSuperAdmin = dadosSincronizados.usuarios.some(u => u.perfil === 'SuperAdmin');
+          if (temSuperAdmin) {
+            setUsuarios(dadosSincronizados.usuarios);
+          } else {
+            setUsuarios([...usuariosPadrao, ...dadosSincronizados.usuarios.filter(u => u.perfil !== 'SuperAdmin')]);
+          }
+        }
+      }
+      
+      console.log('Sincronização concluída com sucesso');
+    } catch (error) {
+      console.error('Erro na sincronização:', error);
+    } finally {
+      setSincronizando(false);
+      window.dispatchEvent(new Event('sync-end'));
+    }
+  };
 
   // Carregar dados do localStorage ao iniciar
   useEffect(() => {
-    const dadosSalvos = localStorage.getItem('cei_data');
-    if (dadosSalvos) {
-      const dados = JSON.parse(dadosSalvos);
-      setInstituicoes(dados.instituicoes || []);
-      setLivros(dados.livros || []);
-      setPatrimonio(dados.patrimonio || []);
-      setClientes(dados.clientes || []);
-      setEmprestimos(dados.emprestimos || []);
-      setPlanos(dados.planos || planosPadrao);
+    const carregarDados = async () => {
+      const dadosSalvos = localStorage.getItem('cei_data');
+      console.log('🔄 Carregando dados...', dadosSalvos ? 'Dados encontrados' : 'Sem dados salvos');
       
-      // Garantir que o SuperAdmin sempre exista
-      if (dados.usuarios && dados.usuarios.length > 0) {
-        const temSuperAdmin = dados.usuarios.some(u => u.perfil === 'SuperAdmin');
-        if (temSuperAdmin) {
-          setUsuarios(dados.usuarios);
-        } else {
-          setUsuarios([...usuariosPadrao, ...dados.usuarios.filter(u => u.perfil !== 'SuperAdmin')]);
-        }
+      if (dadosSalvos) {
+        const dados = JSON.parse(dadosSalvos);
+        console.log('📦 Dados parseados:', {
+          instituicoes: dados.instituicoes?.length || 0,
+          usuarios: dados.usuarios?.length || 0
+        });
+        
+        // Priorizar dados salvos e adicionar padrões apenas se não existirem
+        const instituicoesMerged = dados.instituicoes ? [...dados.instituicoes] : [];
+        instituicoesPadrao.forEach(instPadrao => {
+          if (!instituicoesMerged.find(i => i.id === instPadrao.id)) {
+            instituicoesMerged.push(instPadrao);
+            console.log('➕ Adicionando instituição padrão:', instPadrao.nomeInstituicao);
+          }
+        });
+        setInstituicoes(instituicoesMerged);
+        console.log('✅ Total de instituições carregadas:', instituicoesMerged.length);
+        
+        setLivros(dados.livros || []);
+        setPatrimonio(dados.patrimonio || []);
+        setClientes(dados.clientes || []);
+        setEmprestimos(dados.emprestimos || []);
+        setPlanos(dados.planos || planosPadrao);
+        setNotasFiscais(dados.notasFiscais || []);
+        
+        // Priorizar usuários salvos e garantir que padrões existam
+        const usuariosMerged = dados.usuarios && dados.usuarios.length > 0 ? [...dados.usuarios] : [];
+        usuariosPadrao.forEach(userPadrao => {
+          if (!usuariosMerged.find(u => u.id === userPadrao.id)) {
+            usuariosMerged.push(userPadrao);
+            console.log('➕ Adicionando usuário padrão:', userPadrao.login);
+          }
+        });
+        setUsuarios(usuariosMerged);
+        console.log('✅ Total de usuários carregados:', usuariosMerged.length);
+        
+        // Verificar licenças expiradas ao carregar
+        verificarLicencasExpiradas(instituicoesMerged);
+      } else {
+        // Se não há dados salvos, inicializar com dados padrão
+        console.log('🆕 Inicializando com dados padrão...');
+        setInstituicoes(instituicoesPadrao);
+        setUsuarios(usuariosPadrao);
+        console.log('✅ Instituições padrão:', instituicoesPadrao.length);
+        console.log('✅ Usuários padrão:', usuariosPadrao.length);
       }
-    }
+
+      // Marcar que dados foram carregados
+      setDadosCarregados(true);
+      console.log('✅ Dados carregados e prontos para sincronizar');
+
+      // Tentar sincronizar com servidor se online
+      if (apiService.checkOnlineStatus()) {
+        setTimeout(() => sincronizarDados(), 1000);
+      }
+    };
+
+    carregarDados();
   }, []);
+
+  // Sincronização automática periódica (a cada 5 minutos se online)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (apiService.checkOnlineStatus()) {
+        sincronizarDados();
+      }
+    }, 300000); // 5 minutos
+
+    return () => clearInterval(interval);
+  }, [instituicoes, livros, patrimonio, clientes, emprestimos, usuarios, planos, notasFiscais]);
+
+  // Sincronizar quando voltar online
+  useEffect(() => {
+    const handleSyncRequired = () => {
+      console.log('Sincronização solicitada após reconexão');
+      sincronizarDados();
+    };
+
+    window.addEventListener('sync-required', handleSyncRequired);
+    window.addEventListener('online', handleSyncRequired);
+
+    return () => {
+      window.removeEventListener('sync-required', handleSyncRequired);
+      window.removeEventListener('online', handleSyncRequired);
+    };
+  }, [instituicoes, livros, patrimonio, clientes, emprestimos, usuarios, planos, notasFiscais]);
+
+  // Verificar licenças periodicamente (a cada hora)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      verificarLicencasExpiradas(instituicoes);
+    }, 3600000); // 1 hora
+
+    return () => clearInterval(interval);
+  }, [instituicoes]);
 
   // Salvar dados no localStorage sempre que houver mudança
   useEffect(() => {
@@ -76,30 +252,199 @@ export const DataProvider = ({ children }) => {
       clientes,
       emprestimos,
       usuarios,
-      planos
+      planos,
+      notasFiscais
     };
     localStorage.setItem('cei_data', JSON.stringify(dados));
-  }, [instituicoes, livros, patrimonio, clientes, emprestimos, usuarios, planos]);
+    console.log('💾 Dados salvos no localStorage:', {
+      instituicoes: instituicoes.length,
+      usuarios: usuarios.length,
+      livros: livros.length
+    });
+  }, [instituicoes, livros, patrimonio, clientes, emprestimos, usuarios, planos, notasFiscais]);
+
+  // ==================== VERIFICAÇÃO DE LICENÇAS EXPIRADAS ====================
+  
+  const verificarLicencasExpiradas = (listaInstituicoes) => {
+    const hoje = new Date();
+    let houveAlteracao = false;
+    
+    const instituicoesAtualizadas = listaInstituicoes.map(inst => {
+      // Ignorar instituições pendentes ou bloqueadas manualmente
+      if (inst.status === 'pendente' || inst.status === 'bloqueado') {
+        return inst;
+      }
+      
+      // Verificar se tem data de expiração
+      if (!inst.dataExpiracao) {
+        return inst;
+      }
+      
+      const dataExpiracao = new Date(inst.dataExpiracao);
+      const diasDesdeExpiracao = Math.floor((hoje - dataExpiracao) / (1000 * 60 * 60 * 24));
+      
+      // Licença ainda válida
+      if (dataExpiracao > hoje) {
+        // Se estava expirada e renovou, reativar
+        if (inst.status === 'expirado') {
+          houveAlteracao = true;
+          return {
+            ...inst,
+            status: 'ativo',
+            dataExpiracaoReal: null,
+            avisoExpiracaoEnviado: false
+          };
+        }
+        return inst;
+      }
+      
+      // Licença expirou
+      if (inst.status === 'ativo') {
+        houveAlteracao = true;
+        console.log(`⚠️ Licença expirada: ${inst.nomeInstituicao} - Período de graça de 30 dias iniciado`);
+        
+        return {
+          ...inst,
+          status: 'expirado',
+          dataExpiracaoReal: inst.dataExpiracaoReal || hoje.toISOString(), // Marca quando expirou pela primeira vez
+          avisoExpiracaoEnviado: true,
+          statusFinanceiro: 'expirado'
+        };
+      }
+      
+      // Já está expirada - verificar se passou 30 dias (período de graça)
+      if (inst.status === 'expirado' && inst.dataExpiracaoReal) {
+        const dataExpiracaoReal = new Date(inst.dataExpiracaoReal);
+        const diasExpirado = Math.floor((hoje - dataExpiracaoReal) / (1000 * 60 * 60 * 24));
+        
+        if (diasExpirado >= 30) {
+          // Passou o período de graça - limpar dados mas manter instituição
+          console.log(`🗑️ Período de graça expirado (${diasExpirado} dias): ${inst.nomeInstituicao} - Limpando dados`);
+          houveAlteracao = true;
+          limparDadosInstituicaoExpirada(inst.id);
+          
+          return {
+            ...inst,
+            status: 'dados_removidos',
+            dataRemocaoDados: hoje.toISOString(),
+            avisoRemocaoEnviado: true,
+            // Manter dados básicos para contato
+            dadosBasicosPreservados: {
+              nomeInstituicao: inst.nomeInstituicao,
+              email: inst.email,
+              telefone: inst.telefone,
+              cidade: inst.cidade,
+              estado: inst.estado,
+              cnpj: inst.cnpj,
+              nomeResponsavel: inst.nomeResponsavel,
+              emailResponsavel: inst.emailResponsavel,
+              telefoneResponsavel: inst.telefoneResponsavel,
+              plano: inst.plano,
+              valorMensal: inst.valorMensal,
+              historicoLicencas: inst.historicoLicencas || []
+            }
+          };
+        }
+      }
+      
+      return inst;
+    });
+    
+    if (houveAlteracao) {
+      setInstituicoes(instituicoesAtualizadas);
+    }
+  };
+
+  const limparDadosInstituicaoExpirada = (instituicaoId) => {
+    // Remove todos os dados da instituição, mas mantém a instituição básica
+    console.log(`🗑️ Limpando dados da instituição ID ${instituicaoId} após expiração de licença`);
+    
+    setLivros(prev => prev.filter(l => l.instituicaoId !== instituicaoId));
+    setPatrimonio(prev => prev.filter(p => p.instituicaoId !== instituicaoId));
+    setClientes(prev => prev.filter(c => c.instituicaoId !== instituicaoId));
+    setEmprestimos(prev => prev.filter(e => e.instituicaoId !== instituicaoId));
+    setNotasFiscais(prev => prev.filter(n => n.instituicaoId !== instituicaoId));
+    
+    // Manter o usuário admin mas desativar
+    setUsuarios(prev => prev.map(u => 
+      u.instituicaoId === instituicaoId 
+        ? { ...u, status: 'desativado', motivoDesativacao: 'Licença expirada - dados removidos' }
+        : u
+    ));
+  };
+
+  const calcularDiasRestantesLicenca = (instituicaoId) => {
+    const instituicao = instituicoes.find(i => i.id === instituicaoId);
+    if (!instituicao || !instituicao.dataExpiracao) return null;
+    
+    // Criar datas sem considerar horário (apenas dia/mês/ano)
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+    
+    const expiracao = new Date(instituicao.dataExpiracao);
+    expiracao.setHours(0, 0, 0, 0);
+    
+    console.log('📅 Calculando dias restantes:', {
+      instituicao: instituicao.nomeInstituicao,
+      hoje: hoje.toISOString().split('T')[0],
+      expiracao: expiracao.toISOString().split('T')[0],
+      dataExpiracaoOriginal: instituicao.dataExpiracao
+    });
+    
+    const dias = Math.ceil((expiracao - hoje) / (1000 * 60 * 60 * 24));
+    console.log('📅 Dias calculados:', dias);
+    
+    return dias;
+  };
+
+  const calcularDiasGracaRestantes = (instituicaoId) => {
+    const instituicao = instituicoes.find(i => i.id === instituicaoId);
+    if (!instituicao || instituicao.status !== 'expirado' || !instituicao.dataExpiracaoReal) return null;
+    
+    const hoje = new Date();
+    const dataExpiracaoReal = new Date(instituicao.dataExpiracaoReal);
+    const diasExpirado = Math.floor((hoje - dataExpiracaoReal) / (1000 * 60 * 60 * 24));
+    const diasRestantes = 30 - diasExpirado;
+    
+    return diasRestantes > 0 ? diasRestantes : 0;
+  };
 
   // ==================== FUNÇÕES DE INSTITUIÇÕES ====================
   
   const adicionarInstituicao = (instituicaoData) => {
+    // Verificar se já existe uma instituição com o mesmo CNPJ ou Email
+    const jaExiste = instituicoes.find(
+      i => i.cnpj === instituicaoData.cnpj || 
+           i.email === instituicaoData.email ||
+           i.loginAdmin === instituicaoData.loginAdmin
+    );
+    
+    if (jaExiste) {
+      console.warn('Instituição já cadastrada:', jaExiste);
+      return jaExiste; // Retorna a instituição existente ao invés de criar duplicada
+    }
+    
     const novaInstituicao = {
       ...instituicaoData,
       id: instituicoes.length > 0 ? Math.max(...instituicoes.map(i => i.id)) + 1 : 1,
       dataCadastro: new Date().toISOString(),
-      status: 'pendente', // pendente, ativo, bloqueado
-      dataExpiracao: null,
+      status: instituicaoData.status || 'pendente', // Usar status fornecido ou pendente
+      dataExpiracao: instituicaoData.dataExpiracao || null,
       licenca: gerarCodigoLicenca(),
       // FINANCEIRO - Usar valores do plano selecionado se existirem
       plano: instituicaoData.plano || 'mensal',
       diasLicenca: instituicaoData.diasLicenca || 30,
-      valorMensal: instituicaoData.valorMensal || 97.00,
+      valorMensal: instituicaoData.valorMensal ?? 97.00,
       diaVencimento: 10, // dia do mês para vencimento
       statusFinanceiro: 'em_dia', // em_dia, pendente, atrasado, bloqueado_financeiro
       pagamentos: [] // histórico de pagamentos
     };
-    setInstituicoes([...instituicoes, novaInstituicao]);
+    
+    // Atualizar lista de instituições
+    const novasInstituicoes = [...instituicoes, novaInstituicao];
+    setInstituicoes(novasInstituicoes);
+    console.log('Instituição adicionada:', novaInstituicao);
+    console.log('Total de instituições:', novasInstituicoes.length);
     
     // Criar usuário admin para a instituição
     const adminInstituicao = {
@@ -112,6 +457,7 @@ export const DataProvider = ({ children }) => {
       dataCadastro: new Date().toISOString()
     };
     setUsuarios([...usuarios, adminInstituicao]);
+    console.log('Usuário admin criado:', adminInstituicao);
     
     return novaInstituicao;
   };
@@ -126,11 +472,35 @@ export const DataProvider = ({ children }) => {
     const dataExpiracao = new Date();
     dataExpiracao.setDate(dataExpiracao.getDate() + diasValidade);
     
+    const instituicao = instituicoes.find(i => i.id === id);
+    const historicoLicencas = instituicao?.historicoLicencas || [];
+    
+    // Adicionar ao histórico
+    historicoLicencas.push({
+      dataAtivacao: new Date().toISOString(),
+      dataExpiracao: dataExpiracao.toISOString(),
+      diasValidade: diasValidade,
+      renovacao: instituicao?.status === 'expirado' || instituicao?.status === 'dados_removidos'
+    });
+    
     atualizarInstituicao(id, {
       status: 'ativo',
       dataAtivacao: new Date().toISOString(),
-      dataExpiracao: dataExpiracao.toISOString()
+      dataExpiracao: dataExpiracao.toISOString(),
+      dataExpiracaoReal: null, // Limpar data de expiração real
+      avisoExpiracaoEnviado: false,
+      statusFinanceiro: 'em_dia',
+      historicoLicencas: historicoLicencas
     });
+    
+    // Se estava com dados removidos, reativar usuário
+    if (instituicao?.status === 'dados_removidos') {
+      setUsuarios(prev => prev.map(u => 
+        u.instituicaoId === id 
+          ? { ...u, status: 'ativo', motivoDesativacao: null }
+          : u
+      ));
+    }
   };
 
   const bloquearInstituicao = (id, motivo = '') => {
@@ -223,8 +593,32 @@ export const DataProvider = ({ children }) => {
     const instituicao = instituicoes.find(i => i.id === instituicaoId);
     if (!instituicao) return null;
 
+    // Para planos anuais ou semestrais, usar dataExpiracao como vencimento
+    if (instituicao.dataExpiracao && (instituicao.diasLicenca >= 180 || 
+        instituicao.plano?.includes('Ano') || 
+        instituicao.plano?.includes('ano') ||
+        instituicao.plano?.includes('Semestral') ||
+        instituicao.plano?.includes('semestral'))) {
+      return new Date(instituicao.dataExpiracao);
+    }
+
+    // Para planos mensais, usar sistema de vencimento mensal
     const hoje = new Date();
     const diaVencimento = instituicao.diaVencimento || 10;
+    
+    // Se há último pagamento, calcular a partir dele
+    if (instituicao.ultimoPagamento) {
+      const dataUltimoPagamento = new Date(instituicao.ultimoPagamento);
+      
+      // Próximo vencimento é sempre no dia 10 do MÊS SEGUINTE ao pagamento
+      let proximoVencimento = new Date(dataUltimoPagamento);
+      proximoVencimento.setMonth(proximoVencimento.getMonth() + 1);
+      proximoVencimento.setDate(diaVencimento);
+      
+      return proximoVencimento;
+    }
+    
+    // Se não há pagamento, calcular a partir de hoje
     let proximoVencimento = new Date(hoje.getFullYear(), hoje.getMonth(), diaVencimento);
     
     if (proximoVencimento < hoje) {
@@ -263,6 +657,24 @@ export const DataProvider = ({ children }) => {
 
   const removerLivro = (id) => {
     setLivros(livros.filter(l => l.id !== id));
+  };
+
+  const darBaixaLivro = (id, motivo, detalhes = {}) => {
+    const livro = livros.find(l => l.id === id);
+    if (!livro) return null;
+
+    const baixa = {
+      ...livro,
+      baixa: {
+        data: new Date().toISOString(),
+        motivo, // 'Doação' ou 'Término de Vigência'
+        ...detalhes // donatario, cpfDonatario, etc
+      }
+    };
+
+    // Atualizar livro com informações de baixa
+    setLivros(livros.map(l => l.id === id ? baixa : l));
+    return baixa;
   };
 
   const getLivrosFiltrados = () => {
@@ -352,10 +764,35 @@ export const DataProvider = ({ children }) => {
     return emprestimos.filter(e => e.instituicaoId === instituicaoAtiva);
   };
 
+  // ==================== FUNÇÕES DE NOTAS FISCAIS ====================
+  
+  const adicionarNotaFiscal = (notaData) => {
+    const proximoNumero = notasFiscais.length > 0 
+      ? Math.max(...notasFiscais.map(n => n.numero)) + 1 
+      : 1;
+    
+    const novaNota = {
+      ...notaData,
+      id: notasFiscais.length > 0 ? Math.max(...notasFiscais.map(n => n.id)) + 1 : 1,
+      numero: proximoNumero,
+      dataEmissao: new Date().toISOString()
+    };
+    
+    setNotasFiscais([...notasFiscais, novaNota]);
+    return novaNota;
+  };
+
   // ==================== AUTENTICAÇÃO ====================
   
   const login = (loginData, senha) => {
     console.log('Tentando login:', loginData);
+    console.log('Total de usuários cadastrados:', usuarios.length);
+    console.log('Usuários disponíveis:', usuarios.map(u => ({ 
+      login: u.login, 
+      perfil: u.perfil,
+      instituicaoId: u.instituicaoId 
+    })));
+    
     const usuario = usuarios.find(u => u.login === loginData && u.senha === senha);
     
     if (usuario) {
@@ -402,6 +839,56 @@ export const DataProvider = ({ children }) => {
   const logout = () => {
     setUsuarioLogado(null);
     setInstituicaoAtiva(null);
+  };
+
+  const recuperarSenha = (email, novaSenha = null) => {
+    // Etapa 1: Verificar se o email existe
+    const instituicao = instituicoes.find(i => 
+      i.email?.toLowerCase() === email.toLowerCase() ||
+      i.emailResponsavel?.toLowerCase() === email.toLowerCase()
+    );
+
+    if (!instituicao) {
+      return {
+        sucesso: false,
+        mensagem: 'Email não encontrado. Verifique se digitou corretamente.'
+      };
+    }
+
+    // Se novaSenha foi fornecida, é a etapa 2: redefinir senha
+    if (novaSenha) {
+      // Encontrar o usuário admin da instituição
+      const usuarioAdmin = usuarios.find(u => 
+        u.instituicaoId === instituicao.id && 
+        u.perfil === 'Admin'
+      );
+
+      if (!usuarioAdmin) {
+        return {
+          sucesso: false,
+          mensagem: 'Erro ao localizar usuário da instituição.'
+        };
+      }
+
+      // Atualizar a senha
+      setUsuarios(prev => prev.map(u => 
+        u.id === usuarioAdmin.id 
+          ? { ...u, senha: novaSenha }
+          : u
+      ));
+
+      return {
+        sucesso: true,
+        mensagem: 'Senha redefinida com sucesso!'
+      };
+    }
+
+    // Etapa 1: Apenas verificação do email
+    return {
+      sucesso: true,
+      escola: instituicao.nomeInstituicao,
+      mensagem: 'Email encontrado!'
+    };
   };
 
   // ==================== BUSCA ====================
@@ -472,6 +959,8 @@ export const DataProvider = ({ children }) => {
     usuarioLogado,
     instituicaoAtiva,
     planos,
+    notasFiscais,
+    sincronizando,
     
     // Funções Instituições
     adicionarInstituicao,
@@ -480,10 +969,16 @@ export const DataProvider = ({ children }) => {
     bloquearInstituicao,
     removerInstituicao,
     
+    // Funções Licenças
+    calcularDiasRestantesLicenca,
+    calcularDiasGracaRestantes,
+    verificarLicencasExpiradas,
+    
     // Funções Livros
     adicionarLivro,
     atualizarLivro,
     removerLivro,
+    darBaixaLivro,
     
     // Funções Patrimônio
     adicionarPatrimonio,
@@ -498,6 +993,9 @@ export const DataProvider = ({ children }) => {
     // Funções Empréstimos
     adicionarEmprestimo,
     atualizarEmprestimo,
+    
+    // Funções Notas Fiscais
+    adicionarNotaFiscal,
     
     // Funções Financeiras
     registrarPagamento,
@@ -514,6 +1012,10 @@ export const DataProvider = ({ children }) => {
     // Autenticação
     login,
     logout,
+    recuperarSenha,
+    
+    // Sincronização
+    sincronizarDados,
     
     // Busca
     buscar

@@ -205,6 +205,42 @@ function RelatoriosPage() {
     };
   };
 
+  const getRelatorioRankingLeitores = () => {
+    // Contar empréstimos por leitor (total de livros já emprestados)
+    const rankingPorEmprestimos = clientes.map(c => {
+      const totalEmprestimos = emprestimos.filter(e => e.clienteId === c.id).length;
+      const emprestimosAtivos = emprestimos.filter(e => e.clienteId === c.id && e.status === 'ativo').length;
+      const emprestimosDevolvidos = emprestimos.filter(e => e.clienteId === c.id && e.status === 'devolvido').length;
+      
+      return {
+        posicao: 0, // Será preenchido depois da ordenação
+        nome: c.nome,
+        tipo: c.tipo || 'Leitor',
+        turma: c.turma || 'N/A',
+        totalLivrosEmprestados: totalEmprestimos,
+        livrosAtivos: emprestimosAtivos,
+        livrosDevolvidos: emprestimosDevolvidos,
+        telefone: c.telefone || 'N/A'
+      };
+    })
+    .filter(r => r.totalLivrosEmprestados > 0) // Apenas leitores com empréstimos
+    .sort((a, b) => b.totalLivrosEmprestados - a.totalLivrosEmprestados)
+    .map((r, index) => ({ ...r, posicao: index + 1 })); // Adicionar posição
+
+    return {
+      titulo: 'Ranking de Leitores',
+      colunas: ['Posição', 'Nome', 'Tipo', 'Turma', 'Total Emprestados', 'Ativos', 'Devolvidos', 'Telefone'],
+      dados: rankingPorEmprestimos,
+      resumo: {
+        totalLeitores: rankingPorEmprestimos.length,
+        totalEmprestimos: rankingPorEmprestimos.reduce((sum, r) => sum + r.totalLivrosEmprestados, 0),
+        mediaEmprestimosPorLeitor: rankingPorEmprestimos.length > 0 
+          ? (rankingPorEmprestimos.reduce((sum, r) => sum + r.totalLivrosEmprestados, 0) / rankingPorEmprestimos.length).toFixed(1)
+          : 0
+      }
+    };
+  };
+
   const getRelatorioEscolasCadastradas = () => {
     if (usuarioLogado?.perfil !== 'SuperAdmin') return null;
 
@@ -340,6 +376,7 @@ function RelatoriosPage() {
     { value: 'pessoas-cadastradas', label: 'Pessoas Cadastradas' },
     { value: 'pessoas-com-emprestimos', label: 'Pessoas com Livros Emprestados' },
     { value: 'devolucoes-pendentes', label: 'Devoluções Pendentes' },
+    { value: 'ranking-leitores', label: 'Ranking de Leitores' },
     { value: 'patrimonio', label: 'Patrimônio' },
     { value: 'emprestimos-historico', label: 'Histórico de Empréstimos' },
   ];
@@ -359,6 +396,7 @@ function RelatoriosPage() {
       case 'pessoas-cadastradas': return getRelatorioPessoasCadastradas();
       case 'pessoas-com-emprestimos': return getRelatorioPessoasComEmprestimos();
       case 'devolucoes-pendentes': return getRelatorioDevolucoesPendentes();
+      case 'ranking-leitores': return getRelatorioRankingLeitores();
       case 'patrimonio': return getRelatorioPatrimonio();
       case 'emprestimos-historico': return getRelatorioEmprestimosHistorico();
       case 'escolas-cadastradas': return getRelatorioEscolasCadastradas();

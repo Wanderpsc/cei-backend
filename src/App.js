@@ -18,7 +18,7 @@ import GerenciarEscolasPage from './pages/GerenciarEscolasPage';
 import DashboardPage from './pages/DashboardPage';
 import LivrosPage from './pages/LivrosPage';
 import PatrimonioPage from './pages/PatrimonioPage';
-import ClientesPage from './pages/ClientesPage';
+import LeitoresPage from './pages/LeitoresPage';
 import EmprestimosPage from './pages/EmprestimosPage';
 import RelatoriosPage from './pages/RelatoriosPage';
 import BuscaPage from './pages/BuscaPage';
@@ -27,6 +27,10 @@ import FinanceiroAdminPage from './pages/FinanceiroAdminPage';
 import ConfigurarPlanosPage from './pages/ConfigurarPlanosPage';
 import DiagramaSistemaPage from './pages/DiagramaSistemaPage';
 import AtivarLicencaPage from './pages/AtivarLicencaPage';
+import LimparDuplicatasPage from './pages/LimparDuplicatasPage';
+import ClubeDeLeituraPage from './pages/ClubeDeLeituraPage';
+import RelatoriosLivrosPage from './pages/RelatoriosLivrosPage';
+import NotaFiscalPage from './pages/NotaFiscalPage';
 
 const theme = createTheme({
   palette: {
@@ -72,11 +76,15 @@ function AppRoutes() {
       <Route path="/financeiro" element={<PrivateRoute><FinanceiroPage /></PrivateRoute>} />
       <Route path="/livros" element={<PrivateRoute><LivrosPage /></PrivateRoute>} />
       <Route path="/patrimonio" element={<PrivateRoute><PatrimonioPage /></PrivateRoute>} />
-      <Route path="/clientes" element={<PrivateRoute><ClientesPage /></PrivateRoute>} />
+      <Route path="/clientes" element={<PrivateRoute><LeitoresPage /></PrivateRoute>} />
       <Route path="/emprestimos" element={<PrivateRoute><EmprestimosPage /></PrivateRoute>} />
       <Route path="/relatorios" element={<PrivateRoute><RelatoriosPage /></PrivateRoute>} />
       <Route path="/busca" element={<PrivateRoute><BuscaPage /></PrivateRoute>} />
       <Route path="/diagrama-sistema" element={<PrivateRoute><DiagramaSistemaPage /></PrivateRoute>} />
+      <Route path="/limpar-duplicatas" element={<PrivateRoute><LimparDuplicatasPage /></PrivateRoute>} />
+      <Route path="/clube-leitura" element={<PrivateRoute><ClubeDeLeituraPage /></PrivateRoute>} />
+      <Route path="/relatorios-livros" element={<PrivateRoute><RelatoriosLivrosPage /></PrivateRoute>} />
+      <Route path="/notas-fiscais" element={<PrivateRoute><NotaFiscalPage /></PrivateRoute>} />
     </Routes>
   );
 }

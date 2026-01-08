@@ -24,6 +24,7 @@ export default function PagamentoSucessoPage() {
   const location = useLocation();
   const { adicionarInstituicao } = useData();
   const { dadosCadastro, planoSelecionado, metodoPagamento, parcelas } = location.state || {};
+  const [instituicaoJaCadastrada, setInstituicaoJaCadastrada] = React.useState(false);
 
   useEffect(() => {
     // Redirecionar se não houver dados
@@ -32,30 +33,33 @@ export default function PagamentoSucessoPage() {
       return;
     }
 
-    // Registrar a instituição no sistema
-    try {
-      const dadosInstituicao = {
-        ...dadosCadastro,
-        plano: planoSelecionado.nome,
-        diasLicenca: planoSelecionado.dias,
-        valorMensal: planoSelecionado.valor,
-        pagamentoConfirmado: true,
-        metodoPagamento: metodoPagamento || 'pix',
-        dataPagamento: new Date().toISOString()
-      };
-      
-      adicionarInstituicao(dadosInstituicao);
-    } catch (error) {
-      console.error('Erro ao registrar instituição:', error);
+    // Registrar a instituição no sistema APENAS UMA VEZ
+    if (!instituicaoJaCadastrada) {
+      try {
+        const dataPagamento = new Date();
+        const dadosInstituicao = {
+          ...dadosCadastro,
+          plano: planoSelecionado.nome,
+          diasLicenca: planoSelecionado.dias,
+          valorMensal: planoSelecionado.valor,
+          pagamentoConfirmado: true,
+          metodoPagamento: metodoPagamento || 'pix',
+          dataPagamento: dataPagamento.toISOString(),
+          ultimoPagamento: dataPagamento.toISOString(), // ✅ Registrar data do pagamento
+          status: 'ativo', // ✅ Já vem ativo após pagamento
+          statusFinanceiro: 'em_dia' // ✅ Em dia após pagamento
+        };
+        
+        adicionarInstituicao(dadosInstituicao);
+        setInstituicaoJaCadastrada(true);
+        
+        // Limpar o state da navegação para evitar recadastro no refresh
+        window.history.replaceState({}, document.title);
+      } catch (error) {
+        console.error('Erro ao registrar instituição:', error);
+      }
     }
-
-    // Redirecionar automaticamente após 10 segundos
-    const timer = setTimeout(() => {
-      navigate('/login');
-    }, 10000);
-
-    return () => clearTimeout(timer);
-  }, [dadosCadastro, planoSelecionado, metodoPagamento, navigate, adicionarInstituicao]);
+  }, [dadosCadastro, planoSelecionado, metodoPagamento, navigate, adicionarInstituicao, instituicaoJaCadastrada]);
 
   if (!dadosCadastro || !planoSelecionado) {
     return null;

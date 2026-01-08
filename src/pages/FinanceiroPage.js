@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useData } from '../context/DataContext';
+import Layout from '../components/Layout';
 import {
   Box,
   Card,
@@ -56,11 +57,11 @@ export default function FinanceiroPage() {
 
   if (!instituicao) {
     return (
-      <Box>
+      <Layout>
         <Alert severity="error">
           Instituição não encontrada.
         </Alert>
-      </Box>
+      </Layout>
     );
   }
 
@@ -113,12 +114,13 @@ export default function FinanceiroPage() {
   };
 
   return (
-    <Box>
-      <Typography variant="h4" gutterBottom>
-        Financeiro
-      </Typography>
+    <Layout>
+      <Box>
+        <Typography variant="h4" gutterBottom>
+          💰 Financeiro
+        </Typography>
 
-      {getStatusAlert()}
+        {getStatusAlert()}
 
       {/* Cards Informações */}
       <Grid container spacing={3} sx={{ mb: 3 }}>
@@ -132,7 +134,7 @@ export default function FinanceiroPage() {
                 </Typography>
               </Box>
               <Typography variant="h4">
-                R$ {(instituicao.valorMensal || 97.00).toFixed(2)}
+                R$ {(instituicao.valorMensal ?? 97.00).toFixed(2)}
               </Typography>
               <Typography variant="caption" color="textSecondary">
                 Plano: {instituicao.plano || 'Mensal'}
@@ -156,7 +158,12 @@ export default function FinanceiroPage() {
                   : 'N/A'}
               </Typography>
               <Typography variant="caption" color="textSecondary">
-                Dia {instituicao.diaVencimento || 10} de cada mês
+                {instituicao.diasLicenca >= 180 || 
+                 instituicao.plano?.includes('Ano') || 
+                 instituicao.plano?.includes('ano') ||
+                 instituicao.plano?.includes('Semestral')
+                  ? `Plano: ${instituicao.plano || 'Anual'}`
+                  : `Dia ${instituicao.diaVencimento || 10} de cada mês`}
               </Typography>
             </CardContent>
           </Card>
@@ -271,6 +278,7 @@ export default function FinanceiroPage() {
           </TableContainer>
         </CardContent>
       </Card>
-    </Box>
+      </Box>
+    </Layout>
   );
 }

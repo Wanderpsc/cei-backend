@@ -167,9 +167,11 @@ export default function PagamentoPage() {
   const processarPagamentoCartao = async () => {
     setErro('');
     
+    console.log('🔍 Validando dados do cartão...');
+    
     // Validações
     if (!dadosCartao.numero || dadosCartao.numero.replace(/\s/g, '').length < 16) {
-      setErro('Número do cartão inválido');
+      setErro('Número do cartão inválido (mínimo 16 dígitos)');
       return;
     }
     
@@ -179,34 +181,41 @@ export default function PagamentoPage() {
     }
     
     if (!dadosCartao.validade || dadosCartao.validade.length < 5) {
-      setErro('Validade do cartão inválida');
+      setErro('Validade do cartão inválida (formato MM/AA)');
       return;
     }
     
     if (!dadosCartao.cvv || dadosCartao.cvv.length < 3) {
-      setErro('CVV inválido');
+      setErro('CVV inválido (mínimo 3 dígitos)');
       return;
     }
     
+    console.log('✅ Validações básicas OK');
     setProcessando(true);
     
     try {
       // Verificar se o SDK do Mercado Pago está carregado
       if (!window.MercadoPago) {
-        throw new Error('SDK do Mercado Pago não carregado');
+        throw new Error('SDK do Mercado Pago não carregado. Recarregue a página.');
       }
+
+      console.log('✅ SDK do Mercado Pago carregado');
 
       // Inicializar Mercado Pago
       const mp = new window.MercadoPago(MERCADOPAGO_PUBLIC_KEY);
       
+      console.log('✅ MercadoPago inicializado com chave:', MERCADOPAGO_PUBLIC_KEY.substring(0, 15) + '...');
+      
       // Separar mês e ano da validade
       const [mes, ano] = dadosCartao.validade.split('/');
+      
+      console.log('📅 Validade:', { mes, ano: '20' + ano });
       
       // Criar objeto cardForm para tokenizar
       const cardData = {
         cardNumber: dadosCartao.numero.replace(/\s/g, ''),
-        cardholderName: dadosCartao.nome,
-        cardExpirationMonth: mes,
+        cardholderName: dadosCartao.nome.toUpperCase(),
+        cardExpirationMonth: mes.padStart(2, '0'),
         cardExpirationYear: '20' + ano,
         securityCode: dadosCartao.cvv,
         identificationType: 'CPF',
@@ -214,17 +223,28 @@ export default function PagamentoPage() {
       };
 
       console.log('🔄 Criando token do cartão...');
+      console.log('Dados do cartão (sem número/CVV):', {
+        cardholderName: cardData.cardholderName,
+        cardExpirationMonth: cardData.cardExpirationMonth,
+        cardExpirationYear: cardData.cardExpirationYear,
+        identificationType: cardData.identificationType,
+        identificationNumber: cardData.identificationNumber
+      });
 
       // Criar token do cartão
       const response = await mp.createCardToken(cardData);
       
+      console.log('📦 Resposta do createCardToken:', response);
+      
       if (!response || !response.id) {
-        throw new Error('Falha ao criar token do cartão');
+        throw new Error('Falha ao criar token do cartão. Verifique os dados e tente novamente.');
       }
 
       console.log('✅ Token do cartão criado:', response.id);
 
       // Enviar pagamento para o backend
+      console.log('📤 Enviando para backend:', `${API_URL}/api/create-card-payment`);
+      
       const paymentResponse = await fetch(`${API_URL}/api/create-card-payment`, {
         method: 'POST',
         headers: {
@@ -242,11 +262,17 @@ export default function PagamentoPage() {
         })
       });
 
+      if (!paymentResponse.ok) {
+        throw new Error(`Erro HTTP: ${paymentResponse.status}`);
+      }
+
       const data = await paymentResponse.json();
 
-      if (data.success && data.payment.status === 'approved') {
+      console.log('📥 Resposta do backend:', data);
+
+      if (data.success && (data.payment.status === 'approved' || data.payment.status === 'pending')) {
         setSucesso(true);
-        console.log('✅ Pagamento aprovado!');
+        console.log('✅ Pagamento processado:', data.payment.status);
         
         // Redirecionar para página de sucesso
         setTimeout(() => {
@@ -256,32 +282,30 @@ export default function PagamentoPage() {
               planoSelecionado,
               metodoPagamento: 'cartao',
               parcelas: dadosCartao.parcelas,
-              transacaoId: data.payment.id
-            } 
-          });
-        }, 2000);
-      } else if (data.success && data.payment.status === 'pending') {
-        setSucesso(true);
-        console.log('⏳ Pagamento pendente de aprovação...');
-        
-        setTimeout(() => {
-          navigate('/pagamento-sucesso', { 
-            state: { 
-              dadosCadastro, 
-              planoSelecionado,
-              metodoPagamento: 'cartao',
-              parcelas: dadosCartao.parcelas,
               transacaoId: data.payment.id,
-              status: 'pending'
+              status: data.payment.status
             } 
           });
         }, 2000);
       } else {
-        setErro(data.error || 'Pagamento recusado. Verifique os dados do cartão.');
+        // Pagamento rejeitado ou erro
+        const mensagemErro = data.error || data.payment?.status_detail || 'Pagamento recusado. Verifique os dados do cartão.';
+        console.error('❌ Pagamento recusado:', mensagemErro);
+        setErro(mensagemErro);
       }
     } catch (error) {
-      console.error('Erro ao processar cartão:', error);
-      setErro(error.message || 'Erro ao processar pagamento. Verifique os dados do cartão.');
+      console.error('❌ Erro ao processar cartão:', error);
+      let mensagemErro = 'Erro ao processar pagamento. ';
+      
+      if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+        mensagemErro += 'Verifique sua conexão ou se o backend está rodando.';
+      } else if (error.message.includes('token')) {
+        mensagemErro += 'Erro ao validar dados do cartão.';
+      } else {
+        mensagemErro += error.message;
+      }
+      
+      setErro(mensagemErro);
     } finally {
       setProcessando(false);
     }

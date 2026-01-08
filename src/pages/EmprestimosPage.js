@@ -110,7 +110,7 @@ function EmprestimosPage() {
     <Layout title="Empréstimos">
       <Box sx={{ mb: 2, display: 'flex', gap: 2 }}>
         <TextField
-          placeholder="Buscar por cliente ou livro..."
+          placeholder="Buscar por leitor ou livro..."
           variant="outlined"
           size="small"
           fullWidth
@@ -133,7 +133,7 @@ function EmprestimosPage() {
         <Table>
           <TableHead>
             <TableRow>
-              <TableCell>Cliente</TableCell>
+              <TableCell>Leitor</TableCell>
               <TableCell>Livro</TableCell>
               <TableCell>Data Empréstimo</TableCell>
               <TableCell>Data Devolução</TableCell>
@@ -195,7 +195,7 @@ function EmprestimosPage() {
               getOptionLabel={(option) => option.nome}
               onChange={(e, value) => setFormData({ ...formData, clienteId: value?.id || '' })}
               renderInput={(params) => (
-                <TextField {...params} label="Cliente" required />
+                <TextField {...params} label="Leitor" required />
               )}
             />
             <Autocomplete

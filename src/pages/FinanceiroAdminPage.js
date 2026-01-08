@@ -100,13 +100,13 @@ export default function FinanceiroAdminPage() {
 
   const handleAbrirPagamento = (instituicao) => {
     setInstituicaoSelecionada(instituicao);
-    setValorPagamento(instituicao.valorMensal?.toString() || '97.00');
+    setValorPagamento(instituicao.valorMensal?.toString() ?? '97.00');
     setDialogPagamento(true);
   };
 
   const calcularReceitaMensal = () => {
     return instituicoesAtivas.reduce((total, inst) => {
-      return total + (inst.valorMensal || 97.00);
+      return total + (inst.valorMensal ?? 97.00);
     }, 0);
   };
 
@@ -276,7 +276,7 @@ export default function FinanceiroAdminPage() {
                       
                       <TableCell>
                         <Typography variant="body1">
-                          R$ {(instituicao.valorMensal || 97.00).toFixed(2)}
+                          R$ {(instituicao.valorMensal ?? 97.00).toFixed(2)}
                         </Typography>
                       </TableCell>
                       

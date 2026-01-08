@@ -23,7 +23,7 @@ import {
 import { Add, Edit, Delete, Search, QrCode } from '@mui/icons-material';
 import { useData } from '../context/DataContext';
 
-function ClientesPage() {
+function LeitoresPage() {
   const { clientes, adicionarCliente, atualizarCliente, removerCliente } = useData();
   const [open, setOpen] = useState(false);
   const [editando, setEditando] = useState(null);
@@ -78,7 +78,7 @@ function ClientesPage() {
   };
 
   const handleDelete = (id) => {
-    if (window.confirm('Deseja realmente remover este cliente?')) {
+    if (window.confirm('Deseja realmente remover este leitor?')) {
       removerCliente(id);
     }
   };
@@ -90,7 +90,7 @@ function ClientesPage() {
   );
 
   return (
-    <Layout title="Clientes">
+    <Layout title="Leitores">
       <Box sx={{ mb: 2, display: 'flex', gap: 2 }}>
         <TextField
           placeholder="Buscar por nome, CPF ou matrícula..."
@@ -108,7 +108,7 @@ function ClientesPage() {
           startIcon={<Add />}
           onClick={() => handleOpen()}
         >
-          Novo Cliente
+          Novo Leitor
         </Button>
       </Box>
 
@@ -130,7 +130,7 @@ function ClientesPage() {
               <TableRow>
                 <TableCell colSpan={7} align="center">
                   <Typography color="text.secondary">
-                    Nenhum cliente cadastrado
+                    Nenhum leitor cadastrado
                   </Typography>
                 </TableCell>
               </TableRow>
@@ -167,7 +167,7 @@ function ClientesPage() {
       </TableContainer>
 
       <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
-        <DialogTitle>{editando ? 'Editar Cliente' : 'Novo Cliente'}</DialogTitle>
+        <DialogTitle>{editando ? 'Editar Leitor' : 'Novo Leitor'}</DialogTitle>
         <DialogContent>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
             <TextField
@@ -254,4 +254,4 @@ function ClientesPage() {
   );
 }
 
-export default ClientesPage;
+export default LeitoresPage;

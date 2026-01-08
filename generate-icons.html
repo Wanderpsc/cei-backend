@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Gerador de Ícones CEI</title>
+</head>
+<body>
+    <h1>Gerador de Ícones CEI</h1>
+    <canvas id="canvas192" width="192" height="192"></canvas>
+    <canvas id="canvas512" width="512" height="512"></canvas>
+    <br>
+    <button onclick="downloadIcons()">Baixar Ícones</button>
+    
+    <script>
+        function drawIcon(canvas, size) {
+            const ctx = canvas.getContext('2d');
+            
+            // Criar gradiente
+            const gradient = ctx.createLinearGradient(0, 0, size, size);
+            gradient.addColorStop(0, '#667eea');
+            gradient.addColorStop(1, '#764ba2');
+            
+            // Fundo com gradiente e cantos arredondados
+            const radius = size * 0.15;
+            ctx.fillStyle = gradient;
+            ctx.beginPath();
+            ctx.moveTo(radius, 0);
+            ctx.lineTo(size - radius, 0);
+            ctx.quadraticCurveTo(size, 0, size, radius);
+            ctx.lineTo(size, size - radius);
+            ctx.quadraticCurveTo(size, size, size - radius, size);
+            ctx.lineTo(radius, size);
+            ctx.quadraticCurveTo(0, size, 0, size - radius);
+            ctx.lineTo(0, radius);
+            ctx.quadraticCurveTo(0, 0, radius, 0);
+            ctx.closePath();
+            ctx.fill();
+            
+            // Desenhar prédio escolar
+            ctx.fillStyle = 'white';
+            const buildingWidth = size * 0.5;
+            const buildingHeight = size * 0.35;
+            const buildingX = (size - buildingWidth) / 2;
+            const buildingY = size * 0.35;
+            
+            // Prédio principal
+            ctx.fillRect(buildingX, buildingY, buildingWidth, buildingHeight);
+            
+            // Telhado
+            ctx.beginPath();
+            ctx.moveTo(buildingX - size * 0.05, buildingY);
+            ctx.lineTo(size / 2, buildingY - size * 0.1);
+            ctx.lineTo(buildingX + buildingWidth + size * 0.05, buildingY);
+            ctx.closePath();
+            ctx.fill();
+            
+            // Janelas
+            ctx.fillStyle = '#667eea';
+            const windowSize = size * 0.08;
+            const windowY = buildingY + size * 0.08;
+            
+            for (let i = 0; i < 3; i++) {
+                const windowX = buildingX + (buildingWidth / 4) * (i + 0.5) - windowSize / 2;
+                ctx.fillRect(windowX, windowY, windowSize, windowSize);
+            }
+            
+            // Porta
+            const doorWidth = size * 0.12;
+            const doorHeight = size * 0.15;
+            const doorX = size / 2 - doorWidth / 2;
+            const doorY = buildingY + buildingHeight - doorHeight;
+            ctx.fillRect(doorX, doorY, doorWidth, doorHeight);
+            
+            // Texto CEI
+            ctx.fillStyle = 'white';
+            ctx.font = `bold ${size * 0.15}px Arial`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('CEI', size / 2, size * 0.85);
+        }
+        
+        // Desenhar os ícones
+        drawIcon(document.getElementById('canvas192'), 192);
+        drawIcon(document.getElementById('canvas512'), 512);
+        
+        function downloadIcons() {
+            // Download 192x192
+            const canvas192 = document.getElementById('canvas192');
+            const link192 = document.createElement('a');
+            link192.download = 'logo192.png';
+            link192.href = canvas192.toDataURL('image/png');
+            link192.click();
+            
+            // Download 512x512
+            setTimeout(() => {
+                const canvas512 = document.getElementById('canvas512');
+                const link512 = document.createElement('a');
+                link512.download = 'logo512.png';
+                link512.href = canvas512.toDataURL('image/png');
+                link512.click();
+            }, 500);
+            
+            alert('Ícones baixados! Copie os arquivos logo192.png e logo512.png para a pasta public/');
+        }
+    </script>
+</body>
+</html>

@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { useNavigate, Outlet } from 'react-router-dom';
 import { useData } from '../context/DataContext';
+import AvisoLicenca from './AvisoLicenca';
+import SyncStatus from './SyncStatus';
 import {
   Box,
   Drawer,
@@ -33,6 +35,9 @@ import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
 import SettingsIcon from '@mui/icons-material/Settings';
 import ArchitectureIcon from '@mui/icons-material/Architecture';
 import NotificationsIcon from '@mui/icons-material/Notifications';
+import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
+import LibraryBooksIcon from '@mui/icons-material/LibraryBooks';
+import ReceiptIcon from '@mui/icons-material/Receipt';
 
 const drawerWidth = 240;
 
@@ -51,6 +56,7 @@ export default function Layout({ children }) {
         { text: 'Gerenciar Escolas', icon: <SchoolIcon />, path: '/gerenciar-escolas' },
         { text: 'Configurar Planos', icon: <SettingsIcon />, path: '/configurar-planos' },
         { text: 'Gestão Financeira', icon: <AccountBalanceWalletIcon />, path: '/financeiro-admin' },
+        { text: 'Notas Fiscais (ISS)', icon: <ReceiptIcon />, path: '/notas-fiscais' },
         { text: 'Diagrama do Sistema', icon: <ArchitectureIcon />, path: '/diagrama-sistema' },
       ];
     }
@@ -60,9 +66,11 @@ export default function Layout({ children }) {
       { text: 'Dashboard', icon: <DashboardIcon />, path: '/' },
       { text: 'Financeiro', icon: <AccountBalanceWalletIcon />, path: '/financeiro' },
       { text: 'Livros', icon: <MenuBookIcon />, path: '/livros' },
+      { text: 'Relatórios de Livros', icon: <LibraryBooksIcon />, path: '/relatorios-livros' },
       { text: 'Patrimônio', icon: <BusinessIcon />, path: '/patrimonio' },
-      { text: 'Clientes', icon: <PeopleIcon />, path: '/clientes' },
+      { text: 'Leitores', icon: <PeopleIcon />, path: '/clientes' },
       { text: 'Empréstimos', icon: <SwapHorizIcon />, path: '/emprestimos' },
+      { text: 'Clube de Leitura', icon: <EmojiEventsIcon />, path: '/clube-leitura' },
       { text: 'Busca', icon: <SearchIcon />, path: '/busca' },
       { text: 'Relatórios', icon: <AssessmentIcon />, path: '/relatorios' },
     ];
@@ -205,6 +213,12 @@ export default function Layout({ children }) {
           >
             Controle Escolar Inteligente
           </Typography>
+          
+          {/* Status de Sincronização */}
+          <Box sx={{ mr: 2 }}>
+            <SyncStatus />
+          </Box>
+
           <IconButton 
             color="inherit"
             sx={{
@@ -339,6 +353,9 @@ export default function Layout({ children }) {
       >
         <Toolbar />
         <Box sx={{ flexGrow: 1 }}>
+          {/* Aviso de Licença */}
+          <AvisoLicenca />
+          
           {children}
         </Box>
         

@@ -1,5 +1,7 @@
 import React, { useState, useRef } from 'react';
 import Layout from '../components/Layout';
+import BarcodeScannerDialog from '../components/BarcodeScannerDialog';
+import TermoDoacao from '../components/TermoDoacao';
 import {
   Box,
   Button,
@@ -21,18 +23,41 @@ import {
   Avatar,
   Card,
   CardMedia,
-  Tooltip
+  Tooltip,
+  Select,
+  MenuItem,
+  FormControl,
+  InputLabel,
+  Alert,
+  Radio,
+  RadioGroup,
+  FormControlLabel,
+  FormLabel
 } from '@mui/material';
-import { Add, Edit, Delete, Search, PhotoCamera, Upload, Close } from '@mui/icons-material';
+import { Add, Edit, Delete, Search, PhotoCamera, Upload, Close, QrCodeScanner, GetApp } from '@mui/icons-material';
 import { useData } from '../context/DataContext';
 
 function LivrosPage() {
-  const { livros, adicionarLivro, atualizarLivro, removerLivro } = useData();
+  const { livros, adicionarLivro, atualizarLivro, removerLivro, darBaixaLivro, usuarioLogado } = useData();
   const [open, setOpen] = useState(false);
   const [editando, setEditando] = useState(null);
   const [busca, setBusca] = useState('');
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [baixaOpen, setBaixaOpen] = useState(false);
+  const [livroParaBaixa, setLivroParaBaixa] = useState(null);
+  const [termoOpen, setTermoOpen] = useState(false);
+  const [dadosTermo, setDadosTermo] = useState(null);
   const fileInputRef = useRef(null);
   const cameraInputRef = useRef(null);
+  
+  const [dadosBaixa, setDadosBaixa] = useState({
+    motivo: 'Doação',
+    donatarioNome: '',
+    donatarioCpf: '',
+    donatarioEndereco: '',
+    donatarioTelefone: '',
+    observacoes: ''
+  });
   
   const [formData, setFormData] = useState({
     titulo: '',
@@ -43,7 +68,9 @@ function LivrosPage() {
     categoria: '',
     quantidade: 1,
     localizacao: '',
-    fotoUrl: '' // Nova propriedade para armazenar a foto em base64
+    fotoUrl: '',
+    tipo: 'Paradidático', // Didático ou Paradidático
+    anoVigencia: '' // Apenas para livros didáticos
   });
 
   const handleOpen = (livro = null) => {
@@ -61,9 +88,25 @@ function LivrosPage() {
         categoria: '',
         quantidade: 1,
         localizacao: '',
-        fotoUrl: ''
+        fotoUrl: '',
+        tipo: 'Paradidático',
+        anoVigencia: ''
       });
     }
+    setOpen(true);
+  };
+
+  const handleBookFound = (dadosLivro) => {
+    setFormData({
+      ...formData,
+      titulo: dadosLivro.titulo || formData.titulo,
+      autor: dadosLivro.autor || formData.autor,
+      isbn: dadosLivro.isbn || formData.isbn,
+      editora: dadosLivro.editora || formData.editora,
+      anoPublicacao: dadosLivro.anoPublicacao || formData.anoPublicacao,
+      categoria: dadosLivro.categoria || formData.categoria,
+      fotoUrl: dadosLivro.foto || formData.fotoUrl
+    });
     setOpen(true);
   };
 
@@ -125,6 +168,60 @@ function LivrosPage() {
     }
   };
 
+  const handleAbrirBaixa = (livro) => {
+    setLivroParaBaixa(livro);
+    setDadosBaixa({
+      motivo: 'Doação',
+      donatarioNome: '',
+      donatarioCpf: '',
+      donatarioEndereco: '',
+      donatarioTelefone: '',
+      observacoes: ''
+    });
+    setBaixaOpen(true);
+  };
+
+  const handleConfirmarBaixa = () => {
+    if (dadosBaixa.motivo === 'Doação' && (!dadosBaixa.donatarioNome || !dadosBaixa.donatarioCpf)) {
+      alert('Por favor, preencha os dados do donatário');
+      return;
+    }
+
+    const detalhes = {
+      donatario: dadosBaixa.donatarioNome,
+      cpfDonatario: dadosBaixa.donatarioCpf,
+      enderecoDonatario: dadosBaixa.donatarioEndereco,
+      telefoneDonatario: dadosBaixa.donatarioTelefone,
+      observacoes: dadosBaixa.observacoes
+    };
+
+    const livroComBaixa = darBaixaLivro(livroParaBaixa.id, dadosBaixa.motivo, detalhes);
+
+    if (dadosBaixa.motivo === 'Doação' && livroComBaixa) {
+      // Preparar dados para o termo
+      setDadosTermo({
+        livro: livroComBaixa,
+        doador: {
+          nome: usuarioLogado?.nome || 'Instituição de Ensino',
+          cpf: usuarioLogado?.cpf || '',
+          endereco: usuarioLogado?.endereco || '',
+          telefone: usuarioLogado?.telefone || '',
+          cidade: usuarioLogado?.cidade || ''
+        },
+        donatario: {
+          nome: dadosBaixa.donatarioNome,
+          cpf: dadosBaixa.donatarioCpf,
+          endereco: dadosBaixa.donatarioEndereco,
+          telefone: dadosBaixa.donatarioTelefone
+        }
+      });
+      setTermoOpen(true);
+    }
+
+    setBaixaOpen(false);
+    setLivroParaBaixa(null);
+  };
+
   const livrosFiltrados = livros.filter(livro =>
     livro.titulo.toLowerCase().includes(busca.toLowerCase()) ||
     livro.autor.toLowerCase().includes(busca.toLowerCase()) ||
@@ -146,6 +243,14 @@ function LivrosPage() {
           }}
         />
         <Button
+          variant="outlined"
+          startIcon={<QrCodeScanner />}
+          onClick={() => setScannerOpen(true)}
+          sx={{ minWidth: '200px' }}
+        >
+          Escanear Código
+        </Button>
+        <Button
           variant="contained"
           startIcon={<Add />}
           onClick={() => handleOpen()}
@@ -162,15 +267,17 @@ function LivrosPage() {
               <TableCell>Título</TableCell>
               <TableCell>Autor</TableCell>
               <TableCell>ISBN</TableCell>
+              <TableCell>Tipo</TableCell>
               <TableCell>Categoria</TableCell>
               <TableCell>Quantidade</TableCell>
+              <TableCell>Status</TableCell>
               <TableCell>Ações</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {livrosFiltrados.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} align="center">
+                <TableCell colSpan={9} align="center">
                   <Typography color="text.secondary">
                     Nenhum livro cadastrado
                   </Typography>
@@ -178,7 +285,7 @@ function LivrosPage() {
               </TableRow>
             ) : (
               livrosFiltrados.map((livro) => (
-                <TableRow key={livro.id}>
+                <TableRow key={livro.id} sx={{ bgcolor: livro.baixa ? '#f5f5f5' : 'inherit' }}>
                   <TableCell>
                     <Avatar
                       src={livro.fotoUrl}
@@ -193,13 +300,40 @@ function LivrosPage() {
                   <TableCell>{livro.autor}</TableCell>
                   <TableCell>{livro.isbn}</TableCell>
                   <TableCell>
+                    <Chip 
+                      label={livro.tipo || 'Paradidático'} 
+                      size="small" 
+                      color={livro.tipo === 'Didático' ? 'primary' : 'default'}
+                    />
+                  </TableCell>
+                  <TableCell>
                     <Chip label={livro.categoria} size="small" />
                   </TableCell>
                   <TableCell>{livro.quantidade}</TableCell>
                   <TableCell>
-                    <IconButton onClick={() => handleOpen(livro)} size="small">
-                      <Edit />
-                    </IconButton>
+                    {livro.baixa ? (
+                      <Chip 
+                        label={`Baixa: ${livro.baixa.motivo}`}
+                        size="small"
+                        color="warning"
+                      />
+                    ) : (
+                      <Chip label="Ativo" size="small" color="success" />
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {!livro.baixa && (
+                      <>
+                        <IconButton onClick={() => handleOpen(livro)} size="small">
+                          <Edit />
+                        </IconButton>
+                        <Tooltip title="Dar Baixa">
+                          <IconButton onClick={() => handleAbrirBaixa(livro)} size="small" color="warning">
+                            <GetApp />
+                          </IconButton>
+                        </Tooltip>
+                      </>
+                    )}
                     <IconButton onClick={() => handleDelete(livro.id)} size="small" color="error">
                       <Delete />
                     </IconButton>
@@ -254,6 +388,28 @@ function LivrosPage() {
               value={formData.categoria}
               onChange={(e) => setFormData({ ...formData, categoria: e.target.value })}
             />
+            <FormControl fullWidth>
+              <InputLabel>Tipo de Livro *</InputLabel>
+              <Select
+                value={formData.tipo}
+                label="Tipo de Livro *"
+                onChange={(e) => setFormData({ ...formData, tipo: e.target.value, anoVigencia: e.target.value === 'Paradidático' ? '' : formData.anoVigencia })}
+              >
+                <MenuItem value="Didático">Didático</MenuItem>
+                <MenuItem value="Paradidático">Paradidático</MenuItem>
+              </Select>
+            </FormControl>
+            {formData.tipo === 'Didático' && (
+              <TextField
+                label="Ano de Vigência"
+                fullWidth
+                type="number"
+                placeholder="Ex: 2026"
+                helperText="Ano até quando o livro será utilizado"
+                value={formData.anoVigencia}
+                onChange={(e) => setFormData({ ...formData, anoVigencia: e.target.value })}
+              />
+            )}
             <TextField
               label="Quantidade"
               fullWidth
@@ -342,6 +498,94 @@ function LivrosPage() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      <BarcodeScannerDialog 
+        open={scannerOpen} 
+        onClose={() => setScannerOpen(false)}
+        onBookFound={handleBookFound}
+      />
+
+      {/* Modal de Baixa */}
+      <Dialog open={baixaOpen} onClose={() => setBaixaOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Dar Baixa no Livro</DialogTitle>
+        <DialogContent>
+          <Alert severity="info" sx={{ mb: 2 }}>
+            <strong>Livro:</strong> {livroParaBaixa?.titulo}<br />
+            <strong>Autor:</strong> {livroParaBaixa?.autor}
+          </Alert>
+
+          <FormControl component="fieldset" sx={{ mb: 3 }}>
+            <FormLabel component="legend">Motivo da Baixa</FormLabel>
+            <RadioGroup
+              value={dadosBaixa.motivo}
+              onChange={(e) => setDadosBaixa({ ...dadosBaixa, motivo: e.target.value })}
+            >
+              <FormControlLabel value="Doação" control={<Radio />} label="Doação" />
+              <FormControlLabel value="Término de Vigência" control={<Radio />} label="Término de Vigência" />
+            </RadioGroup>
+          </FormControl>
+
+          {dadosBaixa.motivo === 'Doação' && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <Typography variant="subtitle2" color="primary">Dados do Donatário</Typography>
+              <TextField
+                label="Nome Completo *"
+                fullWidth
+                value={dadosBaixa.donatarioNome}
+                onChange={(e) => setDadosBaixa({ ...dadosBaixa, donatarioNome: e.target.value })}
+              />
+              <TextField
+                label="CPF/CNPJ *"
+                fullWidth
+                value={dadosBaixa.donatarioCpf}
+                onChange={(e) => setDadosBaixa({ ...dadosBaixa, donatarioCpf: e.target.value })}
+              />
+              <TextField
+                label="Endereço"
+                fullWidth
+                value={dadosBaixa.donatarioEndereco}
+                onChange={(e) => setDadosBaixa({ ...dadosBaixa, donatarioEndereco: e.target.value })}
+              />
+              <TextField
+                label="Telefone"
+                fullWidth
+                value={dadosBaixa.donatarioTelefone}
+                onChange={(e) => setDadosBaixa({ ...dadosBaixa, donatarioTelefone: e.target.value })}
+              />
+            </Box>
+          )}
+
+          <TextField
+            label="Observações"
+            fullWidth
+            multiline
+            rows={3}
+            sx={{ mt: 2 }}
+            value={dadosBaixa.observacoes}
+            onChange={(e) => setDadosBaixa({ ...dadosBaixa, observacoes: e.target.value })}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setBaixaOpen(false)}>Cancelar</Button>
+          <Button onClick={handleConfirmarBaixa} variant="contained" color="warning">
+            Confirmar Baixa
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Termo de Doação */}
+      {dadosTermo && (
+        <TermoDoacao 
+          open={termoOpen}
+          onClose={() => {
+            setTermoOpen(false);
+            setDadosTermo(null);
+          }}
+          livro={dadosTermo.livro}
+          doador={dadosTermo.doador}
+          donatario={dadosTermo.donatario}
+        />
+      )}
     </Layout>
   );
 }

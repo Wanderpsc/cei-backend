@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useData } from '../context/DataContext';
+import InstallPWA from '../components/InstallPWA';
 import {
   Container,
   Paper,
@@ -11,20 +12,35 @@ import {
   Alert,
   InputAdornment,
   IconButton,
-  keyframes
+  keyframes,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Link
 } from '@mui/material';
 import SchoolIcon from '@mui/icons-material/School';
 import Visibility from '@mui/icons-material/Visibility';
 import VisibilityOff from '@mui/icons-material/VisibilityOff';
 import LoginIcon from '@mui/icons-material/Login';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
+import LockResetIcon from '@mui/icons-material/LockReset';
+import EmailIcon from '@mui/icons-material/Email';
 
 export default function LoginPage() {
   const [login, setLogin] = useState('');
   const [senha, setSenha] = useState('');
   const [erro, setErro] = useState('');
   const [mostrarSenha, setMostrarSenha] = useState(false);
-  const { login: fazerLogin } = useData();
+  const [dialogRecuperacao, setDialogRecuperacao] = useState(false);
+  const [emailRecuperacao, setEmailRecuperacao] = useState('');
+  const [novaSenha, setNovaSenha] = useState('');
+  const [confirmarNovaSenha, setConfirmarNovaSenha] = useState('');
+  const [erroRecuperacao, setErroRecuperacao] = useState('');
+  const [sucessoRecuperacao, setSucessoRecuperacao] = useState('');
+  const [mostrarNovaSenha, setMostrarNovaSenha] = useState(false);
+  const [etapaRecuperacao, setEtapaRecuperacao] = useState(1); // 1: email, 2: nova senha
+  const { login: fazerLogin, recuperarSenha } = useData();
   const navigate = useNavigate();
 
   const handleSubmit = (e) => {
@@ -35,6 +51,76 @@ export default function LoginPage() {
       navigate('/');
     } else {
       setErro('Login ou senha inválidos');
+    }
+  };
+
+  const handleAbrirRecuperacao = () => {
+    setDialogRecuperacao(true);
+    setEmailRecuperacao('');
+    setNovaSenha('');
+    setConfirmarNovaSenha('');
+    setErroRecuperacao('');
+    setSucessoRecuperacao('');
+    setEtapaRecuperacao(1);
+  };
+
+  const handleFecharRecuperacao = () => {
+    setDialogRecuperacao(false);
+    setEmailRecuperacao('');
+    setNovaSenha('');
+    setConfirmarNovaSenha('');
+    setErroRecuperacao('');
+    setSucessoRecuperacao('');
+    setEtapaRecuperacao(1);
+  };
+
+  const handleVerificarEmail = () => {
+    setErroRecuperacao('');
+    
+    if (!emailRecuperacao.trim()) {
+      setErroRecuperacao('Por favor, informe o email cadastrado');
+      return;
+    }
+
+    // Verificar se o email existe
+    const resultado = recuperarSenha(emailRecuperacao);
+    
+    if (resultado.sucesso) {
+      setEtapaRecuperacao(2);
+      setSucessoRecuperacao(`Email encontrado! Escola: ${resultado.escola}`);
+    } else {
+      setErroRecuperacao(resultado.mensagem);
+    }
+  };
+
+  const handleRedefinirSenha = () => {
+    setErroRecuperacao('');
+    
+    if (!novaSenha || !confirmarNovaSenha) {
+      setErroRecuperacao('Por favor, preencha todos os campos');
+      return;
+    }
+
+    if (novaSenha.length < 6) {
+      setErroRecuperacao('A senha deve ter no mínimo 6 caracteres');
+      return;
+    }
+
+    if (novaSenha !== confirmarNovaSenha) {
+      setErroRecuperacao('As senhas não coincidem');
+      return;
+    }
+
+    // Redefinir a senha
+    const resultado = recuperarSenha(emailRecuperacao, novaSenha);
+    
+    if (resultado.sucesso) {
+      setSucessoRecuperacao('Senha redefinida com sucesso! Você já pode fazer login.');
+      setTimeout(() => {
+        handleFecharRecuperacao();
+      }, 2000);
+    } else {
+      setErroRecuperacao(resultado.mensagem);
     }
   };
 
@@ -210,6 +296,29 @@ export default function LoginPage() {
                 )
               }}
             />
+            
+            <Box sx={{ textAlign: 'right', mt: 1, mb: 2 }}>
+              <Link
+                component="button"
+                type="button"
+                variant="body2"
+                onClick={handleAbrirRecuperacao}
+                sx={{
+                  color: 'primary.main',
+                  fontWeight: 500,
+                  textDecoration: 'none',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  '&:hover': {
+                    textDecoration: 'underline',
+                    color: 'primary.dark',
+                  }
+                }}
+              >
+                Esqueceu a senha?
+              </Link>
+            </Box>
+
             <Button
               type="submit"
               variant="contained"
@@ -265,6 +374,9 @@ export default function LoginPage() {
               Cadastrar Nova Instituição
             </Button>
           </Box>
+
+          {/* Instalar PWA */}
+          <InstallPWA />
           
           {/* Marca Registrada */}
           <Box sx={{ mt: 4, pt: 3, borderTop: '2px solid', borderColor: 'divider', textAlign: 'center' }}>
@@ -290,6 +402,156 @@ export default function LoginPage() {
             </Typography>
           </Box>
         </Paper>
+
+        {/* Dialog de Recuperação de Senha */}
+        <Dialog 
+          open={dialogRecuperacao} 
+          onClose={handleFecharRecuperacao}
+          maxWidth="sm"
+          fullWidth
+          PaperProps={{
+            sx: {
+              borderRadius: 3,
+              p: 2
+            }
+          }}
+        >
+          <DialogTitle sx={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: 1,
+            pb: 1 
+          }}>
+            <LockResetIcon sx={{ color: 'primary.main', fontSize: 30 }} />
+            <Typography variant="h5" fontWeight="bold">
+              Recuperar Senha
+            </Typography>
+          </DialogTitle>
+
+          <DialogContent sx={{ pt: 2 }}>
+            {etapaRecuperacao === 1 ? (
+              // Etapa 1: Verificar email
+              <>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                  Digite o email cadastrado da sua instituição para recuperar a senha.
+                </Typography>
+
+                {erroRecuperacao && (
+                  <Alert severity="error" sx={{ mb: 2 }}>
+                    {erroRecuperacao}
+                  </Alert>
+                )}
+
+                <TextField
+                  label="Email da Instituição"
+                  type="email"
+                  fullWidth
+                  value={emailRecuperacao}
+                  onChange={(e) => setEmailRecuperacao(e.target.value)}
+                  placeholder="email@escola.com.br"
+                  autoFocus
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <EmailIcon color="primary" />
+                      </InputAdornment>
+                    )
+                  }}
+                  sx={{
+                    '& .MuiOutlinedInput-root': {
+                      borderRadius: 2,
+                    }
+                  }}
+                />
+              </>
+            ) : (
+              // Etapa 2: Redefinir senha
+              <>
+                <Alert severity="success" sx={{ mb: 2 }}>
+                  {sucessoRecuperacao}
+                </Alert>
+
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                  Agora defina uma nova senha de acesso.
+                </Typography>
+
+                {erroRecuperacao && (
+                  <Alert severity="error" sx={{ mb: 2 }}>
+                    {erroRecuperacao}
+                  </Alert>
+                )}
+
+                <TextField
+                  label="Nova Senha"
+                  type={mostrarNovaSenha ? 'text' : 'password'}
+                  fullWidth
+                  value={novaSenha}
+                  onChange={(e) => setNovaSenha(e.target.value)}
+                  placeholder="Mínimo 6 caracteres"
+                  autoFocus
+                  sx={{ mb: 2 }}
+                  InputProps={{
+                    endAdornment: (
+                      <InputAdornment position="end">
+                        <IconButton
+                          onClick={() => setMostrarNovaSenha(!mostrarNovaSenha)}
+                          edge="end"
+                        >
+                          {mostrarNovaSenha ? <VisibilityOff /> : <Visibility />}
+                        </IconButton>
+                      </InputAdornment>
+                    )
+                  }}
+                />
+
+                <TextField
+                  label="Confirmar Nova Senha"
+                  type={mostrarNovaSenha ? 'text' : 'password'}
+                  fullWidth
+                  value={confirmarNovaSenha}
+                  onChange={(e) => setConfirmarNovaSenha(e.target.value)}
+                  placeholder="Digite a senha novamente"
+                />
+              </>
+            )}
+          </DialogContent>
+
+          <DialogActions sx={{ px: 3, pb: 2 }}>
+            <Button 
+              onClick={handleFecharRecuperacao}
+              sx={{ borderRadius: 2 }}
+            >
+              Cancelar
+            </Button>
+            {etapaRecuperacao === 1 ? (
+              <Button 
+                variant="contained"
+                onClick={handleVerificarEmail}
+                disabled={!emailRecuperacao.trim()}
+                sx={{ 
+                  borderRadius: 2,
+                  px: 3,
+                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                }}
+              >
+                Verificar Email
+              </Button>
+            ) : (
+              <Button 
+                variant="contained"
+                onClick={handleRedefinirSenha}
+                disabled={!novaSenha || !confirmarNovaSenha}
+                sx={{ 
+                  borderRadius: 2,
+                  px: 3,
+                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                }}
+              >
+                Redefinir Senha
+              </Button>
+            )}
+          </DialogActions>
+        </Dialog>
       </Container>
     </Box>
   );
