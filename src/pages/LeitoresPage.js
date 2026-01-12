@@ -69,6 +69,13 @@ function LeitoresPage() {
   };
 
   const handleSubmit = () => {
+    // Gerar código automático se for novo leitor
+    if (!editando) {
+      const numeroSequencial = (clientes.length + 1).toString().padStart(6, '0');
+      const codigoLeitor = `LEIT${numeroSequencial}`;
+      formData.codigoIdentificacao = codigoLeitor;
+    }
+    
     if (editando) {
       atualizarCliente(editando, formData);
     } else {
@@ -116,6 +123,7 @@ function LeitoresPage() {
         <Table>
           <TableHead>
             <TableRow>
+              <TableCell>Código</TableCell>
               <TableCell>Nome</TableCell>
               <TableCell>CPF</TableCell>
               <TableCell>Tipo</TableCell>
@@ -128,7 +136,7 @@ function LeitoresPage() {
           <TableBody>
             {clientesFiltrados.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} align="center">
+                <TableCell colSpan={8} align="center">
                   <Typography color="text.secondary">
                     Nenhum leitor cadastrado
                   </Typography>
@@ -137,6 +145,14 @@ function LeitoresPage() {
             ) : (
               clientesFiltrados.map((cliente) => (
                 <TableRow key={cliente.id}>
+                  <TableCell>
+                    <Chip 
+                      label={cliente.codigoIdentificacao || 'N/A'} 
+                      size="small" 
+                      color="secondary"
+                      variant="outlined"
+                    />
+                  </TableCell>
                   <TableCell>{cliente.nome}</TableCell>
                   <TableCell>{cliente.cpf}</TableCell>
                   <TableCell>

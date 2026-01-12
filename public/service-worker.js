@@ -1,5 +1,5 @@
 // Service Worker para CEI - Controle Escolar Inteligente
-const CACHE_NAME = 'cei-v2.1.0'; // Versão atualizada para forçar refresh
+const CACHE_NAME = 'cei-v3.3.2'; // NOVA VERSÃO - Botões de acesso rápido na navbar
 const urlsToCache = [
   '/',
   '/index.html',

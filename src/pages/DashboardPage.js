@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { 
   Card, 
@@ -15,11 +16,18 @@ import {
   People, 
   Assignment,
   Warning,
-  Error
+  Error,
+  Assessment,
+  Search,
+  EmojiEvents,
+  AccountBalanceWallet,
+  LibraryBooks,
+  AssignmentReturn
 } from '@mui/icons-material';
 import { useData } from '../context/DataContext';
 
 function DashboardPage() {
+  const navigate = useNavigate();
   const { livros, patrimonio, clientes, emprestimos, usuarioLogado, instituicoes, instituicaoAtiva, calcularProximoVencimento } = useData();
   const [alertaFinanceiro, setAlertaFinanceiro] = useState(null);
 
@@ -77,32 +85,128 @@ function DashboardPage() {
     return dataDevolucao < hoje;
   }).length;
 
-  const cards = [
+  // Cards apenas para SuperAdmin - Painel de Gerenciamento de Instituições
+  const cardsAdmin = [
+    { 
+      title: 'Gerenciar Escolas', 
+      value: instituicoes.length, 
+      icon: <AccountBalanceWallet sx={{ fontSize: 40 }} />, 
+      color: '#1976d2',
+      path: '/gerenciar-escolas'
+    },
+    { 
+      title: 'Financeiro Admin', 
+      value: '💰', 
+      icon: <AccountBalanceWallet sx={{ fontSize: 40 }} />, 
+      color: '#388e3c',
+      path: '/financeiro-admin'
+    },
+    { 
+      title: 'Configurar Planos', 
+      value: '📋', 
+      icon: <Assignment sx={{ fontSize: 40 }} />, 
+      color: '#f57c00',
+      path: '/configurar-planos'
+    },
+    { 
+      title: 'Notas Fiscais', 
+      value: '🧾', 
+      icon: <Assessment sx={{ fontSize: 40 }} />, 
+      color: '#7b1fa2',
+      path: '/notas-fiscais'
+    },
+    { 
+      title: 'Diagrama do Sistema', 
+      value: '🏗️', 
+      icon: <Search sx={{ fontSize: 40 }} />, 
+      color: '#d32f2f',
+      path: '/diagrama-sistema'
+    },
+  ];
+
+  // Cards para Cliente - Menu lateral como cards (operações da biblioteca)
+  const cardsCliente = [
+    { 
+      title: 'Gerenciar Usuários', 
+      value: '👥', 
+      icon: <People sx={{ fontSize: 40 }} />, 
+      color: '#9c27b0',
+      path: '/gerenciar-usuarios'
+    },
     { 
       title: 'Livros', 
       value: livros.length, 
       icon: <MenuBook sx={{ fontSize: 40 }} />, 
-      color: '#1976d2' 
+      color: '#1976d2',
+      path: '/livros'
     },
     { 
       title: 'Patrimônio', 
       value: patrimonio.length, 
       icon: <Inventory sx={{ fontSize: 40 }} />, 
-      color: '#388e3c' 
+      color: '#388e3c',
+      path: '/patrimonio'
     },
     { 
-      title: 'Clientes', 
+      title: 'Leitores', 
       value: clientes.length, 
       icon: <People sx={{ fontSize: 40 }} />, 
-      color: '#f57c00' 
+      color: '#f57c00',
+      path: '/clientes'
     },
     { 
-      title: 'Empréstimos Ativos', 
+      title: 'Empréstimos', 
       value: emprestimosAtivos, 
       icon: <Assignment sx={{ fontSize: 40 }} />, 
-      color: '#7b1fa2' 
+      color: '#7b1fa2',
+      path: '/emprestimos'
+    },
+    { 
+      title: 'Devoluções', 
+      value: emprestimosAtivos, 
+      icon: <AssignmentReturn sx={{ fontSize: 40 }} />, 
+      color: '#d32f2f',
+      path: '/devolucoes'
+    },
+    { 
+      title: 'Clube de Leitura', 
+      value: '🏆', 
+      icon: <EmojiEvents sx={{ fontSize: 40 }} />, 
+      color: '#ffa726',
+      path: '/clube-leitura'
+    },
+    { 
+      title: 'Relatórios', 
+      value: '📊', 
+      icon: <Assessment sx={{ fontSize: 40 }} />, 
+      color: '#5c6bc0',
+      path: '/relatorios'
+    },
+    { 
+      title: 'Relatórios Livros', 
+      value: '📚', 
+      icon: <LibraryBooks sx={{ fontSize: 40 }} />, 
+      color: '#26a69a',
+      path: '/relatorios-livros'
+    },
+    { 
+      title: 'Busca', 
+      value: '🔍', 
+      icon: <Search sx={{ fontSize: 40 }} />, 
+      color: '#ab47bc',
+      path: '/busca'
+    },
+    { 
+      title: 'Financeiro', 
+      value: '💰', 
+      icon: <AccountBalanceWallet sx={{ fontSize: 40 }} />, 
+      color: '#66bb6a',
+      path: '/financeiro'
     },
   ];
+
+  // Selecionar cards baseado no perfil do usuário
+  const cards = usuarioLogado?.perfil === 'SuperAdmin' ? cardsAdmin : cardsCliente;
 
   return (
     <Layout title="Dashboard">
@@ -165,19 +269,40 @@ function DashboardPage() {
         </Box>
       )}
 
-      <Grid container spacing={3}>
+      {/* Título Estatísticas e Informações */}
+      <Box sx={{ mb: 3, textAlign: 'center' }}>
+        <Typography 
+          variant="h4" 
+          sx={{ 
+            fontWeight: 700,
+            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+            backgroundClip: 'text',
+          }}
+        >
+          📊 Estatísticas e Informações
+        </Typography>
+      </Box>
+
+      <Grid container spacing={3} justifyContent="center">
         {cards.map((card, index) => (
-          <Grid item xs={12} sm={6} md={3} key={index}>
-            <Card sx={{ 
-              height: '100%', 
-              display: 'flex', 
-              flexDirection: 'column',
-              transition: 'transform 0.2s',
-              '&:hover': {
-                transform: 'translateY(-4px)',
-                boxShadow: 4,
-              }
-            }}>
+          <Grid item xs={12} sm={6} md={4} lg={3} key={index}>
+            <Card 
+              sx={{ 
+                height: '100%', 
+                display: 'flex', 
+                flexDirection: 'column',
+                transition: 'all 0.3s',
+                cursor: 'pointer',
+                '&:hover': {
+                  transform: 'translateY(-8px)',
+                  boxShadow: 6,
+                  bgcolor: 'action.hover'
+                }
+              }}
+              onClick={() => navigate(card.path)}
+            >
               <CardContent>
                 <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
                   <Box sx={{ color: card.color }}>
@@ -207,15 +332,6 @@ function DashboardPage() {
           </Card>
         </Box>
       )}
-
-      <Box sx={{ mt: 4 }}>
-        <Typography variant="h5" gutterBottom>
-          Bem-vindo ao CEI - Controle Escolar Inteligente
-        </Typography>
-        <Typography variant="body1" color="text.secondary">
-          Sistema de gestão de biblioteca e patrimônio escolar.
-        </Typography>
-      </Box>
     </Layout>
   );
 }

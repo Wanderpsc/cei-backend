@@ -31,6 +31,9 @@ import LimparDuplicatasPage from './pages/LimparDuplicatasPage';
 import ClubeDeLeituraPage from './pages/ClubeDeLeituraPage';
 import RelatoriosLivrosPage from './pages/RelatoriosLivrosPage';
 import NotaFiscalPage from './pages/NotaFiscalPage';
+import DevolucaoPage from './pages/DevolucaoPage';
+import GerenciarUsuariosPage from './pages/GerenciarUsuariosPage';
+import RelatorioUsuariosPage from './pages/RelatorioUsuariosPage';
 
 const theme = createTheme({
   palette: {
@@ -78,6 +81,7 @@ function AppRoutes() {
       <Route path="/patrimonio" element={<PrivateRoute><PatrimonioPage /></PrivateRoute>} />
       <Route path="/clientes" element={<PrivateRoute><LeitoresPage /></PrivateRoute>} />
       <Route path="/emprestimos" element={<PrivateRoute><EmprestimosPage /></PrivateRoute>} />
+      <Route path="/devolucoes" element={<PrivateRoute><DevolucaoPage /></PrivateRoute>} />
       <Route path="/relatorios" element={<PrivateRoute><RelatoriosPage /></PrivateRoute>} />
       <Route path="/busca" element={<PrivateRoute><BuscaPage /></PrivateRoute>} />
       <Route path="/diagrama-sistema" element={<PrivateRoute><DiagramaSistemaPage /></PrivateRoute>} />
@@ -85,6 +89,8 @@ function AppRoutes() {
       <Route path="/clube-leitura" element={<PrivateRoute><ClubeDeLeituraPage /></PrivateRoute>} />
       <Route path="/relatorios-livros" element={<PrivateRoute><RelatoriosLivrosPage /></PrivateRoute>} />
       <Route path="/notas-fiscais" element={<PrivateRoute><NotaFiscalPage /></PrivateRoute>} />
+      <Route path="/gerenciar-usuarios" element={<PrivateRoute><GerenciarUsuariosPage /></PrivateRoute>} />
+      <Route path="/relatorio-usuarios" element={<PrivateRoute><RelatorioUsuariosPage /></PrivateRoute>} />
     </Routes>
   );
 }

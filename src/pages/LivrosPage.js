@@ -154,6 +154,13 @@ function LivrosPage() {
   };
 
   const handleSubmit = () => {
+    // Gerar código automático se for novo livro
+    if (!editando) {
+      const numeroSequencial = (livros.length + 1).toString().padStart(6, '0');
+      const codigoLivro = `LIV${numeroSequencial}`;
+      formData.codigoIdentificacao = codigoLivro;
+    }
+    
     if (editando) {
       atualizarLivro(editando, formData);
     } else {
@@ -248,7 +255,7 @@ function LivrosPage() {
           onClick={() => setScannerOpen(true)}
           sx={{ minWidth: '200px' }}
         >
-          Escanear Código
+          Digite o ISBN
         </Button>
         <Button
           variant="contained"
@@ -263,6 +270,7 @@ function LivrosPage() {
         <Table>
           <TableHead>
             <TableRow>
+              <TableCell>Código</TableCell>
               <TableCell>Foto</TableCell>
               <TableCell>Título</TableCell>
               <TableCell>Autor</TableCell>
@@ -277,7 +285,7 @@ function LivrosPage() {
           <TableBody>
             {livrosFiltrados.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={9} align="center">
+                <TableCell colSpan={10} align="center">
                   <Typography color="text.secondary">
                     Nenhum livro cadastrado
                   </Typography>
@@ -286,6 +294,14 @@ function LivrosPage() {
             ) : (
               livrosFiltrados.map((livro) => (
                 <TableRow key={livro.id} sx={{ bgcolor: livro.baixa ? '#f5f5f5' : 'inherit' }}>
+                  <TableCell>
+                    <Chip 
+                      label={livro.codigoIdentificacao || 'N/A'} 
+                      size="small" 
+                      color="primary"
+                      variant="outlined"
+                    />
+                  </TableCell>
                   <TableCell>
                     <Avatar
                       src={livro.fotoUrl}

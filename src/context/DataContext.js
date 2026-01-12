@@ -50,6 +50,7 @@ export const DataProvider = ({ children }) => {
       login: 'superadmin',
       senha: 'matriz@2025',
       perfil: 'SuperAdmin', // Controle total da matriz
+      tipo: 'master',
       instituicaoId: 0 // 0 = Matriz
     },
     {
@@ -58,9 +59,12 @@ export const DataProvider = ({ children }) => {
       login: 'cetidesamaral',
       senha: 'Ceti@2026',
       perfil: 'Admin',
+      tipo: 'master', // Usuário master da instituição
       instituicaoId: 1, // CETI Desembargador Amaral
       email: 'wander@cetidesamaral.edu.br',
-      status: 'ativo'
+      cargo: 'Diretor',
+      status: 'ativo',
+      dataCriacao: new Date('2024-01-01').toISOString()
     }
   ];
 
@@ -84,6 +88,7 @@ export const DataProvider = ({ children }) => {
   const [instituicaoAtiva, setInstituicaoAtiva] = useState(null);
   const [planos, setPlanos] = useState(planosPadrao);
   const [notasFiscais, setNotasFiscais] = useState([]);
+  const [logAtividades, setLogAtividades] = useState([]);
   const [sincronizando, setSincronizando] = useState(false);
   const [dadosCarregados, setDadosCarregados] = useState(false);
 
@@ -171,6 +176,7 @@ export const DataProvider = ({ children }) => {
         setEmprestimos(dados.emprestimos || []);
         setPlanos(dados.planos || planosPadrao);
         setNotasFiscais(dados.notasFiscais || []);
+        setLogAtividades(dados.logAtividades || []);
         
         // Priorizar usuários salvos e garantir que padrões existam
         const usuariosMerged = dados.usuarios && dados.usuarios.length > 0 ? [...dados.usuarios] : [];
@@ -253,15 +259,17 @@ export const DataProvider = ({ children }) => {
       emprestimos,
       usuarios,
       planos,
-      notasFiscais
+      notasFiscais,
+      logAtividades
     };
     localStorage.setItem('cei_data', JSON.stringify(dados));
     console.log('💾 Dados salvos no localStorage:', {
       instituicoes: instituicoes.length,
       usuarios: usuarios.length,
-      livros: livros.length
+      livros: livros.length,
+      logs: logAtividades.length
     });
-  }, [instituicoes, livros, patrimonio, clientes, emprestimos, usuarios, planos, notasFiscais]);
+  }, [instituicoes, livros, patrimonio, clientes, emprestimos, usuarios, planos, notasFiscais, logAtividades]);
 
   // ==================== VERIFICAÇÃO DE LICENÇAS EXPIRADAS ====================
   
@@ -757,6 +765,30 @@ export const DataProvider = ({ children }) => {
     setEmprestimos(emprestimos.map(e => e.id === id ? { ...e, ...dadosAtualizados } : e));
   };
 
+  const devolverLivro = (emprestimoId) => {
+    const emprestimo = emprestimos.find(e => e.id === emprestimoId);
+    if (emprestimo) {
+      atualizarEmprestimo(emprestimoId, {
+        status: 'devolvido',
+        dataDevolucaoReal: new Date().toISOString()
+      });
+    }
+  };
+
+  const renovarEmprestimo = (emprestimoId, diasAdicionais = 7) => {
+    const emprestimo = emprestimos.find(e => e.id === emprestimoId);
+    if (emprestimo && emprestimo.status === 'ativo') {
+      const novaDataDevolucao = new Date(emprestimo.dataDevolucao);
+      novaDataDevolucao.setDate(novaDataDevolucao.getDate() + diasAdicionais);
+      
+      atualizarEmprestimo(emprestimoId, {
+        dataDevolucao: novaDataDevolucao.toISOString(),
+        renovado: true,
+        dataRenovacao: new Date().toISOString()
+      });
+    }
+  };
+
   const getEmprestimosFiltrados = () => {
     if (usuarioLogado?.perfil === 'SuperAdmin') {
       return emprestimos;
@@ -782,26 +814,83 @@ export const DataProvider = ({ children }) => {
     return novaNota;
   };
 
+  // ==================== FUNÇÕES DE LOG DE ATIVIDADES ====================
+  
+  const registrarLog = (acao, modulo, descricao, detalhes = {}) => {
+    const novoLog = {
+      id: logAtividades.length > 0 ? Math.max(...logAtividades.map(l => l.id)) + 1 : 1,
+      usuarioId: usuarioLogado?.id,
+      usuarioNome: usuarioLogado?.nome,
+      instituicaoId: instituicaoAtiva,
+      acao, // adicionar, editar, excluir, emprestimo, devolucao, etc
+      modulo, // livros, leitores, emprestimos, etc
+      descricao,
+      detalhes,
+      dataHora: new Date().toISOString()
+    };
+    
+    setLogAtividades([...logAtividades, novoLog]);
+    return novoLog;
+  };
+
+  // ==================== FUNÇÕES DE GERENCIAMENTO DE USUÁRIOS ====================
+  
+  const adicionarUsuario = (usuarioData) => {
+    const novoUsuario = {
+      ...usuarioData,
+      id: usuarios.length > 0 ? Math.max(...usuarios.map(u => u.id)) + 1 : 1,
+      dataCriacao: new Date().toISOString()
+    };
+    
+    setUsuarios([...usuarios, novoUsuario]);
+    registrarLog('adicionar', 'usuarios', `Usuário "${novoUsuario.nome}" adicionado`, { usuarioId: novoUsuario.id });
+    return novoUsuario;
+  };
+
+  const editarUsuario = (id, dadosAtualizados) => {
+    const usuariosAtualizados = usuarios.map(u => 
+      u.id === id ? { ...u, ...dadosAtualizados, dataAtualizacao: new Date().toISOString() } : u
+    );
+    setUsuarios(usuariosAtualizados);
+    registrarLog('editar', 'usuarios', `Usuário "${dadosAtualizados.nome}" editado`, { usuarioId: id });
+  };
+
+  const excluirUsuario = (id) => {
+    const usuario = usuarios.find(u => u.id === id);
+    setUsuarios(usuarios.filter(u => u.id !== id));
+    registrarLog('excluir', 'usuarios', `Usuário "${usuario?.nome}" excluído`, { usuarioId: id });
+  };
+
   // ==================== AUTENTICAÇÃO ====================
   
   const login = (loginData, senha) => {
-    console.log('Tentando login:', loginData);
+    console.log('=== TENTATIVA DE LOGIN ===');
+    console.log('Login fornecido:', loginData);
+    console.log('Senha fornecida (length):', senha?.length);
     console.log('Total de usuários cadastrados:', usuarios.length);
-    console.log('Usuários disponíveis:', usuarios.map(u => ({ 
-      login: u.login, 
-      perfil: u.perfil,
-      instituicaoId: u.instituicaoId 
-    })));
     
-    const usuario = usuarios.find(u => u.login === loginData && u.senha === senha);
+    // Fazer trim nos dados de entrada
+    const loginTrim = loginData?.trim();
+    const senhaTrim = senha?.trim();
+    
+    console.log('Usuários disponíveis:');
+    usuarios.forEach(u => {
+      console.log(`  - Login: "${u.login}" | Senha (length): ${u.senha?.length} | Perfil: ${u.perfil} | InstituicaoId: ${u.instituicaoId}`);
+    });
+    
+    const usuario = usuarios.find(u => 
+      u.login?.trim() === loginTrim && u.senha?.trim() === senhaTrim
+    );
     
     if (usuario) {
+      console.log('✅ Usuário encontrado:', usuario.nome);
+      
       // Verificar se a instituição está ativa (exceto super admin)
       if (usuario.perfil !== 'SuperAdmin' && usuario.instituicaoId !== 0) {
         const instituicao = instituicoes.find(i => i.id === usuario.instituicaoId);
         
         if (!instituicao) {
-          console.log('Instituição não encontrada');
+          console.log('❌ Instituição não encontrada');
           return false;
         }
         
@@ -827,12 +916,12 @@ export const DataProvider = ({ children }) => {
         setInstituicaoAtiva(usuario.instituicaoId);
       }
       
-      console.log('Login bem-sucedido:', usuario);
+      console.log('✅ Login bem-sucedido!');
       setUsuarioLogado(usuario);
       return true;
     }
     
-    console.log('Credenciais inválidas');
+    console.log('❌ Credenciais inválidas - usuário não encontrado');
     return false;
   };
 
@@ -993,9 +1082,20 @@ export const DataProvider = ({ children }) => {
     // Funções Empréstimos
     adicionarEmprestimo,
     atualizarEmprestimo,
+    devolverLivro,
+    renovarEmprestimo,
     
     // Funções Notas Fiscais
     adicionarNotaFiscal,
+    
+    // Funções Log de Atividades
+    registrarLog,
+    logAtividades,
+    
+    // Funções Gerenciamento de Usuários
+    adicionarUsuario,
+    editarUsuario,
+    excluirUsuario,
     
     // Funções Financeiras
     registrarPagamento,

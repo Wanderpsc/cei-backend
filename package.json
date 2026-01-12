@@ -1,15 +1,17 @@
 {
   "name": "cei---controle-escolar-inteligente---biblioteca",
   "version": "1.0.0",
-  "description": "",
+  "description": "CEI - Controle Escolar Inteligente - Sistema de Gestão de Biblioteca",
+  "homepage": "https://Wanderpsc.github.io/cei-backend",
   "main": "index.js",
   "scripts": {
     "start": "react-scripts start",
     "build": "react-scripts build",
     "postbuild": "copy build\\index.html build\\200.html && copy public\\service-worker.js build\\service-worker.js",
+    "predeploy": "npm run build",
+    "deploy": "gh-pages -d build",
     "test": "react-scripts test",
-    "eject": "react-scripts eject",
-    "deploy": "npm run build && surge build cei-controle-escolar.surge.sh"
+    "eject": "react-scripts eject"
   },
   "keywords": [],
   "author": "",
@@ -45,5 +47,8 @@
     "react-router-dom": "^7.11.0",
     "react-scripts": "^5.0.1",
     "react-to-print": "^3.2.0"
+  },
+  "devDependencies": {
+    "gh-pages": "^6.3.0"
   }
 }

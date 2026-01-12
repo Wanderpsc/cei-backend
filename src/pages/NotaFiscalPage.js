@@ -50,8 +50,8 @@ export default function NotaFiscalPage() {
   const [notaSelecionada, setNotaSelecionada] = useState(null);
   
   const [formData, setFormData] = useState({
-    clienteId: '',
-    descricaoServico: 'Serviços de biblioteca escolar - mensalidade',
+    instituicaoClienteId: '',
+    descricaoServico: 'Licença mensal do sistema CEI - Controle Escolar Inteligente',
     valorServico: 0,
     aliquotaISS: 2, // Padrão 2% para serviços educacionais
     observacoes: ''
@@ -66,8 +66,8 @@ export default function NotaFiscalPage() {
 
   const handleOpen = () => {
     setFormData({
-      clienteId: '',
-      descricaoServico: 'Serviços de biblioteca escolar - mensalidade',
+      instituicaoClienteId: '',
+      descricaoServico: 'Licença mensal do sistema CEI - Controle Escolar Inteligente',
       valorServico: 0,
       aliquotaISS: 2,
       observacoes: ''
@@ -80,10 +80,10 @@ export default function NotaFiscalPage() {
   };
 
   const handleSubmit = () => {
-    const cliente = clientes.find(c => c.id === parseInt(formData.clienteId));
+    const instituicaoCliente = instituicoes.find(i => i.id === formData.instituicaoClienteId);
     
-    if (!cliente) {
-      alert('Selecione um leitor');
+    if (!instituicaoCliente) {
+      alert('Selecione uma escola/instituição');
       return;
     }
 
@@ -92,19 +92,23 @@ export default function NotaFiscalPage() {
       return;
     }
 
+    // Dados do prestador (SuperAdmin/Desenvolvedor)
     const nota = {
       ...formData,
-      clienteNome: cliente.nome,
-      clienteCpf: cliente.cpf,
-      clienteEndereco: cliente.endereco,
+      clienteNome: instituicaoCliente.nomeInstituicao,
+      clienteCnpj: instituicaoCliente.cnpj || 'Não informado',
+      clienteEndereco: instituicaoCliente.endereco || 'Não informado',
+      clienteCidade: instituicaoCliente.cidade,
+      clienteEstado: instituicaoCliente.estado,
       valorISS,
       valorLiquido,
-      instituicaoId: instituicaoAtiva,
-      prestadorNome: instituicao.nomeEscola,
-      prestadorCnpj: instituicao.cnpj,
-      prestadorEndereco: instituicao.endereco,
-      prestadorCidade: instituicao.cidade,
-      prestadorEstado: instituicao.estado
+      instituicaoId: formData.instituicaoClienteId,
+      // Prestador = Desenvolvedor do sistema (quem vende)
+      prestadorNome: 'Wander Pires Silva Coelho',
+      prestadorCnpj: '00.000.000/0001-00', // Seu CNPJ
+      prestadorEndereco: 'Endereço do desenvolvedor',
+      prestadorCidade: 'Sua cidade',
+      prestadorEstado: 'UF'
     };
 
     adicionarNotaFiscal(nota);
@@ -256,30 +260,30 @@ export default function NotaFiscalPage() {
         <DialogContent>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 2 }}>
             <Typography variant="subtitle2" color="primary">
-              Dados do Prestador (Sua Instituição)
+              Dados do Prestador (Desenvolvedor do Sistema)
             </Typography>
             <Box sx={{ p: 2, bgcolor: '#f5f5f5', borderRadius: 1 }}>
-              <Typography><strong>Nome:</strong> {instituicao.nomeEscola}</Typography>
-              <Typography><strong>CNPJ:</strong> {instituicao.cnpj}</Typography>
-              <Typography><strong>Endereço:</strong> {instituicao.endereco}</Typography>
-              <Typography><strong>Cidade/UF:</strong> {instituicao.cidade}/{instituicao.estado}</Typography>
+              <Typography><strong>Nome:</strong> Wander Pires Silva Coelho</Typography>
+              <Typography><strong>CNPJ:</strong> 00.000.000/0001-00</Typography>
+              <Typography><strong>Endereço:</strong> Endereço do desenvolvedor</Typography>
+              <Typography><strong>Cidade/UF:</strong> Sua cidade/UF</Typography>
             </Box>
 
             <Divider />
 
             <Typography variant="subtitle2" color="primary">
-              Dados do Tomador (Leitor)
+              Dados do Tomador (Escola/Cliente)
             </Typography>
             <FormControl fullWidth>
-              <InputLabel>Selecione o Leitor *</InputLabel>
+              <InputLabel>Selecione a Escola *</InputLabel>
               <Select
-                value={formData.clienteId}
-                label="Selecione o Leitor *"
-                onChange={(e) => setFormData({ ...formData, clienteId: e.target.value })}
+                value={formData.instituicaoClienteId}
+                label="Selecione a Escola *"
+                onChange={(e) => setFormData({ ...formData, instituicaoClienteId: e.target.value })}
               >
-                {clientes.map((cliente) => (
-                  <MenuItem key={cliente.id} value={cliente.id}>
-                    {cliente.nome} - CPF: {cliente.cpf}
+                {instituicoes.map((inst) => (
+                  <MenuItem key={inst.id} value={inst.id}>
+                    {inst.nomeInstituicao} - {inst.cidade}/{inst.estado}
                   </MenuItem>
                 ))}
               </Select>
@@ -297,6 +301,7 @@ export default function NotaFiscalPage() {
               rows={3}
               value={formData.descricaoServico}
               onChange={(e) => setFormData({ ...formData, descricaoServico: e.target.value })}
+              placeholder="Ex: Licença mensal do sistema CEI - Controle Escolar Inteligente - Plano Premium"
             />
 
             <Grid container spacing={2}>

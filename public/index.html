@@ -6,6 +6,11 @@
     <meta name="theme-color" content="#667eea" />
     <meta name="description" content="CEI - Controle Escolar Inteligente - Sistema de Gestão de Biblioteca e Patrimônio" />
     
+    <!-- Prevenir Cache -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+    
     <!-- PWA Meta Tags -->
     <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
     <link rel="apple-touch-icon" href="%PUBLIC_URL%/logo192.png" />
@@ -15,6 +20,55 @@
     <meta name="mobile-web-app-capable" content="yes" />
     
     <title>CEI - Controle Escolar Inteligente</title>
+    
+    <!-- Forçar atualização - versão com ISBN obrigatório -->
+    <script>
+      // Versão do sistema
+      window.CEI_VERSION = '3.3.1';
+      window.CEI_BUILD = Date.now();
+      
+      console.log('🚀 CEI v3.3.1 - Seleção de Leitor Corrigida');
+      
+      // Limpar cache ao carregar
+      if ('caches' in window) {
+        caches.keys().then(keys => {
+          keys.forEach(key => {
+            caches.delete(key);
+            console.log('🗑️ Cache removido:', key);
+          });
+        });
+      }
+      
+      // Desregistrar TODOS os service workers
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(registrations => {
+          registrations.forEach(reg => {
+            reg.unregister();
+            console.log('🗑️ Service Worker desregistrado');
+          });
+        });
+      }
+      
+      // Limpar localStorage de versão e forçar atualização
+      const savedVersion = localStorage.getItem('cei_app_version');
+      if (savedVersion !== '3.3.0') {
+        console.log('🔄 Atualizando de', savedVersion, 'para 3.3.0');
+        localStorage.setItem('cei_app_version', '3.3.0');
+        localStorage.setItem('cei_force_reload', 'true');
+      }
+      
+      // Forçar reload completo na primeira carga da nova versão
+      window.addEventListener('load', () => {
+        const forceReload = localStorage.getItem('cei_force_reload');
+        if (forceReload === 'true') {
+          localStorage.removeItem('cei_force_reload');
+          console.log('🔄 Forçando reload completo com hard refresh...');
+          setTimeout(() => {
+            location.replace(location.href.split('?')[0] + '?v=3.3.0&t=' + Date.now());
+          }, 1000);
+        }
+      });
+    </script>
     
     <!-- Mercado Pago SDK para tokenização de cartões -->
     <script src="https://sdk.mercadopago.com/js/v2"></script>

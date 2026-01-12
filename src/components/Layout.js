@@ -19,7 +19,11 @@ import {
   Menu,
   MenuItem,
   Divider,
-  Chip
+  Chip,
+  Card,
+  CardContent,
+  CardActionArea,
+  Grid
 } from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
 import DashboardIcon from '@mui/icons-material/Dashboard';
@@ -29,6 +33,7 @@ import PeopleIcon from '@mui/icons-material/People';
 import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import SearchIcon from '@mui/icons-material/Search';
+import AssignmentReturnIcon from '@mui/icons-material/AssignmentReturn';
 import LogoutIcon from '@mui/icons-material/Logout';
 import SchoolIcon from '@mui/icons-material/School';
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
@@ -38,6 +43,8 @@ import NotificationsIcon from '@mui/icons-material/Notifications';
 import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
 import LibraryBooksIcon from '@mui/icons-material/LibraryBooks';
 import ReceiptIcon from '@mui/icons-material/Receipt';
+import InventoryIcon from '@mui/icons-material/Inventory';
+import AssignmentIcon from '@mui/icons-material/Assignment';
 
 const drawerWidth = 240;
 
@@ -64,12 +71,15 @@ export default function Layout({ children }) {
     // Para Escolas - Funcionalidades operacionais (cadastros, empréstimos, etc)
     return [
       { text: 'Dashboard', icon: <DashboardIcon />, path: '/' },
+      { text: 'Gerenciar Usuários', icon: <PeopleIcon />, path: '/gerenciar-usuarios' },
+      { text: 'Relatório Usuários', icon: <AssessmentIcon />, path: '/relatorio-usuarios' },
       { text: 'Financeiro', icon: <AccountBalanceWalletIcon />, path: '/financeiro' },
       { text: 'Livros', icon: <MenuBookIcon />, path: '/livros' },
       { text: 'Relatórios de Livros', icon: <LibraryBooksIcon />, path: '/relatorios-livros' },
       { text: 'Patrimônio', icon: <BusinessIcon />, path: '/patrimonio' },
       { text: 'Leitores', icon: <PeopleIcon />, path: '/clientes' },
       { text: 'Empréstimos', icon: <SwapHorizIcon />, path: '/emprestimos' },
+      { text: 'Devoluções', icon: <AssignmentReturnIcon />, path: '/devolucoes' },
       { text: 'Clube de Leitura', icon: <EmojiEventsIcon />, path: '/clube-leitura' },
       { text: 'Busca', icon: <SearchIcon />, path: '/busca' },
       { text: 'Relatórios', icon: <AssessmentIcon />, path: '/relatorios' },
@@ -99,6 +109,21 @@ export default function Layout({ children }) {
     navigate(path);
     setMobileOpen(false);
   };
+
+  // Atalhos rápidos para clientes
+  const quickAccessCards = usuarioLogado?.perfil !== 'SuperAdmin' ? [
+    { label: 'Gerenciar Usuários', icon: <PeopleIcon />, path: '/gerenciar-usuarios', color: '#9c27b0' },
+    { label: 'Livros', icon: <MenuBookIcon />, path: '/livros', color: '#1976d2' },
+    { label: 'Patrimônio', icon: <InventoryIcon />, path: '/patrimonio', color: '#388e3c' },
+    { label: 'Leitores', icon: <PeopleIcon />, path: '/clientes', color: '#f57c00' },
+    { label: 'Empréstimos', icon: <AssignmentIcon />, path: '/emprestimos', color: '#7b1fa2' },
+    { label: 'Devoluções', icon: <AssignmentReturnIcon />, path: '/devolucoes', color: '#d32f2f' },
+    { label: 'Clube de Leitura', icon: <EmojiEventsIcon />, path: '/clube-leitura', color: '#ffa726' },
+    { label: 'Relatórios', icon: <AssessmentIcon />, path: '/relatorios', color: '#5c6bc0' },
+    { label: 'Relatórios Livros', icon: <LibraryBooksIcon />, path: '/relatorios-livros', color: '#26a69a' },
+    { label: 'Busca', icon: <SearchIcon />, path: '/busca', color: '#ab47bc' },
+    { label: 'Financeiro', icon: <AccountBalanceWalletIcon />, path: '/financeiro', color: '#66bb6a' },
+  ] : [];
 
   const drawer = (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -206,9 +231,10 @@ export default function Layout({ children }) {
             noWrap 
             component="div" 
             sx={{ 
-              flexGrow: 1,
               fontWeight: 700,
               letterSpacing: '0.5px',
+              display: { xs: 'none', md: 'block' },
+              flexGrow: 1
             }}
           >
             Controle Escolar Inteligente
@@ -303,6 +329,79 @@ export default function Layout({ children }) {
           </Menu>
         </Toolbar>
       </AppBar>
+
+      {/* Barra de Atalhos Rápidos - Apenas para Clientes */}
+      {usuarioLogado?.perfil !== 'SuperAdmin' && quickAccessCards.length > 0 && (
+        <Box
+          sx={{
+            position: 'fixed',
+            top: 64,
+            width: { sm: `calc(100% - ${drawerWidth}px)` },
+            ml: { sm: `${drawerWidth}px` },
+            bgcolor: '#f5f7fa',
+            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
+            py: 1.5,
+            px: 2,
+            zIndex: 1100,
+            overflowX: 'auto',
+            '&::-webkit-scrollbar': {
+              height: 6,
+            },
+            '&::-webkit-scrollbar-thumb': {
+              backgroundColor: 'rgba(102, 126, 234, 0.3)',
+              borderRadius: 3,
+            },
+          }}
+        >
+          <Grid container spacing={1} wrap="nowrap">
+            {quickAccessCards.map((card, index) => (
+              <Grid item key={index}>
+                <Card
+                  sx={{
+                    boxShadow: 1,
+                    transition: 'all 0.2s',
+                    '&:hover': {
+                      transform: 'translateY(-2px)',
+                      boxShadow: 3,
+                    },
+                  }}
+                >
+                  <CardActionArea
+                    onClick={() => navigate(card.path)}
+                    sx={{ 
+                      px: 1.3, 
+                      py: 0.7,
+                      display: 'flex',
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 0.7,
+                      minWidth: 'fit-content',
+                      maxWidth: 160,
+                    }}
+                  >
+                    <Box sx={{ color: card.color, display: 'flex', flexShrink: 0 }}>
+                      {React.cloneElement(card.icon, { sx: { fontSize: 20 } })}
+                    </Box>
+                    <Typography 
+                      variant="caption" 
+                      fontWeight={600} 
+                      sx={{ 
+                        fontSize: '0.65rem',
+                        lineHeight: 1.2,
+                        whiteSpace: 'normal',
+                        wordBreak: 'break-word',
+                      }}
+                    >
+                      {card.label}
+                    </Typography>
+                  </CardActionArea>
+                </Card>
+              </Grid>
+            ))}
+          </Grid>
+        </Box>
+      )}
+
       <Box
         component="nav"
         sx={{ width: { sm: drawerWidth }, flexShrink: { sm: 0 } }}
@@ -352,6 +451,10 @@ export default function Layout({ children }) {
         }}
       >
         <Toolbar />
+        {/* Espaço adicional quando há barra de atalhos */}
+        {usuarioLogado?.perfil !== 'SuperAdmin' && (
+          <Box sx={{ height: 60 }} />
+        )}
         <Box sx={{ flexGrow: 1 }}>
           {/* Aviso de Licença */}
           <AvisoLicenca />

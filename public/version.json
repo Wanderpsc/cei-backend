@@ -1,0 +1,11 @@
+{
+  "version": "3.1.0",
+  "buildDate": "2026-01-08",
+  "features": [
+    "ISBN obrigatório em primeiro lugar",
+    "Preenchimento automático via Google Books API",
+    "Cadastro manual quando livro não encontrado",
+    "Busca automática ao digitar ISBN"
+  ],
+  "changes": "Removido scanner de código de barras. Sistema agora prioriza busca por ISBN com preenchimento automático de todos os campos do livro."
+}
