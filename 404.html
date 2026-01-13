@@ -8,7 +8,9 @@
     // https://github.com/rafgraph/spa-github-pages
     // Este script pega a URL atual e redireciona para index.html preservando o caminho
     
-    var pathSegmentsToKeep = 0;
+    // Para repositório com nome (https://usuario.github.io/nome-repo/), usar 1
+    // Para repositório de usuário (https://usuario.github.io/), usar 0
+    var pathSegmentsToKeep = 1;
 
     var l = window.location;
     l.replace(
