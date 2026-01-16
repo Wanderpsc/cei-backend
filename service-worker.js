@@ -1,5 +1,6 @@
 // Service Worker para CEI - Controle Escolar Inteligente
-const CACHE_NAME = 'cei-v3.3.2'; // NOVA VERSÃO - Botões de acesso rápido na navbar
+// 🛡️ Sistema de Atualização Automática com Proteção de Dados
+const CACHE_NAME = 'cei-v3.5.0'; // NOVA VERSÃO - Sistema de proteção de dados
 const urlsToCache = [
   '/',
   '/index.html',
@@ -12,34 +13,54 @@ const urlsToCache = [
 
 // Instalação do Service Worker
 self.addEventListener('install', (event) => {
+  console.log('🔧 [SW] Instalando nova versão...');
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then((cache) => {
-        console.log('Cache aberto');
+        console.log('📦 [SW] Cache aberto:', CACHE_NAME);
         return cache.addAll(urlsToCache.map(url => new Request(url, {cache: 'reload'})))
           .catch(err => {
-            console.log('Erro ao adicionar alguns recursos ao cache:', err);
+            console.log('⚠️ [SW] Erro ao adicionar recursos ao cache:', err);
             // Continua mesmo com alguns erros de cache
           });
       })
   );
+  // Ativa imediatamente a nova versão
   self.skipWaiting();
 });
 
 // Ativação do Service Worker
 self.addEventListener('activate', (event) => {
+  console.log('✅ [SW] Ativando nova versão...');
+  
   event.waitUntil(
     caches.keys().then((cacheNames) => {
       return Promise.all(
         cacheNames.map((cacheName) => {
           if (cacheName !== CACHE_NAME) {
-            console.log('Removendo cache antigo:', cacheName);
+            console.log('🗑️ [SW] Removendo cache antigo:', cacheName);
             return caches.delete(cacheName);
           }
         })
       );
+    }).then(() => {
+      console.log('🎉 [SW] Nova versão ativada com sucesso!');
+      console.log('📌 [SW] Versão atual:', CACHE_NAME);
+      
+      // Notificar todos os clientes sobre a atualização
+      return self.clients.matchAll().then(clients => {
+        clients.forEach(client => {
+          client.postMessage({
+            type: 'SW_UPDATED',
+            version: CACHE_NAME,
+            message: 'Sistema atualizado! Seus dados foram preservados.'
+          });
+        });
+      });
     })
   );
+  
+  // Assume controle de todos os clientes imediatamente
   self.clients.claim();
 });
 
