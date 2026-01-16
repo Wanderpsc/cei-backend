@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate, Outlet } from 'react-router-dom';
+import { useNavigate, useLocation, Outlet } from 'react-router-dom';
 import { useData } from '../context/DataContext';
 import AvisoLicenca from './AvisoLicenca';
 import SyncStatus from './SyncStatus';
@@ -53,6 +53,7 @@ export default function Layout({ children }) {
   const [anchorEl, setAnchorEl] = useState(null);
   const { usuarioLogado, logout, instituicoes } = useData();
   const navigate = useNavigate();
+  const location = useLocation();
 
   // Construir menu dinâmico baseado no perfil do usuário
   const getMenuItems = () => {
@@ -123,6 +124,16 @@ export default function Layout({ children }) {
     { label: 'Relatórios Livros', icon: <LibraryBooksIcon />, path: '/relatorios-livros', color: '#26a69a' },
     { label: 'Busca', icon: <SearchIcon />, path: '/busca', color: '#ab47bc' },
     { label: 'Financeiro', icon: <AccountBalanceWalletIcon />, path: '/financeiro', color: '#66bb6a' },
+  ] : [];
+
+  // Atalhos rápidos para SuperAdmin
+  const quickAccessCardsAdmin = usuarioLogado?.perfil === 'SuperAdmin' ? [
+    { label: 'Dashboard', icon: <DashboardIcon />, path: '/', color: '#667eea' },
+    { label: 'Gerenciar Escolas', icon: <SchoolIcon />, path: '/gerenciar-escolas', color: '#1976d2' },
+    { label: 'Configurar Planos', icon: <SettingsIcon />, path: '/configurar-planos', color: '#f57c00' },
+    { label: 'Gestão Financeira', icon: <AccountBalanceWalletIcon />, path: '/financeiro-admin', color: '#66bb6a' },
+    { label: 'Notas Fiscais', icon: <ReceiptIcon />, path: '/notas-fiscais', color: '#9c27b0' },
+    { label: 'Diagrama Sistema', icon: <ArchitectureIcon />, path: '/diagrama-sistema', color: '#5c6bc0' },
   ] : [];
 
   const drawer = (
@@ -330,7 +341,65 @@ export default function Layout({ children }) {
         </Toolbar>
       </AppBar>
 
-      {/* Barra de Atalhos Rápidos - Apenas para Clientes */}
+      {/* Barra de Atalhos Rápidos - Para SuperAdmin */}
+      {usuarioLogado?.perfil === 'SuperAdmin' && quickAccessCardsAdmin.length > 0 && (
+        <Box
+          sx={{
+            position: 'fixed',
+            top: 64,
+            width: { sm: `calc(100% - ${drawerWidth}px)` },
+            ml: { sm: `${drawerWidth}px` },
+            bgcolor: '#f5f7fa',
+            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
+            py: 1.5,
+            px: 2,
+            zIndex: 1100,
+            overflowX: 'auto',
+            display: 'flex',
+            justifyContent: 'center',
+            '&::-webkit-scrollbar': {
+              height: 6,
+            },
+            '&::-webkit-scrollbar-thumb': {
+              backgroundColor: 'rgba(0, 0, 0, 0.2)',
+              borderRadius: 3,
+            },
+          }}
+        >
+          <Box sx={{ display: 'flex', gap: 2, minWidth: 'max-content' }}>
+            {quickAccessCardsAdmin.map((card, index) => (
+              <Card
+                key={index}
+                onClick={() => handleNavigation(card.path)}
+                sx={{
+                  minWidth: 140,
+                  cursor: 'pointer',
+                  transition: 'all 0.3s',
+                  background: `linear-gradient(135deg, ${card.color} 0%, ${card.color}dd 100%)`,
+                  color: 'white',
+                  '&:hover': {
+                    transform: 'translateY(-4px)',
+                    boxShadow: '0 8px 16px rgba(0, 0, 0, 0.2)',
+                  },
+                }}
+              >
+                <CardActionArea>
+                  <CardContent sx={{ p: 1.5, textAlign: 'center', '&:last-child': { pb: 1.5 } }}>
+                    <Box sx={{ mb: 0.5 }}>
+                      {React.cloneElement(card.icon, { sx: { fontSize: 28 } })}
+                    </Box>
+                    <Typography variant="caption" sx={{ fontWeight: 600, fontSize: '0.7rem' }}>
+                      {card.label}
+                    </Typography>
+                  </CardContent>
+                </CardActionArea>
+              </Card>
+            ))}
+          </Box>
+        </Box>
+      )}
+
+      {/* Barra de Atalhos Rápidos - Para Clientes */}
       {usuarioLogado?.perfil !== 'SuperAdmin' && quickAccessCards.length > 0 && (
         <Box
           sx={{
@@ -358,8 +427,10 @@ export default function Layout({ children }) {
               <Grid item key={index}>
                 <Card
                   sx={{
-                    boxShadow: 1,
+                    boxShadow: location.pathname === card.path ? 4 : 1,
                     transition: 'all 0.2s',
+                    border: location.pathname === card.path ? `2px solid ${card.color}` : 'none',
+                    background: location.pathname === card.path ? `linear-gradient(135deg, ${card.color}15, ${card.color}08)` : 'white',
                     '&:hover': {
                       transform: 'translateY(-2px)',
                       boxShadow: 3,
@@ -379,17 +450,24 @@ export default function Layout({ children }) {
                       maxWidth: 160,
                     }}
                   >
-                    <Box sx={{ color: card.color, display: 'flex', flexShrink: 0 }}>
+                    <Box sx={{ 
+                      color: card.color, 
+                      display: 'flex', 
+                      flexShrink: 0,
+                      transform: location.pathname === card.path ? 'scale(1.1)' : 'scale(1)',
+                      transition: 'transform 0.2s'
+                    }}>
                       {React.cloneElement(card.icon, { sx: { fontSize: 20 } })}
                     </Box>
                     <Typography 
                       variant="caption" 
-                      fontWeight={600} 
+                      fontWeight={location.pathname === card.path ? 700 : 600}
                       sx={{ 
                         fontSize: '0.65rem',
                         lineHeight: 1.2,
                         whiteSpace: 'normal',
                         wordBreak: 'break-word',
+                        color: location.pathname === card.path ? card.color : 'inherit',
                       }}
                     >
                       {card.label}
@@ -452,7 +530,10 @@ export default function Layout({ children }) {
       >
         <Toolbar />
         {/* Espaço adicional quando há barra de atalhos */}
-        {usuarioLogado?.perfil !== 'SuperAdmin' && (
+        {(usuarioLogado?.perfil !== 'SuperAdmin' && quickAccessCards.length > 0) && (
+          <Box sx={{ height: 60 }} />
+        )}
+        {usuarioLogado?.perfil === 'SuperAdmin' && quickAccessCardsAdmin.length > 0 && (
           <Box sx={{ height: 60 }} />
         )}
         <Box sx={{ flexGrow: 1 }}>

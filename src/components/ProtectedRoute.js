@@ -11,9 +11,18 @@ export default function ProtectedRoute({ children }) {
   const { isAuthorized, isLoading, error, checkAuthorization } = useLicense();
   const location = useLocation();
 
+  // Log detalhado para debug
+  console.log('🔐 ProtectedRoute (Licença) - Verificando:', {
+    pathname: location.pathname,
+    isLoading,
+    isAuthorized,
+    error
+  });
+
   useEffect(() => {
     // Verificar autorização ao entrar na rota
     if (!isAuthorized && !isLoading) {
+      console.log('🔄 Verificando autorização de licença...');
       checkAuthorization();
     }
   }, [location.pathname]);
@@ -48,9 +57,11 @@ export default function ProtectedRoute({ children }) {
 
   // Se não está autorizado, redirecionar para ativação
   if (!isAuthorized) {
+    console.log('❌ Licença não autorizada, redirecionando para /ativar-licenca');
     return <Navigate to="/ativar-licenca" state={{ from: location }} replace />;
   }
 
   // Se está autorizado, mostrar conteúdo
+  console.log('✅ Licença autorizada, mostrando conteúdo');
   return <>{children}</>;
 }

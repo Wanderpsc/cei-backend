@@ -24,7 +24,7 @@ import { Add, Edit, Delete, Search, QrCode } from '@mui/icons-material';
 import { useData } from '../context/DataContext';
 
 function LeitoresPage() {
-  const { clientes, adicionarCliente, atualizarCliente, removerCliente } = useData();
+  const { clientes, adicionarCliente, atualizarCliente, removerCliente, emprestimos } = useData();
   const [open, setOpen] = useState(false);
   const [editando, setEditando] = useState(null);
   const [busca, setBusca] = useState('');
@@ -85,6 +85,20 @@ function LeitoresPage() {
   };
 
   const handleDelete = (id) => {
+    // Verificar se o leitor tem empréstimos ativos
+    const emprestimoAtivo = emprestimos.find(e => 
+      e.clienteId === id && e.status === 'Emprestado'
+    );
+    
+    if (emprestimoAtivo) {
+      alert(
+        'Não é possível excluir este leitor!\n\n' +
+        'O leitor possui livro(s) emprestado(s).\n' +
+        'Primeiro realize a devolução de todos os livros emprestados.'
+      );
+      return;
+    }
+    
     if (window.confirm('Deseja realmente remover este leitor?')) {
       removerCliente(id);
     }

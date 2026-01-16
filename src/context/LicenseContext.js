@@ -19,8 +19,9 @@ export const useLicense = () => {
 };
 
 export const LicenseProvider = ({ children }) => {
-  const [isAuthorized, setIsAuthorized] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  // LICENCIAMENTO DESABILITADO - Sistema sempre autorizado
+  const [isAuthorized, setIsAuthorized] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [licenseInfo, setLicenseInfo] = useState(null);
   const [error, setError] = useState(null);
   const [deviceInfo, setDeviceInfo] = useState(null);

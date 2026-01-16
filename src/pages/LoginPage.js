@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useData } from '../context/DataContext';
 import InstallPWA from '../components/InstallPWA';
 import {
@@ -40,15 +40,28 @@ export default function LoginPage() {
   const [sucessoRecuperacao, setSucessoRecuperacao] = useState('');
   const [mostrarNovaSenha, setMostrarNovaSenha] = useState(false);
   const [etapaRecuperacao, setEtapaRecuperacao] = useState(1); // 1: email, 2: nova senha
-  const { login: fazerLogin, recuperarSenha } = useData();
+  const { login: fazerLogin, recuperarSenha, usuarioLogado } = useData();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // Se usuário já está logado, redirecionar
+  useEffect(() => {
+    if (usuarioLogado) {
+      const from = location.state?.from?.pathname || '/';
+      console.log('👤 Usuário já logado, redirecionando para:', from);
+      navigate(from, { replace: true });
+    }
+  }, [usuarioLogado, navigate, location]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
     setErro('');
     
     if (fazerLogin(login, senha)) {
-      navigate('/');
+      // Redirecionar para a página de origem ou para home
+      const from = location.state?.from?.pathname || '/';
+      console.log('✅ Login realizado, redirecionando para:', from);
+      navigate(from, { replace: true });
     } else {
       setErro('Login ou senha inválidos');
     }

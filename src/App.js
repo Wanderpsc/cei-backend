@@ -1,8 +1,9 @@
 import React from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { DataProvider, useData } from './context/DataContext';
 import { LicenseProvider } from './context/LicenseContext';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
+import { Box, Typography } from '@mui/material';
 import CssBaseline from '@mui/material/CssBaseline';
 
 // Componentes
@@ -50,14 +51,44 @@ const theme = createTheme({
 });
 
 function PrivateRoute({ children }) {
-  const { usuarioLogado } = useData();
+  const { usuarioLogado, autenticacaoCarregada } = useData();
+  const location = useLocation();
   
-  // Primeiro verifica licença, depois login
-  return usuarioLogado ? (
-    <ProtectedRoute>{children}</ProtectedRoute>
-  ) : (
-    <Navigate to="/login" />
-  );
+  // Log detalhado para debug
+  console.log('🔍 PrivateRoute - Verificando acesso:', {
+    pathname: location.pathname,
+    autenticacaoCarregada,
+    usuarioLogado: usuarioLogado ? usuarioLogado.nome : 'null'
+  });
+  
+  // Aguardar autenticação ser carregada do localStorage
+  if (!autenticacaoCarregada) {
+    console.log('⏳ Aguardando autenticação carregar...');
+    return (
+      <Box
+        sx={{
+          minHeight: '100vh',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
+        }}
+      >
+        <Typography variant="h6" color="white">Carregando...</Typography>
+      </Box>
+    );
+  }
+  
+  // Verificar se está logado
+  if (!usuarioLogado) {
+    // Salvar a localização de onde veio para redirecionar após login
+    console.log('🔒 Usuário não autenticado, redirecionando para login');
+    return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+  
+  // Se está logado, verificar licença
+  console.log('✅ Usuário autenticado:', usuarioLogado.nome, '- Verificando licença...');
+  return <ProtectedRoute>{children}</ProtectedRoute>;
 }
 
 function AppRoutes() {

@@ -16,16 +16,19 @@ import {
   FormControl,
   InputLabel,
   Select,
-  MenuItem
+  MenuItem,
+  LinearProgress,
+  Chip
 } from '@mui/material';
 import { MenuBook, Close, Search } from '@mui/icons-material';
-import axios from 'axios';
+import { buscarLivroPorISBN } from '../utils/isbnSearchService';
 
 export default function BarcodeScannerDialog({ open, onClose, onBookFound }) {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [isbnBuscado, setIsbnBuscado] = useState(false);
   const [mostrarCamposManual, setMostrarCamposManual] = useState(false);
+  const [progressoAtual, setProgressoAtual] = useState(null); // Para mostrar progresso da busca
   const [dadosLivro, setDadosLivro] = useState({
     isbn: '',
     titulo: '',
@@ -41,17 +44,108 @@ export default function BarcodeScannerDialog({ open, onClose, onBookFound }) {
     qtdLivrosColecao: ''
   });
 
+  // Estados para detecção de leitor a laser
+  const [bufferScanner, setBufferScanner] = useState('');
+  const [ultimoCaractere, setUltimoCaractere] = useState(Date.now());
+  const timeoutRef = React.useRef(null);
+
   // Log para confirmar que está usando o componente atualizado
   React.useEffect(() => {
     if (open) {
-      console.log('📚 BarcodeScannerDialog v3.2.0 - ISBN PRIMEIRO!');
+      console.log('📚 BarcodeScannerDialog v3.4.1 - BUSCA APRIMORADA COM FONTES BRASILEIRAS!');
+      console.log('🔫 Leitor de código de barras com detecção aprimorada');
+      console.log('🇧🇷 Busca em fontes brasileiras: Editoras FTD, Ática, Moderna, Saraiva, etc.');
+      console.log('🌐 Busca global: Google Books + Open Library + Mercado Editorial');
     }
   }, [open]);
 
-  // Função para buscar livro por ISBN
+  // Sistema de detecção de leitor a laser APRIMORADO
+  React.useEffect(() => {
+    if (!open) return;
+
+    let scanBuffer = '';
+    let scanTimestamp = Date.now();
+    let scanTimeout = null;
+
+    const handleKeyDown = (event) => {
+      const now = Date.now();
+      const timeSinceLastKey = now - scanTimestamp;
+      const char = event.key;
+
+      // Ignorar teclas especiais exceto Enter
+      if (char.length > 1 && char !== 'Enter') return;
+
+      // Se for Enter e temos um buffer válido
+      if (char === 'Enter') {
+        if (scanBuffer.length >= 10 && scanBuffer.length <= 13) {
+          event.preventDefault();
+          const isbn = scanBuffer;
+          console.log('🔫 Leitor laser detectado! ISBN:', isbn);
+          scanBuffer = '';
+          setDadosLivro(prev => ({...prev, isbn}));
+          setBufferScanner(isbn);
+          buscarLivroPorIsbn(isbn);
+        }
+        return;
+      }
+
+      // Detectar leitor a laser: tempo rápido entre teclas (< 100ms)
+      const isFastTyping = timeSinceLastKey < 100;
+      
+      // Se for número ou letra e digitação rápida
+      if (/^[0-9X]$/i.test(char)) {
+        // Resetar buffer se passou muito tempo (> 200ms = nova leitura)
+        if (timeSinceLastKey > 200) {
+          scanBuffer = '';
+        }
+
+        scanBuffer += char;
+        scanTimestamp = now;
+        setBufferScanner(scanBuffer);
+
+        // Limpar timeout anterior
+        if (scanTimeout) clearTimeout(scanTimeout);
+
+        // Auto-buscar após 150ms de inatividade
+        scanTimeout = setTimeout(() => {
+          if (scanBuffer.length >= 10 && scanBuffer.length <= 13) {
+            const isbn = scanBuffer;
+            console.log('🔫 Código completo capturado:', isbn);
+            scanBuffer = '';
+            setDadosLivro(prev => ({...prev, isbn}));
+            setBufferScanner(isbn);
+            buscarLivroPorIsbn(isbn);
+          } else if (scanBuffer.length > 0) {
+            console.log('⚠️ Buffer incompleto:', scanBuffer);
+            scanBuffer = '';
+            setBufferScanner('');
+          }
+        }, 150);
+      }
+    };
+
+    // Usar keydown para captura mais rápida
+    document.addEventListener('keydown', handleKeyDown);
+    
+    // Cleanup
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      if (scanTimeout) clearTimeout(scanTimeout);
+    };
+  }, [open, mostrarCamposManual]);
+
+  // Função para buscar livro usando o novo serviço aprimorado
   const buscarLivroPorIsbn = async (isbn) => {
-    if (!isbn || isbn.length < 10) {
-      setError('⚠️ Digite um ISBN válido (10 ou 13 dígitos)');
+    // Limpar e validar ISBN
+    const isbnLimpo = isbn.replace(/[^0-9X]/gi, '').toUpperCase();
+    
+    console.log('🔍 ISBN RECEBIDO:', isbn);
+    console.log('🧹 ISBN LIMPO:', isbnLimpo);
+    
+    if (!isbnLimpo || (isbnLimpo.length !== 10 && isbnLimpo.length !== 13)) {
+      setError('⚠️ ISBN inválido! Deve ter 10 ou 13 dígitos.');
+      setDadosLivro({ ...dadosLivro, isbn: isbnLimpo });
+      setMostrarCamposManual(true);
       return;
     }
 
@@ -59,81 +153,56 @@ export default function BarcodeScannerDialog({ open, onClose, onBookFound }) {
     setError('');
     setIsbnBuscado(false);
     setMostrarCamposManual(false);
+    setProgressoAtual(null);
+    
+    // Estado para armazenar a fonte
+    let fonteEncontrada = '';
     
     try {
-      console.log('🔍 Buscando ISBN:', isbn);
+      // Usar o novo serviço de busca aprimorado
+      const resultado = await buscarLivroPorISBN(isbnLimpo, (progresso) => {
+        // Atualizar progresso visual
+        setProgressoAtual(progresso);
+        console.log(`📊 Progresso: ${progresso.progresso}% - Tentando: ${progresso.estrategia}`);
+      });
       
-      // Tentar busca com restrição de idioma português
-      let response = await axios.get(
-        `https://www.googleapis.com/books/v1/volumes?q=isbn:${isbn}&langRestrict=pt`
-      );
-      
-      // Se não encontrar, tentar busca global
-      if (response.data.totalItems === 0) {
-        console.log('🔄 Tentando busca global...');
-        response = await axios.get(
-          `https://www.googleapis.com/books/v1/volumes?q=isbn:${isbn}`
-        );
-      }
-      
-      if (response.data.totalItems > 0) {
-        const book = response.data.items[0].volumeInfo;
-        console.log('📚 Livro encontrado:', book);
+      if (resultado.sucesso) {
+        console.log('✅ LIVRO ENCONTRADO!');
+        console.log('📚 Fonte:', resultado.fonte);
+        console.log('📖 Dados:', resultado.dados);
         
-        // Pegar a melhor qualidade de imagem disponível
-        let foto = '';
-        if (book.imageLinks) {
-          foto = book.imageLinks.extraLarge || 
-                 book.imageLinks.large || 
-                 book.imageLinks.medium || 
-                 book.imageLinks.thumbnail || 
-                 book.imageLinks.smallThumbnail || '';
-          
-          // Forçar HTTPS na URL da imagem
-          if (foto) {
-            foto = foto.replace('http://', 'https://');
-          }
-        }
+        fonteEncontrada = resultado.fonte;
         
-        console.log('🖼️ Foto da capa:', foto);
-        
-        // Preencher todos os campos automaticamente
+        // Preencher formulário com os dados encontrados
         setDadosLivro({
-          isbn: isbn,
-          titulo: book.title || '',
-          subtitulo: book.subtitle || '',
-          autor: book.authors?.join(', ') || '',
-          editora: book.publisher || '',
-          anoPublicacao: book.publishedDate?.substring(0, 4) || '',
-          categoria: book.categories?.join(', ') || '',
-          descricao: book.description || '',
-          paginas: book.pageCount?.toString() || '',
-          idioma: book.language || 'pt',
-          foto: foto,
+          ...resultado.dados,
           quantidade: dadosLivro.quantidade || '1',
-          colecao: dadosLivro.colecao || '',
-          qtdLivrosColecao: dadosLivro.qtdLivrosColecao || ''
+          colecao: dadosLivro.colecao || resultado.dados.colecao || '',
+          qtdLivrosColecao: dadosLivro.qtdLivrosColecao || resultado.dados.qtdLivrosColecao || '',
+          _fonte: fonteEncontrada // Armazenar fonte para exibir depois
         });
         
         setIsbnBuscado(true);
         setMostrarCamposManual(true);
-        console.log('✅ Formulário preenchido automaticamente!');
+        setError('');
       } else {
-        // ISBN não encontrado - permitir cadastro manual
-        console.log('❌ Livro não encontrado com esse ISBN');
-        setError('📚 Livro não encontrado. Preencha os dados manualmente.');
-        setDadosLivro({ ...dadosLivro, isbn: isbn });
+        // Não encontrou em nenhuma fonte
+        console.log('❌ LIVRO NÃO ENCONTRADO');
+        setError(resultado.mensagem || `📚 ISBN ${isbnLimpo} não encontrado.\nVerifique o código e preencha os dados manualmente.`);
+        setDadosLivro({ ...dadosLivro, isbn: isbnLimpo });
         setMostrarCamposManual(true);
         setIsbnBuscado(false);
       }
+      
     } catch (err) {
-      console.error('❌ Erro ao buscar livro:', err);
-      setError('⚠️ Erro ao buscar livro. Preencha os dados manualmente.');
-      setDadosLivro({ ...dadosLivro, isbn: isbn });
+      console.error('❌ Erro geral na busca:', err);
+      setError('⚠️ Erro ao buscar livro. Verifique sua conexão e tente novamente.');
+      setDadosLivro({ ...dadosLivro, isbn: isbnLimpo });
       setMostrarCamposManual(true);
       setIsbnBuscado(false);
     } finally {
       setLoading(false);
+      setProgressoAtual(null);
     }
   };
 
@@ -164,6 +233,10 @@ export default function BarcodeScannerDialog({ open, onClose, onBookFound }) {
     setLoading(false);
     setIsbnBuscado(false);
     setMostrarCamposManual(false);
+    setBufferScanner('');
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+    }
     setDadosLivro({
       isbn: '',
       titulo: '',
@@ -198,18 +271,56 @@ export default function BarcodeScannerDialog({ open, onClose, onBookFound }) {
       <DialogContent>
         <Alert severity="info" sx={{ mb: 2 }}>
           <Typography variant="body2">
-            <strong>📝 Passo 1:</strong> Digite o ISBN (obrigatório)<br />
+            <strong>� LEITOR A LASER HABILITADO!</strong><br />
+            <strong>📝 Opção 1:</strong> Use o leitor de código de barras a laser - ele detectará automaticamente<br />
+            <strong>⌨️ Opção 2:</strong> Digite o ISBN manualmente e pressione Enter<br />
             <strong>🔍 Passo 2:</strong> O sistema buscará os dados automaticamente<br />
             <strong>✏️ Passo 3:</strong> Se não encontrar, preencha manualmente
           </Typography>
         </Alert>
 
+        {bufferScanner && (
+          <Alert severity="success" sx={{ mb: 2 }}>
+            🔫 Lendo código de barras: {bufferScanner}...
+          </Alert>
+        )}
+
         {loading && (
-          <Box sx={{ textAlign: 'center', py: 3, mb: 2 }}>
-            <CircularProgress />
-            <Typography variant="body2" sx={{ mt: 2 }}>
-              📚 Buscando dados do livro na internet...
-            </Typography>
+          <Box sx={{ mb: 3 }}>
+            <Box sx={{ textAlign: 'center', py: 2 }}>
+              <CircularProgress size={60} />
+              <Typography variant="h6" sx={{ mt: 2, fontWeight: 'bold' }}>
+                🔍 Buscando ISBN: <Chip label={dadosLivro.isbn} color="primary" size="small" />
+              </Typography>
+              
+              {progressoAtual && (
+                <Box sx={{ mt: 2 }}>
+                  <Typography variant="body2" color="primary" sx={{ mb: 1, fontWeight: 600 }}>
+                    📡 {progressoAtual.estrategia}
+                  </Typography>
+                  <LinearProgress 
+                    variant="determinate" 
+                    value={progressoAtual.progresso} 
+                    sx={{ height: 8, borderRadius: 4 }}
+                  />
+                  <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
+                    Tentativa {progressoAtual.tentativa} de {progressoAtual.total} • {progressoAtual.progresso}%
+                  </Typography>
+                </Box>
+              )}
+            </Box>
+            
+            <Alert severity="info" sx={{ mt: 2 }}>
+              <Typography variant="caption" component="div">
+                <strong>🇧🇷 Fontes Brasileiras:</strong>
+                <br />• Editoras: FTD, Ática, Moderna, Saraiva, Scipione, SM, IBEP
+                <br />• Mercado Editorial Brasileiro
+                <br />
+                <br /><strong>🌐 Fontes Internacionais:</strong>
+                <br />• Google Books API (múltiplas estratégias)
+                <br />• Open Library (biblioteca mundial)
+              </Typography>
+            </Alert>
           </Box>
         )}
 
@@ -222,6 +333,11 @@ export default function BarcodeScannerDialog({ open, onClose, onBookFound }) {
         {isbnBuscado && dadosLivro.titulo && (
           <Alert severity="success" sx={{ mb: 2 }}>
             ✅ Livro encontrado! Dados preenchidos automaticamente.
+            {dadosLivro._fonte && (
+              <Typography variant="caption" display="block" sx={{ mt: 0.5 }}>
+                📡 Fonte: <strong>{dadosLivro._fonte}</strong>
+              </Typography>
+            )}
           </Alert>
         )}
 
@@ -229,6 +345,7 @@ export default function BarcodeScannerDialog({ open, onClose, onBookFound }) {
         <TextField
           fullWidth
           required
+          id="isbn-field"
           label="ISBN"
           value={dadosLivro.isbn}
           onChange={(e) => {
@@ -260,7 +377,7 @@ export default function BarcodeScannerDialog({ open, onClose, onBookFound }) {
               </InputAdornment>
             )
           }}
-          helperText="Digite o ISBN e pressione Enter ou clique na lupa para buscar"
+          helperText="🔫 Use o leitor laser (RECOMENDADO) | ⌨️ Digite e pressione Enter | 🇧🇷 Busca em fontes brasileiras + internacionais"
           autoFocus
           sx={{ mb: 2 }}
         />

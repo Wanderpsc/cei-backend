@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🔫 Teste de Leitor de Código de Barras</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            padding: 40px;
+            max-width: 600px;
+            width: 100%;
+        }
+        
+        h1 {
+            color: #667eea;
+            text-align: center;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+        
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+        }
+        
+        .status {
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            text-align: center;
+            font-weight: bold;
+            font-size: 18px;
+        }
+        
+        .status.waiting {
+            background: #fff3cd;
+            color: #856404;
+            border: 2px solid #ffeaa7;
+        }
+        
+        .status.detecting {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 2px solid #bee5eb;
+            animation: pulse 1s infinite;
+        }
+        
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 2px solid #c3e6cb;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.02); }
+        }
+        
+        .input-container {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 600;
+        }
+        
+        input {
+            width: 100%;
+            padding: 15px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: all 0.3s;
+        }
+        
+        input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        .buffer {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-family: 'Courier New', monospace;
+            min-height: 50px;
+            border: 2px dashed #ddd;
+        }
+        
+        .buffer-label {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 5px;
+        }
+        
+        .buffer-content {
+            font-size: 24px;
+            color: #667eea;
+            font-weight: bold;
+            letter-spacing: 2px;
+        }
+        
+        .results {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+        
+        .result-item {
+            padding: 10px;
+            margin-bottom: 10px;
+            background: white;
+            border-radius: 5px;
+            border-left: 4px solid #667eea;
+        }
+        
+        .result-label {
+            font-size: 12px;
+            color: #666;
+            text-transform: uppercase;
+        }
+        
+        .result-value {
+            font-size: 16px;
+            color: #333;
+            font-weight: 600;
+            margin-top: 5px;
+        }
+        
+        .instructions {
+            background: #e7f3ff;
+            border: 2px solid #b3d9ff;
+            border-radius: 8px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+        
+        .instructions h3 {
+            color: #004085;
+            margin-bottom: 10px;
+        }
+        
+        .instructions ol {
+            margin-left: 20px;
+            color: #004085;
+        }
+        
+        .instructions li {
+            margin-bottom: 8px;
+        }
+        
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+            margin-top: 20px;
+        }
+        
+        .stat-box {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+            border: 2px solid #eee;
+        }
+        
+        .stat-value {
+            font-size: 32px;
+            font-weight: bold;
+            color: #667eea;
+        }
+        
+        .stat-label {
+            font-size: 12px;
+            color: #666;
+            margin-top: 5px;
+        }
+        
+        .clear-btn {
+            background: #dc3545;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            margin-top: 20px;
+            width: 100%;
+            transition: all 0.3s;
+        }
+        
+        .clear-btn:hover {
+            background: #c82333;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(220, 53, 69, 0.3);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔫 Teste de Leitor de Código de Barras</h1>
+        <p class="subtitle">Teste seu leitor a laser aqui!</p>
+        
+        <div id="status" class="status waiting">
+            ⏳ Aguardando leitura do código de barras...
+        </div>
+        
+        <div class="input-container">
+            <label for="scanner-input">📝 Campo de Captura:</label>
+            <input 
+                type="text" 
+                id="scanner-input" 
+                placeholder="Foque aqui e use o leitor a laser..."
+                autocomplete="off"
+            >
+        </div>
+        
+        <div class="buffer">
+            <div class="buffer-label">🔍 Buffer de Captura (tempo real):</div>
+            <div class="buffer-content" id="buffer">-</div>
+        </div>
+        
+        <div class="results" id="results">
+            <h3>📊 Últimos Códigos Lidos:</h3>
+            <div id="codes-list">
+                <p style="text-align: center; color: #999;">Nenhum código lido ainda</p>
+            </div>
+        </div>
+        
+        <div class="stats">
+            <div class="stat-box">
+                <div class="stat-value" id="total-reads">0</div>
+                <div class="stat-label">Total de Leituras</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-value" id="avg-time">0ms</div>
+                <div class="stat-label">Tempo Médio</div>
+            </div>
+        </div>
+        
+        <button class="clear-btn" onclick="clearResults()">🗑️ Limpar Resultados</button>
+        
+        <div class="instructions">
+            <h3>📖 Como Usar:</h3>
+            <ol>
+                <li><strong>Certifique-se</strong> de que o leitor está conectado na USB</li>
+                <li><strong>Clique</strong> no campo "Campo de Captura" acima</li>
+                <li><strong>Aponte</strong> o leitor para um código de barras</li>
+                <li><strong>Pressione</strong> o gatilho do leitor</li>
+                <li><strong>Observe</strong> o código aparecer automaticamente</li>
+            </ol>
+            <p style="margin-top: 15px; font-size: 14px;">
+                <strong>💡 Dica:</strong> Leitores a laser digitam muito rápido (< 50ms entre caracteres). 
+                Este teste mostra o tempo real de captura e valida se seu leitor está funcionando corretamente.
+            </p>
+        </div>
+    </div>
+    
+    <script>
+        let buffer = '';
+        let lastCharTime = Date.now();
+        let isScanning = false;
+        let scanStartTime = 0;
+        let codes = [];
+        let readTimes = [];
+        
+        const statusDiv = document.getElementById('status');
+        const bufferDiv = document.getElementById('buffer');
+        const codesList = document.getElementById('codes-list');
+        const totalReadsDiv = document.getElementById('total-reads');
+        const avgTimeDiv = document.getElementById('avg-time');
+        const input = document.getElementById('scanner-input');
+        
+        // Focar automaticamente no input
+        input.focus();
+        
+        // Listener para captura de teclas
+        document.addEventListener('keypress', (e) => {
+            const now = Date.now();
+            const timeDiff = now - lastCharTime;
+            
+            // Detectar se é um leitor a laser (< 50ms entre caracteres)
+            const isLaser = timeDiff < 50 && buffer.length > 0;
+            
+            if (e.key === 'Enter') {
+                if (buffer.length >= 3) {
+                    const scanTime = now - scanStartTime;
+                    processCode(buffer, scanTime);
+                    buffer = '';
+                    isScanning = false;
+                    input.value = '';
+                }
+                return;
+            }
+            
+            // Capturar apenas números
+            if (/^[0-9a-zA-Z]$/.test(e.key)) {
+                if (!isScanning) {
+                    scanStartTime = now;
+                    isScanning = true;
+                    updateStatus('detecting', `🔫 Detectando leitura...`);
+                }
+                
+                buffer += e.key;
+                bufferDiv.textContent = buffer;
+                bufferDiv.style.color = isLaser ? '#28a745' : '#667eea';
+                lastCharTime = now;
+                
+                // Auto-reset após 100ms sem digitar
+                setTimeout(() => {
+                    if (Date.now() - lastCharTime >= 100 && buffer.length > 0 && buffer.length < 3) {
+                        buffer = '';
+                        bufferDiv.textContent = '-';
+                        isScanning = false;
+                        updateStatus('waiting', '⏳ Aguardando leitura do código de barras...');
+                    }
+                }, 110);
+            }
+        });
+        
+        function processCode(code, time) {
+            const timestamp = new Date().toLocaleTimeString();
+            codes.unshift({ code, time, timestamp });
+            readTimes.push(time);
+            
+            // Limitar a 10 códigos
+            if (codes.length > 10) {
+                codes.pop();
+                readTimes.pop();
+            }
+            
+            updateStatus('success', `✅ Código lido com sucesso!`);
+            setTimeout(() => {
+                updateStatus('waiting', '⏳ Aguardando leitura do código de barras...');
+            }, 2000);
+            
+            renderCodes();
+            updateStats();
+            
+            // Reset buffer
+            bufferDiv.textContent = '-';
+            bufferDiv.style.color = '#667eea';
+        }
+        
+        function updateStatus(type, message) {
+            statusDiv.className = `status ${type}`;
+            statusDiv.textContent = message;
+        }
+        
+        function renderCodes() {
+            if (codes.length === 0) {
+                codesList.innerHTML = '<p style="text-align: center; color: #999;">Nenhum código lido ainda</p>';
+                return;
+            }
+            
+            codesList.innerHTML = codes.map((item, index) => `
+                <div class="result-item" style="animation: slideIn 0.3s ease-out;">
+                    <div class="result-label">#${index + 1} - ${item.timestamp}</div>
+                    <div class="result-value">${item.code}</div>
+                    <div style="font-size: 12px; color: #28a745; margin-top: 5px;">
+                        ⚡ Tempo de captura: ${item.time}ms
+                    </div>
+                </div>
+            `).join('');
+        }
+        
+        function updateStats() {
+            totalReadsDiv.textContent = codes.length;
+            
+            if (readTimes.length > 0) {
+                const avgTime = Math.round(readTimes.reduce((a, b) => a + b, 0) / readTimes.length);
+                avgTimeDiv.textContent = `${avgTime}ms`;
+            }
+        }
+        
+        function clearResults() {
+            if (confirm('Deseja limpar todos os resultados?')) {
+                codes = [];
+                readTimes = [];
+                buffer = '';
+                renderCodes();
+                updateStats();
+                bufferDiv.textContent = '-';
+                input.value = '';
+                updateStatus('waiting', '⏳ Aguardando leitura do código de barras...');
+            }
+        }
+        
+        // Manter foco no input
+        setInterval(() => {
+            if (document.activeElement !== input) {
+                input.focus();
+            }
+        }, 1000);
+        
+        // CSS para animação
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes slideIn {
+                from {
+                    opacity: 0;
+                    transform: translateX(-20px);
+                }
+                to {
+                    opacity: 1;
+                    transform: translateX(0);
+                }
+            }
+        `;
+        document.head.appendChild(style);
+    </script>
+</body>
+</html>

@@ -84,8 +84,34 @@ export const DataProvider = ({ children }) => {
   const [clientes, setClientes] = useState([]);
   const [emprestimos, setEmprestimos] = useState([]);
   const [usuarios, setUsuarios] = useState([]);
-  const [usuarioLogado, setUsuarioLogado] = useState(null);
-  const [instituicaoAtiva, setInstituicaoAtiva] = useState(null);
+  const [usuarioLogado, setUsuarioLogado] = useState(() => {
+    // Restaurar usuário logado do localStorage
+    const usuarioSalvo = localStorage.getItem('cei_usuario_logado');
+    console.log('🔐 [INIT] Tentando restaurar usuário do localStorage');
+    console.log('🔐 [INIT] localStorage.getItem("cei_usuario_logado"):', usuarioSalvo);
+    
+    if (usuarioSalvo) {
+      try {
+        const parsed = JSON.parse(usuarioSalvo);
+        console.log('✅ [INIT] Usuário restaurado com sucesso:', parsed.nome);
+        return parsed;
+      } catch (error) {
+        console.error('❌ [INIT] Erro ao fazer parse do usuário:', error);
+        return null;
+      }
+    } else {
+      console.log('⚠️ [INIT] Nenhum usuário salvo no localStorage');
+      return null;
+    }
+  });
+  const [instituicaoAtiva, setInstituicaoAtiva] = useState(() => {
+    // Restaurar instituição ativa do localStorage
+    const instituicaoSalva = localStorage.getItem('cei_instituicao_ativa');
+    console.log('🏢 [INIT] instituicaoAtiva restaurada:', instituicaoSalva);
+    return instituicaoSalva ? parseInt(instituicaoSalva) : null;
+  });
+  // Marcar como true imediatamente porque a restauração do localStorage acima é síncrona
+  const [autenticacaoCarregada, setAutenticacaoCarregada] = useState(true);
   const [planos, setPlanos] = useState(planosPadrao);
   const [notasFiscais, setNotasFiscais] = useState([]);
   const [logAtividades, setLogAtividades] = useState([]);
@@ -918,6 +944,20 @@ export const DataProvider = ({ children }) => {
       
       console.log('✅ Login bem-sucedido!');
       setUsuarioLogado(usuario);
+      // Persistir usuário logado no localStorage
+      const usuarioParaSalvar = JSON.stringify(usuario);
+      console.log('💾 [LOGIN] Salvando usuário no localStorage:', usuarioParaSalvar);
+      localStorage.setItem('cei_usuario_logado', usuarioParaSalvar);
+      
+      if (usuario.perfil !== 'SuperAdmin' && usuario.instituicaoId !== 0) {
+        console.log('💾 [LOGIN] Salvando instituicaoAtiva:', usuario.instituicaoId);
+        localStorage.setItem('cei_instituicao_ativa', usuario.instituicaoId.toString());
+      }
+      
+      // Verificar se salvou corretamente
+      const verificacao = localStorage.getItem('cei_usuario_logado');
+      console.log('✔️ [LOGIN] Verificação - localStorage após salvar:', verificacao ? 'OK' : 'FALHOU');
+      
       return true;
     }
     
@@ -928,6 +968,9 @@ export const DataProvider = ({ children }) => {
   const logout = () => {
     setUsuarioLogado(null);
     setInstituicaoAtiva(null);
+    // Remover do localStorage
+    localStorage.removeItem('cei_usuario_logado');
+    localStorage.removeItem('cei_instituicao_ativa');
   };
 
   const recuperarSenha = (email, novaSenha = null) => {
@@ -1047,6 +1090,7 @@ export const DataProvider = ({ children }) => {
     emprestimos: getEmprestimosFiltrados(),
     usuarioLogado,
     instituicaoAtiva,
+    autenticacaoCarregada, // Novo: indica se autenticação foi carregada do localStorage
     planos,
     notasFiscais,
     sincronizando,

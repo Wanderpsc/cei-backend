@@ -50,6 +50,7 @@ O **CEI - Controle Escolar Inteligente** é um sistema web completo para gestão
 ### ✨ Funcionalidades Principais
 
 - 📚 **Gestão de Livros**: Cadastro, busca e controle de acervo
+- � **Leitor de Código de Barras**: Suporte para leitores a laser USB (NOVO!)
 - 👥 **Gestão de Alunos**: Cadastro e histórico de empréstimos
 - 📊 **Relatórios**: Estatísticas e indicadores de uso
 - 🏢 **Patrimônio**: Controle de bens da biblioteca
@@ -57,6 +58,17 @@ O **CEI - Controle Escolar Inteligente** é um sistema web completo para gestão
 - 🔍 **Busca Avançada**: Localização rápida de livros
 - 📱 **Multi-unidade**: Gestão de várias escolas (Premium)
 - 🔐 **Segurança**: Criptografia e proteção de dados (LGPD)
+
+### 🆕 DESTAQUE: Leitor de Código de Barras a Laser
+
+✅ **Cadastro ultra-rápido de livros** (3-5 segundos por livro!)  
+✅ **Compatível com qualquer leitor USB** (modo teclado)  
+✅ **Detecção automática** - não precisa configurar nada  
+✅ **Busca automática** de dados do livro (título, autor, capa, etc.)  
+✅ **Aumento de 40x na produtividade** do cadastro
+
+📖 [Ver documentação completa do leitor de código de barras](LEITOR_CODIGO_BARRAS.md)  
+🧪 [Testar seu leitor aqui](testar-leitor-barras.html)
 
 ---
 

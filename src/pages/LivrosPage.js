@@ -154,8 +154,35 @@ function LivrosPage() {
   };
 
   const handleSubmit = () => {
-    // Gerar código automático se for novo livro
+    // Verificar se livro já existe (por ISBN ou título+autor)
     if (!editando) {
+      const livroExistente = livros.find(l => 
+        (formData.isbn && l.isbn === formData.isbn) ||
+        (l.titulo.toLowerCase() === formData.titulo.toLowerCase() && 
+         l.autor.toLowerCase() === formData.autor.toLowerCase())
+      );
+      
+      if (livroExistente) {
+        const aumentarQuantidade = window.confirm(
+          `O livro "${formData.titulo}" já está cadastrado!\n\n` +
+          `Quantidade atual: ${livroExistente.quantidade}\n\n` +
+          `Deseja aumentar a quantidade em ${formData.quantidade} unidade(s)?`
+        );
+        
+        if (aumentarQuantidade) {
+          const novaQuantidade = parseInt(livroExistente.quantidade) + parseInt(formData.quantidade);
+          atualizarLivro(livroExistente.id, { 
+            ...livroExistente, 
+            quantidade: novaQuantidade 
+          });
+          handleClose();
+          return;
+        } else {
+          return; // Não fazer nada se usuário cancelar
+        }
+      }
+      
+      // Gerar código automático se for novo livro
       const numeroSequencial = (livros.length + 1).toString().padStart(6, '0');
       const codigoLivro = `LIV${numeroSequencial}`;
       formData.codigoIdentificacao = codigoLivro;
