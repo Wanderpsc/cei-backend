@@ -22,7 +22,12 @@ initializeSecurity();
 
 // Middlewares
 app.use(cors({
-  origin: ['http://localhost:3000', 'https://cei-controle-escolar.surge.sh'],
+  origin: [
+    'http://localhost:3000',
+    'https://cei-controle-escolar.surge.sh',
+    'https://cei-sistema-biblioteca.surge.sh',
+    'https://wanderpsc.github.io'
+  ],
   credentials: true
 }));
 app.use(express.json());
@@ -597,6 +602,288 @@ app.post('/api/webhooks', async (req, res) => {
   } catch (error) {
     console.error('❌ Erro no webhook:', error);
     res.status(500).send('Error');
+  }
+});
+
+// ==========================================
+// ENDPOINTS DO SISTEMA ESCOLAR
+// ==========================================
+
+// Banco de dados em memória (temporário - substituir por banco real)
+const notificationsDB = [];
+const subjectsDB = [];
+const usersDB = [
+  {
+    id: 1,
+    nome: 'Super Administrador',
+    login: 'superadmin',
+    senha: 'matriz@2025',
+    perfil: 'SuperAdmin',
+    tipo: 'master',
+    instituicaoId: 0
+  },
+  {
+    id: 2,
+    nome: 'Wander Pires Silva Coelho',
+    login: 'cetidesamaral',
+    senha: 'Ceti@2026',
+    perfil: 'Admin',
+    tipo: 'master',
+    instituicaoId: 1,
+    email: 'wander@cetidesamaral.edu.br',
+    cargo: 'Diretor',
+    status: 'ativo',
+    dataCriacao: new Date('2024-01-01').toISOString()
+  }
+];
+
+// POST - Autenticação/Login
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { login, senha, username, password } = req.body;
+    
+    // Aceita tanto login/senha quanto username/password
+    const loginUser = login || username;
+    const senhaUser = senha || password;
+    
+    console.log('🔐 Tentativa de login:', loginUser);
+    
+    if (!loginUser || !senhaUser) {
+      return res.status(400).json({
+        success: false,
+        error: 'Login e senha são obrigatórios'
+      });
+    }
+    
+    // Buscar usuário
+    const user = usersDB.find(u => u.login === loginUser && u.senha === senhaUser);
+    
+    if (!user) {
+      console.log('❌ Login falhou para:', loginUser);
+      return res.status(401).json({
+        success: false,
+        error: 'Login ou senha inválidos'
+      });
+    }
+    
+    console.log('✅ Login bem-sucedido:', user.nome);
+    
+    // Retornar dados do usuário (sem a senha)
+    const { senha: _, ...userSemSenha } = user;
+    
+    res.json({
+      success: true,
+      user: userSemSenha,
+      token: generateSecureToken() // Usar a função de segurança existente
+    });
+    
+  } catch (error) {
+    console.error('❌ Erro ao fazer login:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Erro no servidor ao processar login',
+      details: error.message
+    });
+  }
+});
+
+// POST - Registro de usuário
+app.post('/api/auth/register', async (req, res) => {
+  try {
+    const { nome, login, senha, email, instituicaoId } = req.body;
+    
+    console.log('📝 Tentativa de registro:', login);
+    
+    // Validações
+    if (!nome || !login || !senha) {
+      return res.status(400).json({
+        success: false,
+        error: 'Nome, login e senha são obrigatórios'
+      });
+    }
+    
+    // Verificar se login já existe
+    if (usersDB.find(u => u.login === login)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Login já está em uso'
+      });
+    }
+    
+    // Criar novo usuário
+    const newUser = {
+      id: usersDB.length + 1,
+      nome,
+      login,
+      senha, // Em produção, use hash!
+      email,
+      instituicaoId: instituicaoId || 1,
+      perfil: 'Usuario',
+      tipo: 'normal',
+      status: 'ativo',
+      dataCriacao: new Date().toISOString()
+    };
+    
+    usersDB.push(newUser);
+    
+    console.log('✅ Usuário registrado:', newUser.nome);
+    
+    const { senha: _, ...userSemSenha } = newUser;
+    
+    res.json({
+      success: true,
+      user: userSemSenha,
+      message: 'Usuário criado com sucesso'
+    });
+    
+  } catch (error) {
+    console.error('❌ Erro ao registrar:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Erro no servidor ao registrar usuário'
+    });
+  }
+});
+
+// GET - Dados do usuário autenticado
+app.get('/api/auth/me', async (req, res) => {
+  try {
+    // Em produção, validar o token JWT aqui
+    const authHeader = req.headers.authorization;
+    
+    if (!authHeader) {
+      return res.status(401).json({
+        success: false,
+        error: 'Token não fornecido'
+      });
+    }
+    
+    // Simplificado - retornar primeiro usuário admin
+    const user = usersDB.find(u => u.perfil === 'Admin' || u.perfil === 'SuperAdmin');
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        error: 'Usuário não encontrado'
+      });
+    }
+    
+    const { senha: _, ...userSemSenha } = user;
+    
+    res.json({
+      success: true,
+      user: userSemSenha
+    });
+    
+  } catch (error) {
+    console.error('❌ Erro ao buscar usuário:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Erro no servidor'
+    });
+  }
+});
+
+// POST - Logout
+app.post('/api/auth/logout', async (req, res) => {
+  try {
+    console.log('🚪 Logout realizado');
+    
+    res.json({
+      success: true,
+      message: 'Logout realizado com sucesso'
+    });
+    
+  } catch (error) {
+    console.error('❌ Erro ao fazer logout:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Erro no servidor'
+    });
+  }
+});
+
+// GET - Notificações
+app.get('/api/notifications', async (req, res) => {
+  try {
+    console.log('📬 Buscando notificações...');
+    res.json({
+      success: true,
+      notifications: notificationsDB
+    });
+  } catch (error) {
+    console.error('❌ Erro ao buscar notificações:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Erro ao buscar notificações',
+      details: error.message
+    });
+  }
+});
+
+// POST - Criar notificação
+app.post('/api/notifications', async (req, res) => {
+  try {
+    const notification = {
+      id: Date.now().toString(),
+      ...req.body,
+      createdAt: new Date().toISOString()
+    };
+    
+    notificationsDB.push(notification);
+    
+    res.json({
+      success: true,
+      notification
+    });
+  } catch (error) {
+    console.error('❌ Erro ao criar notificação:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Erro ao criar notificação'
+    });
+  }
+});
+
+// GET - Matérias/Disciplinas
+app.get('/api/subjects', async (req, res) => {
+  try {
+    console.log('📚 Buscando matérias...');
+    res.json({
+      success: true,
+      subjects: subjectsDB
+    });
+  } catch (error) {
+    console.error('❌ Erro ao buscar matérias:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Erro ao buscar matérias',
+      details: error.message
+    });
+  }
+});
+
+// POST - Criar matéria
+app.post('/api/subjects', async (req, res) => {
+  try {
+    const subject = {
+      id: Date.now().toString(),
+      ...req.body,
+      createdAt: new Date().toISOString()
+    };
+    
+    subjectsDB.push(subject);
+    
+    res.json({
+      success: true,
+      subject
+    });
+  } catch (error) {
+    console.error('❌ Erro ao criar matéria:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Erro ao criar matéria'
+    });
   }
 });
 
