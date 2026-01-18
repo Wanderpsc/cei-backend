@@ -4,25 +4,11 @@
   <meta charset="utf-8">
   <title>CEI - Controle Escolar Inteligente</title>
   <script type="text/javascript">
-    // Solução para Single-Page Applications no GitHub Pages
-    // https://github.com/rafgraph/spa-github-pages
-    // Este script pega a URL atual e redireciona para index.html preservando o caminho
-    
-    // Para repositório com nome (https://usuario.github.io/nome-repo/), usar 1
-    // Para repositório de usuário (https://usuario.github.io/), usar 0
-    var pathSegmentsToKeep = 1;
-
-    var l = window.location;
-    l.replace(
-      l.protocol + '//' + l.hostname + (l.port ? ':' + l.port : '') +
-      l.pathname.split('/').slice(0, 1 + pathSegmentsToKeep).join('/') + '/?/' +
-      l.pathname.slice(1).split('/').slice(pathSegmentsToKeep).join('/').replace(/&/g, '~and~') +
-      (l.search ? '&' + l.search.slice(1).replace(/&/g, '~and~') : '') +
-      l.hash
-    );
+    // Redirecionar para a página principal
+    window.location.href = '/cei-backend/';
   </script>
 </head>
 <body>
-  <!-- Redirecionando... -->
+  <p>Redirecionando...</p>
 </body>
 </html>
