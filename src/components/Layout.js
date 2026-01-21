@@ -47,6 +47,7 @@ import InventoryIcon from '@mui/icons-material/Inventory';
 import AssignmentIcon from '@mui/icons-material/Assignment';
 
 const drawerWidth = 240;
+const mobileDrawerWidth = 200;
 
 export default function Layout({ children }) {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -248,7 +249,7 @@ export default function Layout({ children }) {
               flexGrow: 1
             }}
           >
-            Controle Escolar Inteligente
+            Controle Escolar Inteligente - Gerenciamento de Biblioteca
           </Typography>
           
           {/* Status de Sincronização */}
@@ -404,17 +405,17 @@ export default function Layout({ children }) {
         <Box
           sx={{
             position: 'fixed',
-            top: 64,
-            width: { sm: `calc(100% - ${drawerWidth}px)` },
+            top: { xs: 56, sm: 64 },
+            width: { xs: '100%', sm: `calc(100% - ${drawerWidth}px)` },
             ml: { sm: `${drawerWidth}px` },
             bgcolor: '#f5f7fa',
             boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
-            py: 1.5,
-            px: 2,
+            py: { xs: 0.8, sm: 1.5 },
+            px: { xs: 1, sm: 2 },
             zIndex: 1100,
             overflowX: 'auto',
             '&::-webkit-scrollbar': {
-              height: 6,
+              height: 4,
             },
             '&::-webkit-scrollbar-thumb': {
               backgroundColor: 'rgba(102, 126, 234, 0.3)',
@@ -422,7 +423,7 @@ export default function Layout({ children }) {
             },
           }}
         >
-          <Grid container spacing={1} wrap="nowrap">
+          <Grid container spacing={{ xs: 0.5, sm: 1 }} wrap="nowrap">
             {quickAccessCards.map((card, index) => (
               <Grid item key={index}>
                 <Card
@@ -438,16 +439,19 @@ export default function Layout({ children }) {
                   }}
                 >
                   <CardActionArea
-                    onClick={() => navigate(card.path)}
+                    onClick={() => {
+                      navigate(card.path);
+                      setMobileOpen(false);
+                    }}
                     sx={{ 
-                      px: 1.3, 
-                      py: 0.7,
+                      px: { xs: 0.8, sm: 1.3 }, 
+                      py: { xs: 0.5, sm: 0.7 },
                       display: 'flex',
                       flexDirection: 'row',
                       alignItems: 'center',
-                      gap: 0.7,
+                      gap: { xs: 0.5, sm: 0.7 },
                       minWidth: 'fit-content',
-                      maxWidth: 160,
+                      maxWidth: { xs: 140, sm: 160 },
                     }}
                   >
                     <Box sx={{ 
@@ -457,13 +461,13 @@ export default function Layout({ children }) {
                       transform: location.pathname === card.path ? 'scale(1.1)' : 'scale(1)',
                       transition: 'transform 0.2s'
                     }}>
-                      {React.cloneElement(card.icon, { sx: { fontSize: 20 } })}
+                      {React.cloneElement(card.icon, { sx: { fontSize: { xs: 18, sm: 20 } } })}
                     </Box>
                     <Typography 
                       variant="caption" 
                       fontWeight={location.pathname === card.path ? 700 : 600}
                       sx={{ 
-                        fontSize: '0.65rem',
+                        fontSize: { xs: '0.6rem', sm: '0.65rem' },
                         lineHeight: 1.2,
                         whiteSpace: 'normal',
                         wordBreak: 'break-word',
@@ -493,7 +497,7 @@ export default function Layout({ children }) {
             display: { xs: 'block', sm: 'none' },
             '& .MuiDrawer-paper': { 
               boxSizing: 'border-box', 
-              width: drawerWidth,
+              width: mobileDrawerWidth,
               background: 'linear-gradient(180deg, #667eea 0%, #764ba2 100%)',
             },
           }}
@@ -531,10 +535,10 @@ export default function Layout({ children }) {
         <Toolbar />
         {/* Espaço adicional quando há barra de atalhos */}
         {(usuarioLogado?.perfil !== 'SuperAdmin' && quickAccessCards.length > 0) && (
-          <Box sx={{ height: 60 }} />
+          <Box sx={{ height: { xs: 48, sm: 60 } }} />
         )}
         {usuarioLogado?.perfil === 'SuperAdmin' && quickAccessCardsAdmin.length > 0 && (
-          <Box sx={{ height: 60 }} />
+          <Box sx={{ height: { xs: 48, sm: 60 } }} />
         )}
         <Box sx={{ flexGrow: 1 }}>
           {/* Aviso de Licença */}
@@ -557,7 +561,7 @@ export default function Layout({ children }) {
           }}
         >
           <Typography variant="body2" color="text.secondary" fontWeight="600">
-            © {new Date().getFullYear()} CEI - Controle Escolar Inteligente
+            © {new Date().getFullYear()} CEI - Controle Escolar Inteligente - Gerenciamento de Biblioteca
           </Typography>
           <Typography 
             variant="caption" 

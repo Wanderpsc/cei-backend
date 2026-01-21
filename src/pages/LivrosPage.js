@@ -1,7 +1,9 @@
 import React, { useState, useRef } from 'react';
 import Layout from '../components/Layout';
 import BarcodeScannerDialog from '../components/BarcodeScannerDialog';
+import MobileBarcodeScanner from '../components/MobileBarcodeScanner';
 import TermoDoacao from '../components/TermoDoacao';
+import CameraCapture from '../components/CameraCapture';
 import {
   Box,
   Button,
@@ -43,12 +45,13 @@ function LivrosPage() {
   const [editando, setEditando] = useState(null);
   const [busca, setBusca] = useState('');
   const [scannerOpen, setScannerOpen] = useState(false);
+  const [mobileScannerOpen, setMobileScannerOpen] = useState(false);
   const [baixaOpen, setBaixaOpen] = useState(false);
   const [livroParaBaixa, setLivroParaBaixa] = useState(null);
   const [termoOpen, setTermoOpen] = useState(false);
   const [dadosTermo, setDadosTermo] = useState(null);
+  const [cameraOpen, setCameraOpen] = useState(false);
   const fileInputRef = useRef(null);
-  const cameraInputRef = useRef(null);
   
   const [dadosBaixa, setDadosBaixa] = useState({
     motivo: 'Doação',
@@ -59,12 +62,42 @@ function LivrosPage() {
     observacoes: ''
   });
   
+  // Categorias predefinidas para livros
+  const categoriasLivros = [
+    'Ficção',
+    'Não-ficção',
+    'Romance',
+    'Aventura',
+    'Fantasia',
+    'Suspense',
+    'Terror',
+    'Biografia',
+    'História',
+    'Ciência',
+    'Tecnologia',
+    'Autoajuda',
+    'Infantil',
+    'Juvenil',
+    'Didático',
+    'Paradidático',
+    'Poesia',
+    'Drama',
+    'Comédia',
+    'Filosofia',
+    'Religião',
+    'Artes',
+    'Culinária',
+    'Outros'
+  ];
+  
   const [formData, setFormData] = useState({
     titulo: '',
     autor: '',
     isbn: '',
     editora: '',
     anoPublicacao: '',
+    edicao: '',
+    cidadeEdicao: '',
     categoria: '',
     quantidade: 1,
     localizacao: '',
@@ -85,6 +118,8 @@ function LivrosPage() {
         isbn: '',
         editora: '',
         anoPublicacao: '',
+        edicao: '',
+        cidadeEdicao: '',
         categoria: '',
         quantidade: 1,
         localizacao: '',
@@ -97,6 +132,8 @@ function LivrosPage() {
   };
 
   const handleBookFound = (dadosLivro) => {
+    console.log('📖 Preenchendo formulário com dados do livro:', dadosLivro);
+    
     setFormData({
       ...formData,
       titulo: dadosLivro.titulo || formData.titulo,
@@ -104,9 +141,16 @@ function LivrosPage() {
       isbn: dadosLivro.isbn || formData.isbn,
       editora: dadosLivro.editora || formData.editora,
       anoPublicacao: dadosLivro.anoPublicacao || formData.anoPublicacao,
+      edicao: dadosLivro.edicao || formData.edicao || '1',
+      cidadeEdicao: dadosLivro.cidadeEdicao || formData.cidadeEdicao,
       categoria: dadosLivro.categoria || formData.categoria,
-      fotoUrl: dadosLivro.foto || formData.fotoUrl
+      idioma: dadosLivro.idioma || formData.idioma || 'Português',
+      numeroPaginas: dadosLivro.numeroPaginas || formData.numeroPaginas,
+      descricao: dadosLivro.descricao || formData.descricao,
+      fotoUrl: dadosLivro.imagemUrl || dadosLivro.fotoUrl || dadosLivro.foto || formData.fotoUrl
     });
+    
+    console.log('✅ Formulário preenchido!');
     setOpen(true);
   };
 
@@ -133,15 +177,9 @@ function LivrosPage() {
     }
   };
 
-  const handleCameraCapture = (event) => {
-    const file = event.target.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setFormData({ ...formData, fotoUrl: reader.result });
-      };
-      reader.readAsDataURL(file);
-    }
+  const handleCameraCapture = (imageData) => {
+    setFormData({ ...formData, fotoUrl: imageData });
+    setCameraOpen(false);
   };
 
   const handleRemoverFoto = () => {
@@ -279,10 +317,26 @@ function LivrosPage() {
         <Button
           variant="outlined"
           startIcon={<QrCodeScanner />}
-          onClick={() => setScannerOpen(true)}
-          sx={{ minWidth: '200px' }}
+          onClick={() => {
+            // Detectar se é mobile
+            const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || window.innerWidth < 768;
+            if (isMobile) {
+              setMobileScannerOpen(true);
+            } else {
+              setScannerOpen(true);
+            }
+          }}
+          sx={{ minWidth: '200px', display: { xs: 'none', sm: 'flex' } }}
         >
           Digite o ISBN
+        </Button>
+        <Button
+          variant="outlined"
+          startIcon={<QrCodeScanner />}
+          onClick={() => setMobileScannerOpen(true)}
+          sx={{ display: { xs: 'flex', sm: 'none' } }}
+        >
+          Escanear
         </Button>
         <Button
           variant="contained"
@@ -426,11 +480,36 @@ function LivrosPage() {
               onChange={(e) => setFormData({ ...formData, anoPublicacao: e.target.value })}
             />
             <TextField
-              label="Categoria"
+              label="Edição"
               fullWidth
-              value={formData.categoria}
-              onChange={(e) => setFormData({ ...formData, categoria: e.target.value })}
+              placeholder="Ex: 1ª edição, 2ª edição, etc."
+              value={formData.edicao}
+              onChange={(e) => setFormData({ ...formData, edicao: e.target.value })}
             />
+            <TextField
+              label="Cidade de Edição"
+              fullWidth
+              placeholder="Ex: São Paulo, Rio de Janeiro, etc."
+              value={formData.cidadeEdicao}
+              onChange={(e) => setFormData({ ...formData, cidadeEdicao: e.target.value })}
+            />
+            <FormControl fullWidth>
+              <InputLabel>Categoria</InputLabel>
+              <Select
+                value={formData.categoria}
+                label="Categoria"
+                onChange={(e) => setFormData({ ...formData, categoria: e.target.value })}
+              >
+                <MenuItem value="">
+                  <em>Selecione uma categoria</em>
+                </MenuItem>
+                {categoriasLivros.map((cat) => (
+                  <MenuItem key={cat} value={cat}>
+                    {cat}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
             <FormControl fullWidth>
               <InputLabel>Tipo de Livro *</InputLabel>
               <Select
@@ -507,18 +586,10 @@ function LivrosPage() {
                     Upload
                   </Button>
                   
-                  <input
-                    type="file"
-                    ref={cameraInputRef}
-                    accept="image/*"
-                    capture="environment"
-                    style={{ display: 'none' }}
-                    onChange={handleCameraCapture}
-                  />
                   <Button
                     variant="outlined"
                     startIcon={<PhotoCamera />}
-                    onClick={() => cameraInputRef.current?.click()}
+                    onClick={() => setCameraOpen(true)}
                   >
                     Câmera
                   </Button>
@@ -545,6 +616,13 @@ function LivrosPage() {
       <BarcodeScannerDialog 
         open={scannerOpen} 
         onClose={() => setScannerOpen(false)}
+        onBookFound={handleBookFound}
+      />
+
+      {/* Scanner Mobile Otimizado */}
+      <MobileBarcodeScanner
+        open={mobileScannerOpen}
+        onClose={() => setMobileScannerOpen(false)}
         onBookFound={handleBookFound}
       />
 
@@ -629,6 +707,14 @@ function LivrosPage() {
           donatario={dadosTermo.donatario}
         />
       )}
+
+      {/* Dialog de Captura de Câmera */}
+      <CameraCapture
+        open={cameraOpen}
+        onClose={() => setCameraOpen(false)}
+        onCapture={handleCameraCapture}
+        title="Tirar Foto do Livro"
+      />
     </Layout>
   );
 }

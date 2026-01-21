@@ -35,6 +35,8 @@ export default function BarcodeScannerDialog({ open, onClose, onBookFound }) {
     autor: '',
     editora: '',
     anoPublicacao: '',
+    edicao: '',
+    cidadeEdicao: '',
     categoria: '',
     descricao: '',
     paginas: '',
@@ -52,10 +54,9 @@ export default function BarcodeScannerDialog({ open, onClose, onBookFound }) {
   // Log para confirmar que está usando o componente atualizado
   React.useEffect(() => {
     if (open) {
-      console.log('📚 BarcodeScannerDialog v3.4.1 - BUSCA APRIMORADA COM FONTES BRASILEIRAS!');
-      console.log('🔫 Leitor de código de barras com detecção aprimorada');
-      console.log('🇧🇷 Busca em fontes brasileiras: Editoras FTD, Ática, Moderna, Saraiva, etc.');
-      console.log('🌐 Busca global: Google Books + Open Library + Mercado Editorial');
+  console.log('📚 BarcodeScannerDialog v3.5.1 - BUSCA EXPANDIDA!');
+  console.log('🔫 Leitor de código de barras com IA');
+  console.log('🚀 7 fontes: Google Books (múltiplas variações) + Gemini AI + Open Library + WorldCat + Amazon BR + BuscaISBN + Advanced Search');
     }
   }, [open]);
 
@@ -77,22 +78,20 @@ export default function BarcodeScannerDialog({ open, onClose, onBookFound }) {
 
       // Se for Enter e temos um buffer válido
       if (char === 'Enter') {
+        event.preventDefault();
         if (scanBuffer.length >= 10 && scanBuffer.length <= 13) {
-          event.preventDefault();
           const isbn = scanBuffer;
           console.log('🔫 Leitor laser detectado! ISBN:', isbn);
-          scanBuffer = '';
+          // Atualizar campo e buscar
           setDadosLivro(prev => ({...prev, isbn}));
-          setBufferScanner(isbn);
           buscarLivroPorIsbn(isbn);
+          scanBuffer = '';
         }
+        scanBuffer = ''; // Limpar buffer após Enter
         return;
       }
 
-      // Detectar leitor a laser: tempo rápido entre teclas (< 100ms)
-      const isFastTyping = timeSinceLastKey < 100;
-      
-      // Se for número ou letra e digitação rápida
+      // Se for número ou letra X
       if (/^[0-9X]$/i.test(char)) {
         // Resetar buffer se passou muito tempo (> 200ms = nova leitura)
         if (timeSinceLastKey > 200) {
@@ -101,26 +100,24 @@ export default function BarcodeScannerDialog({ open, onClose, onBookFound }) {
 
         scanBuffer += char;
         scanTimestamp = now;
-        setBufferScanner(scanBuffer);
+        console.log('🔵 Buffer atual:', scanBuffer);
 
         // Limpar timeout anterior
         if (scanTimeout) clearTimeout(scanTimeout);
 
-        // Auto-buscar após 150ms de inatividade
+        // Auto-buscar após 200ms de inatividade (fim da leitura)
         scanTimeout = setTimeout(() => {
           if (scanBuffer.length >= 10 && scanBuffer.length <= 13) {
             const isbn = scanBuffer;
-            console.log('🔫 Código completo capturado:', isbn);
-            scanBuffer = '';
+            console.log('🔫 Código completo capturado (timeout):', isbn);
             setDadosLivro(prev => ({...prev, isbn}));
-            setBufferScanner(isbn);
             buscarLivroPorIsbn(isbn);
+            scanBuffer = '';
           } else if (scanBuffer.length > 0) {
             console.log('⚠️ Buffer incompleto:', scanBuffer);
             scanBuffer = '';
-            setBufferScanner('');
           }
-        }, 150);
+        }, 200);
       }
     };
 
@@ -174,21 +171,33 @@ export default function BarcodeScannerDialog({ open, onClose, onBookFound }) {
         fonteEncontrada = resultado.fonte;
         
         // Preencher formulário com os dados encontrados
-        setDadosLivro({
+        const dadosCompletos = {
           ...resultado.dados,
           quantidade: dadosLivro.quantidade || '1',
           colecao: dadosLivro.colecao || resultado.dados.colecao || '',
           qtdLivrosColecao: dadosLivro.qtdLivrosColecao || resultado.dados.qtdLivrosColecao || '',
           _fonte: fonteEncontrada // Armazenar fonte para exibir depois
-        });
+        };
         
+        setDadosLivro(dadosCompletos);
         setIsbnBuscado(true);
         setMostrarCamposManual(true);
         setError('');
+        
+        // PREENCHER O FORMULÁRIO PRINCIPAL AUTOMATICAMENTE
+        console.log('🎯 Preenchendo formulário principal automaticamente...');
+        onBookFound(dadosCompletos);
+        
+        // Fechar o dialog após 1 segundo para o usuário ver que encontrou
+        setTimeout(() => {
+          handleClose();
+        }, 1000);
       } else {
         // Não encontrou em nenhuma fonte
         console.log('❌ LIVRO NÃO ENCONTRADO');
-        setError(resultado.mensagem || `📚 ISBN ${isbnLimpo} não encontrado.\nVerifique o código e preencha os dados manualmente.`);
+        const mensagemAmigavel = `ISBN ${isbnLimpo} não encontrado nas bases de dados.`;
+        
+        setError(mensagemAmigavel);
         setDadosLivro({ ...dadosLivro, isbn: isbnLimpo });
         setMostrarCamposManual(true);
         setIsbnBuscado(false);
@@ -207,7 +216,8 @@ export default function BarcodeScannerDialog({ open, onClose, onBookFound }) {
   };
 
   const handleIsbnBlur = () => {
-    if (dadosLivro.isbn && dadosLivro.isbn.length >= 10) {
+    // Buscar apenas se ainda não foi buscado e não está mostrando campos manuais
+    if (dadosLivro.isbn && dadosLivro.isbn.length >= 10 && !isbnBuscado && !mostrarCamposManual) {
       buscarLivroPorIsbn(dadosLivro.isbn);
     }
   };
@@ -312,20 +322,27 @@ export default function BarcodeScannerDialog({ open, onClose, onBookFound }) {
             
             <Alert severity="info" sx={{ mt: 2 }}>
               <Typography variant="caption" component="div">
-                <strong>🇧🇷 Fontes Brasileiras:</strong>
+                <strong>🤖 Inteligência Artificial:</strong>
+                <br />• Google Gemini AI (prioridade máxima!) ⚠️ <strong>Configure a API key gratuita!</strong>
+                <br />
+                <br /><strong>🇧🇷 Fontes Brasileiras:</strong>
                 <br />• Editoras: FTD, Ática, Moderna, Saraiva, Scipione, SM, IBEP
                 <br />• Mercado Editorial Brasileiro
                 <br />
                 <br /><strong>🌐 Fontes Internacionais:</strong>
                 <br />• Google Books API (múltiplas estratégias)
                 <br />• Open Library (biblioteca mundial)
+                <br />
+                <br /><Typography variant="caption" sx={{ fontStyle: 'italic', fontSize: '0.7rem' }}>
+                  💡 <strong>Dica:</strong> O Gemini AI encontra QUALQUER livro! Configure a API key gratuita em ATIVAR_GEMINI_AI.md
+                </Typography>
               </Typography>
             </Alert>
           </Box>
         )}
 
         {error && (
-          <Alert severity="warning" sx={{ mb: 2 }}>
+          <Alert severity="info" sx={{ mb: 2 }}>
             {error}
           </Alert>
         )}
@@ -405,6 +422,7 @@ export default function BarcodeScannerDialog({ open, onClose, onBookFound }) {
                 <TextField
                   fullWidth
                   required
+                  id="titulo-field"
                   label="Título"
                   value={dadosLivro.titulo}
                   onChange={(e) => setDadosLivro({...dadosLivro, titulo: e.target.value})}
@@ -439,6 +457,26 @@ export default function BarcodeScannerDialog({ open, onClose, onBookFound }) {
                   onChange={(e) => setDadosLivro({...dadosLivro, anoPublicacao: e.target.value.replace(/[^0-9]/g, '')})}
                   inputProps={{ maxLength: 4 }}
                   placeholder="2024"
+                />
+              </Grid>
+              
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  label="Edição"
+                  value={dadosLivro.edicao}
+                  onChange={(e) => setDadosLivro({...dadosLivro, edicao: e.target.value})}
+                  placeholder="Ex: 1ª edição, 2ª, etc."
+                />
+              </Grid>
+              
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  label="Cidade de Edição"
+                  value={dadosLivro.cidadeEdicao}
+                  onChange={(e) => setDadosLivro({...dadosLivro, cidadeEdicao: e.target.value})}
+                  placeholder="Ex: São Paulo, Rio de Janeiro"
                 />
               </Grid>
               

@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teste ISBN 9786558884101</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1200px;
+            margin: 50px auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .container {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            color: #333;
+        }
+        h1 {
+            color: #667eea;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .isbn-info {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border-left: 4px solid #667eea;
+        }
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            font-size: 18px;
+            border-radius: 8px;
+            cursor: pointer;
+            width: 100%;
+            transition: all 0.3s;
+            font-weight: bold;
+        }
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
+        }
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        #resultado {
+            margin-top: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            min-height: 100px;
+            display: none;
+        }
+        .loading {
+            text-align: center;
+            padding: 40px;
+        }
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .progress {
+            background: #e9ecef;
+            border-radius: 10px;
+            height: 30px;
+            margin: 20px 0;
+            overflow: hidden;
+            display: none;
+        }
+        .progress-bar {
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            height: 100%;
+            transition: width 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 14px;
+        }
+        .book-info {
+            display: grid;
+            gap: 15px;
+        }
+        .info-item {
+            display: flex;
+            border-bottom: 1px solid #dee2e6;
+            padding: 10px 0;
+        }
+        .info-label {
+            font-weight: bold;
+            color: #667eea;
+            width: 150px;
+            flex-shrink: 0;
+        }
+        .info-value {
+            flex: 1;
+            color: #495057;
+        }
+        .success {
+            color: #28a745;
+            font-weight: bold;
+        }
+        .error {
+            color: #dc3545;
+            font-weight: bold;
+        }
+        .log-container {
+            background: #212529;
+            color: #00ff00;
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 20px;
+            max-height: 400px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            display: none;
+        }
+        .log-item {
+            margin: 5px 0;
+            padding: 5px;
+            border-left: 3px solid #00ff00;
+            padding-left: 10px;
+        }
+        .fonte-atual {
+            background: #667eea;
+            color: white;
+            padding: 10px 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+            font-weight: bold;
+            text-align: center;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 Teste de Busca ISBN</h1>
+        
+        <div class="isbn-info">
+            <strong>📚 ISBN a ser testado:</strong> 9786558884101<br>
+            <strong>🤖 Google Gemini AI:</strong> <span id="gemini-status">Verificando...</span><br>
+            <strong>📊 Total de fontes:</strong> 13 (Brasil + Internacional)
+        </div>
+
+        <button id="btnBuscar" onclick="buscarLivro()">
+            🚀 Iniciar Busca
+        </button>
+
+        <div class="fonte-atual" id="fonteAtual"></div>
+
+        <div class="progress" id="progressContainer">
+            <div class="progress-bar" id="progressBar">0%</div>
+        </div>
+
+        <div class="log-container" id="logContainer"></div>
+
+        <div id="resultado"></div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <script>
+        // Configuração da API (mesma do sistema)
+        const GEMINI_API_KEY = 'AIzaSyBP0YQuwCrLnT1mIIXWAmydRxGnoaatK80';
+        const GEMINI_ENABLED = GEMINI_API_KEY && GEMINI_API_KEY.length > 10;
+
+        // Atualizar status do Gemini
+        document.getElementById('gemini-status').innerHTML = GEMINI_ENABLED ? 
+            '<span style="color: #28a745;">✅ ATIVADO</span>' : 
+            '<span style="color: #dc3545;">❌ DESABILITADO</span>';
+
+        function addLog(message, tipo = 'info') {
+            const logContainer = document.getElementById('logContainer');
+            logContainer.style.display = 'block';
+            const logItem = document.createElement('div');
+            logItem.className = 'log-item';
+            
+            let icon = '📝';
+            if (message.includes('✅')) icon = '✅';
+            if (message.includes('❌')) icon = '❌';
+            if (message.includes('🔍')) icon = '🔍';
+            if (message.includes('🚀')) icon = '🚀';
+            if (message.includes('⚠️')) icon = '⚠️';
+            
+            logItem.innerHTML = `<span style="color: #00ff00;">[${new Date().toLocaleTimeString()}]</span> ${message}`;
+            logContainer.appendChild(logItem);
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+
+        function updateProgress(percent, fonte) {
+            const progressContainer = document.getElementById('progressContainer');
+            const progressBar = document.getElementById('progressBar');
+            const fonteAtual = document.getElementById('fonteAtual');
+            
+            progressContainer.style.display = 'block';
+            progressBar.style.width = percent + '%';
+            progressBar.textContent = Math.round(percent) + '%';
+            
+            if (fonte) {
+                fonteAtual.style.display = 'block';
+                fonteAtual.textContent = `🔎 Buscando em: ${fonte}`;
+            }
+        }
+
+        async function buscarGeminiAI(isbn) {
+            if (!GEMINI_ENABLED) {
+                addLog('⚠️ Google Gemini AI desabilitado (sem API key)');
+                return null;
+            }
+
+            addLog('🤖 Iniciando busca no Google Gemini AI...');
+            addLog('🔑 API Key: ' + GEMINI_API_KEY.substring(0, 20) + '...');
+
+            try {
+                const prompt = `Você é um especialista em literatura e biblioteconomia. Forneça informações COMPLETAS E DETALHADAS sobre o livro com ISBN ${isbn}.
+
+IMPORTANTE: 
+- Pesquise em todas as suas bases de dados
+- Inclua RESUMO/SINOPSE COMPLETA (mínimo 100 palavras)
+- Se for livro didático, mencione série/ano escolar
+- Inclua todas as informações bibliográficas
+
+Retorne APENAS um objeto JSON válido (sem markdown, sem \`\`\`json):
+{
+  "titulo": "título completo do livro",
+  "autor": "nome completo do autor ou autores",
+  "editora": "nome completo da editora",
+  "anoPublicacao": "ano de publicação",
+  "isbn": "${isbn}",
+  "idioma": "pt ou en ou es",
+  "numeroPaginas": "número de páginas",
+  "descricao": "RESUMO COMPLETO E DETALHADO do livro",
+  "categoria": "categoria principal",
+  "edicao": "número da edição",
+  "cidadeEdicao": "cidade de publicação"
+}`;
+
+                addLog('📤 Enviando requisição para Gemini API...');
+                
+                const response = await axios.post(
+                    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${GEMINI_API_KEY}`,
+                    {
+                        contents: [{
+                            parts: [{
+                                text: prompt
+                            }]
+                        }]
+                    },
+                    {
+                        timeout: 15000,
+                        headers: {
+                            'Content-Type': 'application/json'
+                        }
+                    }
+                );
+
+                addLog('📥 Resposta recebida! Status: ' + response.status);
+
+                if (response.data?.candidates?.[0]?.content?.parts?.[0]?.text) {
+                    const textoResposta = response.data.candidates[0].content.parts[0].text;
+                    addLog('📝 Resposta da IA recebida (' + textoResposta.length + ' caracteres)');
+
+                    // Limpar markdown
+                    let jsonText = textoResposta.replace(/```json\s*/g, '').replace(/```\s*/g, '');
+                    
+                    const jsonMatch = jsonText.match(/\{[\s\S]*\}/);
+                    if (jsonMatch) {
+                        const dadosLivro = JSON.parse(jsonMatch[0]);
+                        
+                        if (dadosLivro && dadosLivro.titulo) {
+                            addLog('✅ Livro encontrado via Gemini AI!');
+                            addLog('📖 Título: ' + dadosLivro.titulo);
+                            addLog('✍️ Autor: ' + dadosLivro.autor);
+                            return dadosLivro;
+                        }
+                    }
+                }
+
+                addLog('⚠️ Gemini AI não retornou dados válidos');
+                return null;
+
+            } catch (error) {
+                if (error.response?.status === 403) {
+                    addLog('❌ ERRO 403: API Key inválida ou expirada!');
+                } else {
+                    addLog('❌ Erro no Gemini AI: ' + error.message);
+                }
+                return null;
+            }
+        }
+
+        async function buscarGoogleBooks(isbn) {
+            addLog('📗 Buscando no Google Books API...');
+            
+            try {
+                const response = await axios.get(
+                    `https://www.googleapis.com/books/v1/volumes?q=isbn:${isbn}&langRestrict=pt&maxResults=10`,
+                    { timeout: 10000 }
+                );
+
+                if (response.data.items && response.data.items.length > 0) {
+                    const livro = response.data.items[0].volumeInfo;
+                    addLog('✅ Livro encontrado no Google Books!');
+                    addLog('📖 Título: ' + livro.title);
+                    
+                    return {
+                        titulo: livro.title || '',
+                        autor: livro.authors?.join(', ') || '',
+                        editora: livro.publisher || '',
+                        anoPublicacao: livro.publishedDate?.substring(0, 4) || '',
+                        isbn: isbn,
+                        idioma: livro.language || 'pt',
+                        numeroPaginas: livro.pageCount || '',
+                        descricao: livro.description || '',
+                        categoria: livro.categories?.[0] || '',
+                        imagemUrl: livro.imageLinks?.thumbnail || ''
+                    };
+                }
+
+                addLog('⚠️ Nenhum resultado no Google Books');
+                return null;
+
+            } catch (error) {
+                addLog('❌ Erro no Google Books: ' + error.message);
+                return null;
+            }
+        }
+
+        async function buscarLivro() {
+            const isbn = '9786558884101';
+            const btnBuscar = document.getElementById('btnBuscar');
+            const resultado = document.getElementById('resultado');
+            const logContainer = document.getElementById('logContainer');
+            
+            // Limpar
+            resultado.style.display = 'none';
+            resultado.innerHTML = '';
+            logContainer.innerHTML = '';
+            logContainer.style.display = 'block';
+            
+            btnBuscar.disabled = true;
+            btnBuscar.textContent = '🔍 Buscando...';
+
+            addLog('🔍 ===================================');
+            addLog('🔍 INICIANDO BUSCA DE LIVRO POR ISBN');
+            addLog('🔍 ===================================');
+            addLog('📋 ISBN: ' + isbn);
+            addLog('📋 Comprimento: ' + isbn.length + ' dígitos');
+
+            let livroEncontrado = null;
+
+            // Busca 1: Google Books
+            updateProgress(10, 'Google Books API');
+            livroEncontrado = await buscarGoogleBooks(isbn);
+            
+            if (!livroEncontrado) {
+                // Busca 2: Gemini AI
+                updateProgress(50, 'Google Gemini AI (Inteligência Artificial)');
+                livroEncontrado = await buscarGeminiAI(isbn);
+            }
+
+            updateProgress(100, 'Busca Concluída');
+
+            // Exibir resultado
+            resultado.style.display = 'block';
+            
+            if (livroEncontrado) {
+                addLog('✅ ===================================');
+                addLog('✅ LIVRO ENCONTRADO COM SUCESSO!');
+                addLog('✅ ===================================');
+                
+                resultado.innerHTML = `
+                    <h2 class="success">✅ Livro Encontrado!</h2>
+                    <div class="book-info">
+                        <div class="info-item">
+                            <span class="info-label">📖 Título:</span>
+                            <span class="info-value">${livroEncontrado.titulo}</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">✍️ Autor:</span>
+                            <span class="info-value">${livroEncontrado.autor || 'Não informado'}</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">🏢 Editora:</span>
+                            <span class="info-value">${livroEncontrado.editora || 'Não informado'}</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">📅 Ano:</span>
+                            <span class="info-value">${livroEncontrado.anoPublicacao || 'Não informado'}</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">📚 ISBN:</span>
+                            <span class="info-value">${livroEncontrado.isbn}</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">🌍 Idioma:</span>
+                            <span class="info-value">${livroEncontrado.idioma || 'pt'}</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">📄 Páginas:</span>
+                            <span class="info-value">${livroEncontrado.numeroPaginas || 'Não informado'}</span>
+                        </div>
+                        ${livroEncontrado.categoria ? `
+                        <div class="info-item">
+                            <span class="info-label">📂 Categoria:</span>
+                            <span class="info-value">${livroEncontrado.categoria}</span>
+                        </div>
+                        ` : ''}
+                        ${livroEncontrado.descricao ? `
+                        <div class="info-item">
+                            <span class="info-label">📝 Descrição:</span>
+                            <span class="info-value">${livroEncontrado.descricao}</span>
+                        </div>
+                        ` : ''}
+                    </div>
+                `;
+            } else {
+                addLog('❌ ===================================');
+                addLog('❌ LIVRO NÃO ENCONTRADO');
+                addLog('❌ ===================================');
+                
+                resultado.innerHTML = `
+                    <h2 class="error">❌ Livro Não Encontrado</h2>
+                    <p>O ISBN <strong>${isbn}</strong> não foi encontrado nas fontes consultadas.</p>
+                    <p><strong>💡 Sugestões:</strong></p>
+                    <ul>
+                        <li>Verifique se o ISBN está correto</li>
+                        <li>Tente pesquisar manualmente no Google</li>
+                        <li>Consulte o site da editora</li>
+                        <li>Preencha os dados manualmente no sistema</li>
+                    </ul>
+                `;
+            }
+
+            btnBuscar.disabled = false;
+            btnBuscar.textContent = '🔄 Buscar Novamente';
+        }
+    </script>
+</body>
+</html>

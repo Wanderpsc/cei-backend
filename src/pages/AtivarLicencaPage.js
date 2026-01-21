@@ -126,7 +126,7 @@ export default function AtivarLicencaPage() {
               Ativar Licença
             </Typography>
             <Typography variant="subtitle1" color="text.secondary">
-              Sistema CEI - Controle Escolar Inteligente
+              Sistema CEI - Controle Escolar Inteligente - Gerenciamento de Biblioteca
             </Typography>
           </Box>
 

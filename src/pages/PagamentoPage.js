@@ -387,7 +387,7 @@ export default function PagamentoPage() {
               Finalizar Pagamento
             </Typography>
             <Typography variant="subtitle1" color="text.secondary">
-              Sistema CEI - Controle Escolar Inteligente
+              Sistema CEI - Controle Escolar Inteligente - Gerenciamento de Biblioteca
             </Typography>
           </Box>
 

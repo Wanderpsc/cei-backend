@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import Layout from '../components/Layout';
 import { useData } from '../context/DataContext';
+import CameraCapture from '../components/CameraCapture';
 import {
   Box,
   Card,
@@ -55,7 +56,7 @@ export default function ClubeDeLeituraPage() {
     const salvos = localStorage.getItem('cei_resumos_livros');
     return salvos ? JSON.parse(salvos) : [];
   });
-  const fileInputRef = useRef(null);
+  const [cameraOpen, setCameraOpen] = useState(false);
 
   const salvarResumo = () => {
     if (!resumo.clienteId || !resumo.livroId || !resumo.resumoTexto) {
@@ -90,15 +91,9 @@ export default function ClubeDeLeituraPage() {
     alert('✅ Resumo cadastrado com sucesso! Leitor adicionado ao ranking.');
   };
 
-  const handleFotoCapture = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setFotoAluno(reader.result);
-      };
-      reader.readAsDataURL(file);
-    }
+  const handleFotoCapture = (imageData) => {
+    setFotoAluno(imageData);
+    setCameraOpen(false);
   };
 
   const getRankingLeitores = () => {
@@ -313,17 +308,10 @@ export default function ClubeDeLeituraPage() {
 
             <Grid item xs={12}>
               <Box sx={{ textAlign: 'center', mb: 2 }}>
-                <input
-                  type="file"
-                  accept="image/*"
-                  ref={fileInputRef}
-                  style={{ display: 'none' }}
-                  onChange={handleFotoCapture}
-                />
                 <Button
                   variant="outlined"
                   startIcon={<CameraAlt />}
-                  onClick={() => fileInputRef.current.click()}
+                  onClick={() => setCameraOpen(true)}
                 >
                   {fotoAluno ? 'Alterar Foto' : 'Tirar Foto do Leitor'}
                 </Button>
@@ -403,6 +391,14 @@ export default function ClubeDeLeituraPage() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Dialog de Captura de Câmera */}
+      <CameraCapture
+        open={cameraOpen}
+        onClose={() => setCameraOpen(false)}
+        onCapture={handleFotoCapture}
+        title="Tirar Foto do Leitor"
+      />
     </Layout>
   );
 }

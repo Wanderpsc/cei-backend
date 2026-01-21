@@ -70,7 +70,7 @@ export default function TermosDeUsoPage() {
             Termos de Uso e Políticas
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            Sistema CEI - Controle Escolar Inteligente
+            Sistema CEI - Controle Escolar Inteligente - Gerenciamento de Biblioteca
           </Typography>
           <Typography variant="caption" color="text.secondary">
             © 2026 Wander Pires Silva Coelho - Todos os direitos reservados

@@ -230,10 +230,7 @@ export default function LoginPage() {
               CEI
             </Typography>
             <Typography variant="h6" color="text.secondary" fontWeight="500">
-              Controle Escolar Inteligente
-            </Typography>
-            <Typography variant="subtitle1" color="primary" fontWeight="600" sx={{ mt: 0.5 }}>
-              Gerenciamento de Biblioteca
+              Controle Escolar Inteligente - Gerenciamento de Biblioteca
             </Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
               Bem-vindo! Faça login para continuar

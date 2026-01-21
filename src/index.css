@@ -85,3 +85,73 @@ body {
   }
 }
 
+/* Melhorias para Mobile */
+@media (max-width: 600px) {
+  /* Reduzir padding em mobile */
+  .MuiDialog-paper {
+    margin: 8px !important;
+  }
+  
+  .MuiDialogContent-root {
+    padding: 12px !important;
+  }
+  
+  .MuiTableCell-root {
+    padding: 8px 4px !important;
+    font-size: 0.8rem !important;
+  }
+  
+  /* Melhorar responsividade de formulários */
+  .MuiTextField-root {
+    margin-bottom: 12px !important;
+  }
+  
+  /* Ajustar botões em mobile */
+  .MuiButton-root {
+    font-size: 0.85rem !important;
+  }
+  
+  /* Melhorar visualização de cards */
+  .MuiCard-root {
+    margin-bottom: 8px !important;
+  }
+  
+  /* Reduzir tamanho de chips */
+  .MuiChip-root {
+    font-size: 0.7rem !important;
+    height: 24px !important;
+  }
+  
+  /* Melhorar AppBar em mobile */
+  .MuiAppBar-root .MuiToolbar-root {
+    min-height: 56px !important;
+    padding-left: 8px !important;
+    padding-right: 8px !important;
+  }
+  
+  /* Ajustar avatar em mobile */
+  .MuiAvatar-root {
+    width: 32px !important;
+    height: 32px !important;
+  }
+  
+  /* Melhorar drawer mobile */
+  .MuiDrawer-paper {
+    max-width: 200px !important;
+  }
+  
+  /* Ajustar espaçamento de tabs */
+  .MuiTab-root {
+    min-width: 80px !important;
+    padding: 8px 12px !important;
+    font-size: 0.8rem !important;
+  }
+}
+
+/* Melhorias para telas médias (tablets) */
+@media (min-width: 600px) and (max-width: 960px) {
+  .MuiTableCell-root {
+    padding: 10px 8px !important;
+    font-size: 0.9rem !important;
+  }
+}

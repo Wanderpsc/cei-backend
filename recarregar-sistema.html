@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🔄 Recarregar CEI - Nova API Key Aplicada</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .card {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            max-width: 600px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            text-align: center;
+        }
+        h1 {
+            color: #667eea;
+            margin-bottom: 20px;
+            font-size: 32px;
+        }
+        .success-icon {
+            font-size: 80px;
+            margin-bottom: 20px;
+            animation: bounce 1s infinite;
+        }
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-20px); }
+        }
+        .info {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+            text-align: left;
+            border-left: 4px solid #28a745;
+        }
+        .info h3 {
+            color: #28a745;
+            margin-top: 0;
+        }
+        .info p {
+            margin: 10px 0;
+            line-height: 1.6;
+        }
+        .warning {
+            background: #fff3cd;
+            border-left-color: #ffc107;
+            color: #856404;
+        }
+        .warning h3 {
+            color: #ffc107;
+        }
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            font-size: 18px;
+            border-radius: 10px;
+            cursor: pointer;
+            margin: 10px;
+            font-weight: bold;
+            transition: all 0.3s;
+        }
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
+        }
+        .secondary {
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+        }
+        .steps {
+            text-align: left;
+            margin: 20px 0;
+        }
+        .steps li {
+            margin: 10px 0;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 5px;
+        }
+        .code {
+            background: #212529;
+            color: #00ff00;
+            padding: 10px;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="success-icon">✅</div>
+        <h1>Build Concluído!</h1>
+        <p style="font-size: 18px; color: #495057;">Nova API key do Gemini AI aplicada com sucesso</p>
+
+        <div class="info">
+            <h3>✅ O que foi feito:</h3>
+            <p><strong>1.</strong> API key atualizada para: <code>AIzaSyBP0...K80</code></p>
+            <p><strong>2.</strong> Sistema reconstruído (npm run build)</p>
+            <p><strong>3.</strong> Novo bundle gerado: <code>main.da09560a.js</code></p>
+        </div>
+
+        <div class="info warning">
+            <h3>⚠️ IMPORTANTE - Limpar Cache:</h3>
+            <ol class="steps">
+                <li><strong>Pressione Ctrl + Shift + Delete</strong></li>
+                <li>Marque "Imagens e arquivos em cache"</li>
+                <li>Clique em "Limpar dados"</li>
+                <li>Recarregue a página (Ctrl + Shift + R)</li>
+            </ol>
+        </div>
+
+        <div class="info">
+            <h3>🎯 Como Testar:</h3>
+            <p><strong>1.</strong> Abra o sistema CEI no navegador</p>
+            <p><strong>2.</strong> Pressione F12 (Console)</p>
+            <p><strong>3.</strong> Use o leitor de código de barras</p>
+            <p><strong>4.</strong> Verifique se aparece:</p>
+            <div class="code">
+                🤖 Buscando com Google Gemini AI...<br>
+                🔑 API Key configurada: SIM ✅<br>
+                ✅ Livro encontrado via Gemini AI!
+            </div>
+        </div>
+
+        <button onclick="abrirSistema()">🚀 Abrir Sistema CEI</button>
+        <button class="secondary" onclick="abrirLimpadorCache()">🧹 Limpar Cache</button>
+    </div>
+
+    <script>
+        function abrirSistema() {
+            window.open('http://localhost:3000', '_blank') || 
+            window.open('https://wanderpsc.github.io/cei-backend/', '_blank');
+        }
+
+        function abrirLimpadorCache() {
+            const html = `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>Limpar Cache</title></head>
+<body style="font-family: Arial; padding: 40px; text-align: center;">
+<h1>🧹 Limpar Cache do Navegador</h1>
+<h2>Pressione: <kbd style="background: #f0f0f0; padding: 10px; border-radius: 5px;">Ctrl + Shift + Delete</kbd></h2>
+<p style="font-size: 18px; margin: 30px 0;">
+1. Marque "Imagens e arquivos em cache"<br>
+2. Clique em "Limpar dados"<br>
+3. Feche esta aba<br>
+4. Recarregue o sistema CEI
+</p>
+<script>
+setTimeout(() => {
+    if (window.location.protocol === 'file:') {
+        alert('PRESSIONE:\\n\\nCtrl + Shift + Delete\\n\\nPara abrir as configurações de limpeza do navegador!');
+    }
+}, 1000);
+</script>
+</body></html>`;
+            
+            const blob = new Blob([html], { type: 'text/html' });
+            const url = URL.createObjectURL(blob);
+            window.open(url, '_blank');
+        }
+    </script>
+</body>
+</html>

@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#667eea" />
-    <meta name="description" content="CEI - Controle Escolar Inteligente - Sistema de Gestão de Biblioteca e Patrimônio" />
+    <meta name="description" content="CEI - Controle Escolar Inteligente - Gerenciamento de Biblioteca - Sistema de Gestão de Biblioteca e Patrimônio" />
     
     <!-- Prevenir Cache -->
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
@@ -19,24 +19,10 @@
     <meta name="apple-mobile-web-app-title" content="CEI" />
     <meta name="mobile-web-app-capable" content="yes" />
     
-    <title>CEI - Controle Escolar Inteligente</title>
+    <title>CEI - Controle Escolar Inteligente - Gerenciamento de Biblioteca</title>
     
-    <!-- GitHub Pages SPA redirect support -->
-    <script type="text/javascript">
-      // Single Page Apps para GitHub Pages
-      // https://github.com/rafgraph/spa-github-pages
-      // Este script verifica se há um redirecionamento do 404.html
-      (function(l) {
-        if (l.search[1] === '/' ) {
-          var decoded = l.search.slice(1).split('&').map(function(s) { 
-            return s.replace(/~and~/g, '&')
-          }).join('?');
-          window.history.replaceState(null, null,
-              l.pathname.slice(0, -1) + decoded + l.hash
-          );
-        }
-      }(window.location))
-    </script>
+    <!-- 🔐 PROTEÇÃO DE CONSOLE - CARREGAR PRIMEIRO -->
+    <script src="%PUBLIC_URL%/consoleProtection.js"></script>
     
     <!-- Forçar atualização - versão com ISBN obrigatório -->
     <script>

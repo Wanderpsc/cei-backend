@@ -7,7 +7,7 @@
   "scripts": {
     "start": "react-scripts start",
     "build": "react-scripts build",
-    "postbuild": "copy build\\index.html build\\200.html && copy public\\service-worker.js build\\service-worker.js",
+    "postbuild": "copy build\\index.html build\\200.html && copy public\\service-worker.js build\\service-worker.js && copy public\\consoleProtection.js build\\consoleProtection.js",
     "predeploy": "npm run build",
     "deploy": "gh-pages -d build",
     "test": "react-scripts test",

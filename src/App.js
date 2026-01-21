@@ -8,6 +8,7 @@ import CssBaseline from '@mui/material/CssBaseline';
 
 // Componentes
 import ProtectedRoute from './components/ProtectedRoute';
+import UpdateNotification from './components/UpdateNotification';
 
 // Páginas
 import LoginPage from './pages/LoginPage';
@@ -132,6 +133,7 @@ function App() {
       <CssBaseline />
       <DataProvider>
         <LicenseProvider>
+          <UpdateNotification />
           <AppRoutes />
         </LicenseProvider>
       </DataProvider>

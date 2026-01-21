@@ -378,7 +378,7 @@ export default function CadastroEscolaPage() {
               Cadastro de Nova Instituição
             </Typography>
             <Typography variant="subtitle1" color="text.secondary">
-              Sistema CEI - Controle Escolar Inteligente
+              Sistema CEI - Controle Escolar Inteligente - Gerenciamento de Biblioteca
             </Typography>
           </Box>
 
@@ -661,7 +661,7 @@ export default function CadastroEscolaPage() {
           {/* Marca Registrada no rodapé do formulário */}
           <Box sx={{ mt: 4, pt: 3, borderTop: 1, borderColor: 'divider', textAlign: 'center' }}>
             <Typography variant="caption" color="text.secondary" display="block">
-              © {new Date().getFullYear()} CEI - Controle Escolar Inteligente
+              © {new Date().getFullYear()} CEI - Controle Escolar Inteligente - Gerenciamento de Biblioteca
             </Typography>
             <Typography variant="caption" color="text.secondary" display="block">
               Sistema desenvolvido por <strong>Wander Pires Silva Coelho</strong> ®

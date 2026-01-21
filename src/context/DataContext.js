@@ -1,5 +1,6 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import apiService from '../utils/apiService';
+import { initDataProtection, createBackup } from '../utils/dataProtection';
 
 const DataContext = createContext();
 
@@ -39,10 +40,41 @@ export const DataProvider = ({ children }) => {
       dataExpiracao: new Date('2027-01-01T23:59:59').toISOString(), // Válido até 2027
       licenca: 'CETI-2024-AMAR-AL01',
       statusFinanceiro: 'em_dia'
+    },
+    {
+      id: 999,
+      nomeInstituicao: 'Escola Teste - Versão Demonstração',
+      cnpj: '00.000.000/0000-00',
+      email: 'teste@cei-demo.com.br',
+      telefone: '(00) 0000-0000',
+      endereco: 'Teste Demonstração',
+      cidade: 'Demo',
+      estado: 'TE',
+      cep: '00000-000',
+      nomeResponsavel: 'Conta Teste',
+      cargoResponsavel: 'Demonstração',
+      emailResponsavel: 'teste@cei-demo.com.br',
+      telefoneResponsavel: '(00) 00000-0000',
+      loginAdmin: 'demo',
+      senhaAdmin: 'demo2026',
+      plano: 'Teste - Limitado',
+      diasLicenca: 30,
+      valorMensal: 0,
+      status: 'ativo',
+      dataCadastro: new Date().toISOString(),
+      dataAtivacao: new Date().toISOString(),
+      dataExpiracao: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+      licenca: 'DEMO-TESTE-LIMITADO',
+      statusFinanceiro: 'teste',
+      contaTeste: true,
+      limites: {
+        maxLivros: 15,
+        maxLeitores: 15
+      }
     }
   ];
 
-  // Usuários padrão - SUPER ADMIN DA MATRIZ + Admin da CETI
+  // Usuários padrão - SUPER ADMIN DA MATRIZ + Admin da CETI + Conta Teste
   const usuariosPadrao = [
     {
       id: 1,
@@ -65,6 +97,20 @@ export const DataProvider = ({ children }) => {
       cargo: 'Diretor',
       status: 'ativo',
       dataCriacao: new Date('2024-01-01').toISOString()
+    },
+    {
+      id: 999,
+      nome: 'Usuário Demonstração',
+      login: 'demo',
+      senha: 'demo2026',
+      perfil: 'Admin',
+      tipo: 'teste',
+      instituicaoId: 999, // Instituição de teste
+      email: 'teste@cei-demo.com.br',
+      cargo: 'Teste',
+      status: 'ativo',
+      dataCriacao: new Date().toISOString(),
+      contaTeste: true
     }
   ];
 
@@ -175,6 +221,25 @@ export const DataProvider = ({ children }) => {
   // Carregar dados do localStorage ao iniciar
   useEffect(() => {
     const carregarDados = async () => {
+      console.log('🔄 [INIT] Iniciando carregamento de dados...');
+      
+      // 🛡️ PASSO 1: Inicializar sistema de proteção de dados
+      console.log('🛡️ [INIT] Inicializando proteção de dados...');
+      const protectionResult = initDataProtection();
+      
+      if (protectionResult.migrated) {
+        console.log('✅ [INIT] Dados migrados com sucesso!');
+        if (protectionResult.stats) {
+          console.log('📊 [INIT] Dados preservados:', protectionResult.stats);
+        }
+      }
+      
+      if (!protectionResult.success) {
+        console.error('❌ [INIT] Erro na proteção de dados:', protectionResult.error);
+        alert('⚠️ Erro ao carregar dados. Seu backup será restaurado.');
+      }
+      
+      // PASSO 2: Carregar dados (agora já migrados se necessário)
       const dadosSalvos = localStorage.getItem('cei_data');
       console.log('🔄 Carregando dados...', dadosSalvos ? 'Dados encontrados' : 'Sem dados salvos');
       
@@ -182,7 +247,9 @@ export const DataProvider = ({ children }) => {
         const dados = JSON.parse(dadosSalvos);
         console.log('📦 Dados parseados:', {
           instituicoes: dados.instituicoes?.length || 0,
-          usuarios: dados.usuarios?.length || 0
+          usuarios: dados.usuarios?.length || 0,
+          livros: dados.livros?.length || 0,
+          clientes: dados.clientes?.length || 0
         });
         
         // Priorizar dados salvos e adicionar padrões apenas se não existirem
@@ -277,6 +344,16 @@ export const DataProvider = ({ children }) => {
 
   // Salvar dados no localStorage sempre que houver mudança
   useEffect(() => {
+    // 🛡️ Criar backup antes de salvar (a cada 10 salvamentos ou 1 hora)
+    const lastBackup = localStorage.getItem('cei_last_backup');
+    const shouldBackup = !lastBackup || 
+      (Date.now() - new Date(lastBackup).getTime()) > 60 * 60 * 1000; // 1 hora
+    
+    if (shouldBackup && dadosCarregados) {
+      console.log('📦 [BACKUP] Criando backup automático...');
+      createBackup();
+    }
+    
     const dados = {
       instituicoes,
       livros,
@@ -288,14 +365,22 @@ export const DataProvider = ({ children }) => {
       notasFiscais,
       logAtividades
     };
-    localStorage.setItem('cei_data', JSON.stringify(dados));
-    console.log('💾 Dados salvos no localStorage:', {
-      instituicoes: instituicoes.length,
-      usuarios: usuarios.length,
-      livros: livros.length,
-      logs: logAtividades.length
-    });
-  }, [instituicoes, livros, patrimonio, clientes, emprestimos, usuarios, planos, notasFiscais, logAtividades]);
+    
+    try {
+      localStorage.setItem('cei_data', JSON.stringify(dados));
+      console.log('💾 Dados salvos no localStorage:', {
+        instituicoes: instituicoes.length,
+        usuarios: usuarios.length,
+        livros: livros.length,
+        clientes: clientes.length,
+        emprestimos: emprestimos.length,
+        logs: logAtividades.length
+      });
+    } catch (error) {
+      console.error('❌ [SAVE] Erro ao salvar dados:', error);
+      alert('⚠️ Erro ao salvar dados. Verifique o espaço de armazenamento do navegador.');
+    }
+  }, [instituicoes, livros, patrimonio, clientes, emprestimos, usuarios, planos, notasFiscais, logAtividades, dadosCarregados]);
 
   // ==================== VERIFICAÇÃO DE LICENÇAS EXPIRADAS ====================
   
@@ -667,11 +752,56 @@ export const DataProvider = ({ children }) => {
     return instituicao?.pagamentos || [];
   };
 
+  // ==================== VERIFICAÇÃO DE LIMITES ====================
+  
+  const verificarLimitesConta = () => {
+    if (!usuarioLogado?.contaTeste) {
+      return { permitido: true };
+    }
+    
+    const instituicao = instituicoes.find(i => i.id === instituicaoAtiva);
+    if (!instituicao?.limites) {
+      return { permitido: true };
+    }
+    
+    const livrosInstituicao = livros.filter(l => l.instituicaoId === instituicaoAtiva);
+    const leitoresInstituicao = clientes.filter(c => c.instituicaoId === instituicaoAtiva);
+    
+    return {
+      permitido: true,
+      limites: instituicao.limites,
+      livrosAtual: livrosInstituicao.length,
+      leitoresAtual: leitoresInstituicao.length,
+      livrosLimiteAtingido: livrosInstituicao.length >= instituicao.limites.maxLivros,
+      leitoresLimiteAtingido: leitoresInstituicao.length >= instituicao.limites.maxLeitores
+    };
+  };
+
   // ==================== FUNÇÕES CRUD PARA LIVROS ====================
   
   const adicionarLivro = (livro) => {
     if (!instituicaoAtiva && usuarioLogado?.perfil !== 'SuperAdmin') {
       alert('Instituição não selecionada');
+      return null;
+    }
+    
+    // Verificar limites da conta teste
+    const verificacao = verificarLimitesConta();
+    if (verificacao.livrosLimiteAtingido) {
+      const linkCadastro = window.location.origin + '/cadastro-escola';
+      const mensagem = `⚠️ LIMITE ATINGIDO - VERSÃO DEMONSTRAÇÃO\n\n` +
+        `Você cadastrou ${verificacao.livrosAtual} de ${verificacao.limites.maxLivros} livros permitidos na versão de teste.\n\n` +
+        `Para cadastrar mais livros e ter acesso completo, faça o cadastro completo da sua escola:\n\n` +
+        `🔗 ${linkCadastro}\n\n` +
+        `Com a versão completa você terá:\n` +
+        `✅ Livros ilimitados\n` +
+        `✅ Leitores ilimitados\n` +
+        `✅ Suporte técnico completo\n` +
+        `✅ Backup automático\n` +
+        `✅ Sem limitações\n\n` +
+        `Valor: R$ 970,00/ano`;
+      
+      alert(mensagem);
       return null;
     }
     
@@ -749,6 +879,31 @@ export const DataProvider = ({ children }) => {
   // ==================== FUNÇÕES CRUD PARA CLIENTES ====================
   
   const adicionarCliente = (cliente) => {
+    if (!instituicaoAtiva && usuarioLogado?.perfil !== 'SuperAdmin') {
+      alert('Instituição não selecionada');
+      return null;
+    }
+    
+    // Verificar limites da conta teste
+    const verificacao = verificarLimitesConta();
+    if (verificacao.leitoresLimiteAtingido) {
+      const linkCadastro = window.location.origin + '/cadastro-escola';
+      const mensagem = `⚠️ LIMITE ATINGIDO - VERSÃO DEMONSTRAÇÃO\n\n` +
+        `Você cadastrou ${verificacao.leitoresAtual} de ${verificacao.limites.maxLeitores} leitores permitidos na versão de teste.\n\n` +
+        `Para cadastrar mais leitores e ter acesso completo, faça o cadastro completo da sua escola:\n\n` +
+        `🔗 ${linkCadastro}\n\n` +
+        `Com a versão completa você terá:\n` +
+        `✅ Livros ilimitados\n` +
+        `✅ Leitores ilimitados\n` +
+        `✅ Suporte técnico completo\n` +
+        `✅ Backup automático\n` +
+        `✅ Sem limitações\n\n` +
+        `Valor: R$ 970,00/ano`;
+      
+      alert(mensagem);
+      return null;
+    }
+    
     const novoCliente = {
       ...cliente,
       id: clientes.length > 0 ? Math.max(...clientes.map(c => c.id)) + 1 : 1,
@@ -1152,6 +1307,9 @@ export const DataProvider = ({ children }) => {
     atualizarPlano,
     removerPlano,
     getPlanosAtivos,
+    
+    // Verificação de Limites
+    verificarLimitesConta,
     
     // Autenticação
     login,
