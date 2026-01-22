@@ -73,6 +73,7 @@ export default function Layout({ children }) {
     // Para Escolas - Funcionalidades operacionais (cadastros, empréstimos, etc)
     return [
       { text: 'Dashboard', icon: <DashboardIcon />, path: '/' },
+      { text: 'Configurações', icon: <SettingsIcon />, path: '/configuracoes' },
       { text: 'Gerenciar Usuários', icon: <PeopleIcon />, path: '/gerenciar-usuarios' },
       { text: 'Relatório Usuários', icon: <AssessmentIcon />, path: '/relatorio-usuarios' },
       { text: 'Financeiro', icon: <AccountBalanceWalletIcon />, path: '/financeiro' },
@@ -114,6 +115,7 @@ export default function Layout({ children }) {
 
   // Atalhos rápidos para clientes
   const quickAccessCards = usuarioLogado?.perfil !== 'SuperAdmin' ? [
+    { label: 'Configurações', icon: <SettingsIcon />, path: '/configuracoes', color: '#667eea' },
     { label: 'Gerenciar Usuários', icon: <PeopleIcon />, path: '/gerenciar-usuarios', color: '#9c27b0' },
     { label: 'Livros', icon: <MenuBookIcon />, path: '/livros', color: '#1976d2' },
     { label: 'Patrimônio', icon: <InventoryIcon />, path: '/patrimonio', color: '#388e3c' },

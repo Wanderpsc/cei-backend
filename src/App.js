@@ -36,6 +36,7 @@ import NotaFiscalPage from './pages/NotaFiscalPage';
 import DevolucaoPage from './pages/DevolucaoPage';
 import GerenciarUsuariosPage from './pages/GerenciarUsuariosPage';
 import RelatorioUsuariosPage from './pages/RelatorioUsuariosPage';
+import ConfiguracoesPage from './pages/ConfiguracoesPage';
 
 const theme = createTheme({
   palette: {
@@ -123,6 +124,7 @@ function AppRoutes() {
       <Route path="/notas-fiscais" element={<PrivateRoute><NotaFiscalPage /></PrivateRoute>} />
       <Route path="/gerenciar-usuarios" element={<PrivateRoute><GerenciarUsuariosPage /></PrivateRoute>} />
       <Route path="/relatorio-usuarios" element={<PrivateRoute><RelatorioUsuariosPage /></PrivateRoute>} />
+      <Route path="/configuracoes" element={<PrivateRoute><ConfiguracoesPage /></PrivateRoute>} />
     </Routes>
   );
 }
