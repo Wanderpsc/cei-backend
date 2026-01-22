@@ -27,8 +27,9 @@ import {
   InputAdornment,
   Divider
 } from '@mui/material';
-import { Add, Edit, AssignmentReturn, Search, PersonAdd, CheckCircle } from '@mui/icons-material';
+import { Add, Edit, AssignmentReturn, Search, PersonAdd, CheckCircle, Print, Description, PrintOutlined } from '@mui/icons-material';
 import { useData } from '../context/DataContext';
+import TermoEmprestimo from '../components/TermoEmprestimo';
 
 function EmprestimosPage() {
   const { 
@@ -47,6 +48,11 @@ function EmprestimosPage() {
   const [etapaAtual, setEtapaAtual] = useState(1); // 1: buscar livro, 2: selecionar/cadastrar leitor
   const [buscaLeitor, setBuscaLeitor] = useState('');
   const [mostrarCadastroLeitor, setMostrarCadastroLeitor] = useState(false);
+  
+  // Estados para termos de empréstimo
+  const [termoOpen, setTermoOpen] = useState(false);
+  const [termoSelecionado, setTermoSelecionado] = useState(null);
+  const [tipoTermo, setTipoTermo] = useState('preenchido'); // 'preenchido' ou 'branco'
   
   const [formData, setFormData] = useState({
     clienteId: '',
@@ -183,6 +189,35 @@ function EmprestimosPage() {
       });
     }
   };
+  
+  const handleAbrirTermo = (emprestimo) => {
+    setTermoSelecionado(emprestimo.dadosTermoEmprestimo);
+    setTipoTermo('preenchido');
+    setTermoOpen(true);
+  };
+  
+  const handleAbrirTermoBranco = () => {
+    setTermoSelecionado(null);
+    setTipoTermo('branco');
+    setTermoOpen(true);
+  };
+  
+  const handleImprimirLote = () => {
+    const emprestimosAtivos = emprestimos.filter(e => e.status === 'ativo');
+    if (emprestimosAtivos.length === 0) {
+      alert('Não há empréstimos ativos para imprimir!');
+      return;
+    }
+    
+    alert('✅ Preparado ' + emprestimosAtivos.length + ' termo(s) para impressão em lote!\n\nClique em OK para imprimir cada termo individualmente.');
+    
+    // Imprimir cada termo com um pequeno delay
+    emprestimosAtivos.forEach((emp, index) => {
+      setTimeout(() => {
+        handleAbrirTermo(emp);
+      }, index * 500);
+    });
+  };
 
   const getStatusColor = (emprestimo) => {
     if (emprestimo.status === 'devolvido') return 'success';
@@ -202,7 +237,25 @@ function EmprestimosPage() {
 
   return (
     <Layout title="Empréstimos">
-      <Box sx={{ mb: 2, display: 'flex', justifyContent: 'flex-end' }}>
+      <Box sx={{ mb: 2, display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1 }}>
+        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+          <Button
+            variant="outlined"
+            startIcon={<Description />}
+            onClick={handleAbrirTermoBranco}
+            color="secondary"
+          >
+            Termo em Branco
+          </Button>
+          <Button
+            variant="outlined"
+            startIcon={<PrintOutlined />}
+            onClick={handleImprimirLote}
+            color="info"
+          >
+            Imprimir em Lote
+          </Button>
+        </Box>
         <Button
           variant="contained"
           startIcon={<Add />}
@@ -216,6 +269,7 @@ function EmprestimosPage() {
         <Table>
           <TableHead>
             <TableRow>
+              <TableCell>Código</TableCell>
               <TableCell>Leitor</TableCell>
               <TableCell>Livro</TableCell>
               <TableCell>Data Empréstimo</TableCell>
@@ -227,7 +281,7 @@ function EmprestimosPage() {
           <TableBody>
             {emprestimos.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} align="center">
+                <TableCell colSpan={7} align="center">
                   <Typography color="text.secondary">
                     Nenhum empréstimo registrado
                   </Typography>
@@ -236,6 +290,14 @@ function EmprestimosPage() {
             ) : (
               emprestimos.map((emprestimo) => (
                 <TableRow key={emprestimo.id}>
+                  <TableCell>
+                    <Chip 
+                      label={emprestimo.codigoEmprestimo || `EMP${emprestimo.id.toString().padStart(6, '0')}`}
+                      size="small"
+                      color="default"
+                      variant="outlined"
+                    />
+                  </TableCell>
                   <TableCell>{emprestimo.clienteNome}</TableCell>
                   <TableCell>{emprestimo.livroTitulo}</TableCell>
                   <TableCell>
@@ -252,15 +314,26 @@ function EmprestimosPage() {
                     />
                   </TableCell>
                   <TableCell>
-                    {emprestimo.status === 'ativo' && (
+                    <Box sx={{ display: 'flex', gap: 0.5 }}>
                       <IconButton 
-                        onClick={() => handleDevolucao(emprestimo.id)} 
+                        onClick={() => handleAbrirTermo(emprestimo)} 
                         size="small"
-                        color="primary"
+                        color="info"
+                        title="Imprimir Termo"
                       >
-                        <AssignmentReturn />
+                        <Print />
                       </IconButton>
-                    )}
+                      {emprestimo.status === 'ativo' && (
+                        <IconButton 
+                          onClick={() => handleDevolucao(emprestimo.id)} 
+                          size="small"
+                          color="primary"
+                          title="Devolver Livro"
+                        >
+                          <AssignmentReturn />
+                        </IconButton>
+                      )}
+                    </Box>
                   </TableCell>
                 </TableRow>
               ))
@@ -562,6 +635,14 @@ function EmprestimosPage() {
           )}
         </DialogActions>
       </Dialog>
+
+      {/* Dialog do Termo de Empréstimo */}
+      <TermoEmprestimo
+        open={termoOpen}
+        onClose={() => setTermoOpen(false)}
+        dados={termoSelecionado}
+        tipo={tipoTermo}
+      />
     </Layout>
   );
 }

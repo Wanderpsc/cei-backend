@@ -36,8 +36,9 @@ import {
   FormControlLabel,
   FormLabel
 } from '@mui/material';
-import { Add, Edit, Delete, Search, PhotoCamera, Upload, Close, QrCodeScanner, GetApp } from '@mui/icons-material';
+import { Add, Edit, Delete, Search, PhotoCamera, Upload, Close, QrCodeScanner, GetApp, Description, PrintOutlined } from '@mui/icons-material';
 import { useData } from '../context/DataContext';
+import TermoEmprestimo from '../components/TermoEmprestimo';
 
 function LivrosPage() {
   const { livros, adicionarLivro, atualizarLivro, removerLivro, darBaixaLivro, usuarioLogado } = useData();
@@ -52,6 +53,10 @@ function LivrosPage() {
   const [dadosTermo, setDadosTermo] = useState(null);
   const [cameraOpen, setCameraOpen] = useState(false);
   const fileInputRef = useRef(null);
+  
+  // Estados para termo de empréstimo
+  const [termoEmprestimoOpen, setTermoEmprestimoOpen] = useState(false);
+  const [tipoTermoEmprestimo, setTipoTermoEmprestimo] = useState('branco');
   
   const [dadosBaixa, setDadosBaixa] = useState({
     motivo: 'Doação',
@@ -302,7 +307,7 @@ function LivrosPage() {
 
   return (
     <Layout title="Livros">
-      <Box sx={{ mb: 2, display: 'flex', gap: 2 }}>
+      <Box sx={{ mb: 2, display: 'flex', gap: 2, flexWrap: 'wrap' }}>
         <TextField
           placeholder="Buscar por título, autor ou ISBN..."
           variant="outlined"
@@ -313,7 +318,21 @@ function LivrosPage() {
           InputProps={{
             startAdornment: <Search sx={{ mr: 1, color: 'text.secondary' }} />
           }}
+          sx={{ flexGrow: 1, minWidth: '200px' }}
         />
+        <Button
+          variant="outlined"
+          startIcon={<Description />}
+          onClick={() => {
+            setTipoTermoEmprestimo('branco');
+            setTermoEmprestimoOpen(true);
+          }}
+          size="small"
+          color="secondary"
+          sx={{ display: { xs: 'none', sm: 'flex' } }}
+        >
+          Termo
+        </Button>
         <Button
           variant="outlined"
           startIcon={<QrCodeScanner />}
@@ -326,15 +345,17 @@ function LivrosPage() {
               setScannerOpen(true);
             }
           }}
-          sx={{ minWidth: '200px', display: { xs: 'none', sm: 'flex' } }}
+          sx={{ minWidth: '120px', display: { xs: 'none', sm: 'flex' } }}
+          size="small"
         >
-          Digite o ISBN
+          ISBN
         </Button>
         <Button
           variant="outlined"
           startIcon={<QrCodeScanner />}
           onClick={() => setMobileScannerOpen(true)}
           sx={{ display: { xs: 'flex', sm: 'none' } }}
+          size="small"
         >
           Escanear
         </Button>
@@ -714,6 +735,14 @@ function LivrosPage() {
         onClose={() => setCameraOpen(false)}
         onCapture={handleCameraCapture}
         title="Tirar Foto do Livro"
+      />
+
+      {/* Dialog do Termo de Empréstimo */}
+      <TermoEmprestimo
+        open={termoEmprestimoOpen}
+        onClose={() => setTermoEmprestimoOpen(false)}
+        dados={null}
+        tipo={tipoTermoEmprestimo}
       />
     </Layout>
   );

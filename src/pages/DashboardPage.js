@@ -8,7 +8,9 @@ import {
   Grid, 
   Box,
   Chip,
-  Alert
+  Alert,
+  Button,
+  Tooltip
 } from '@mui/material';
 import { 
   MenuBook, 
@@ -22,14 +24,19 @@ import {
   EmojiEvents,
   AccountBalanceWallet,
   LibraryBooks,
-  AssignmentReturn
+  AssignmentReturn,
+  Description,
+  PrintOutlined
 } from '@mui/icons-material';
 import { useData } from '../context/DataContext';
+import TermoEmprestimo from '../components/TermoEmprestimo';
 
 function DashboardPage() {
   const navigate = useNavigate();
   const { livros, patrimonio, clientes, emprestimos, usuarioLogado, instituicoes, instituicaoAtiva, calcularProximoVencimento } = useData();
   const [alertaFinanceiro, setAlertaFinanceiro] = useState(null);
+  const [termoOpen, setTermoOpen] = useState(false);
+  const [tipoTermo, setTipoTermo] = useState('branco');
 
   // Buscar informações da instituição ativa
   const instituicaoInfo = instituicoes.find(i => i.id === instituicaoAtiva);
@@ -210,6 +217,35 @@ function DashboardPage() {
 
   return (
     <Layout title="Dashboard">
+      {/* Botões de Ações Rápidas - Termos de Empréstimo */}
+      <Box sx={{ mb: 3, display: 'flex', gap: 1, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+        <Tooltip title="Gerar termo em branco para impressão">
+          <Button
+            variant="outlined"
+            startIcon={<Description />}
+            onClick={() => {
+              setTipoTermo('branco');
+              setTermoOpen(true);
+            }}
+            size="small"
+            color="secondary"
+          >
+            Termo em Branco
+          </Button>
+        </Tooltip>
+        <Tooltip title="Imprimir termos de empréstimos ativos">
+          <Button
+            variant="outlined"
+            startIcon={<PrintOutlined />}
+            onClick={() => navigate('/emprestimos')}
+            size="small"
+            color="info"
+          >
+            Gerenciar Termos
+          </Button>
+        </Tooltip>
+      </Box>
+
       {/* Alerta Financeiro */}
       {alertaFinanceiro && (
         <Alert 
@@ -332,6 +368,14 @@ function DashboardPage() {
           </Card>
         </Box>
       )}
+
+      {/* Dialog do Termo de Empréstimo */}
+      <TermoEmprestimo
+        open={termoOpen}
+        onClose={() => setTermoOpen(false)}
+        dados={null}
+        tipo={tipoTermo}
+      />
     </Layout>
   );
 }

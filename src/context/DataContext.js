@@ -932,11 +932,60 @@ export const DataProvider = ({ children }) => {
   // ==================== FUNÇÕES PARA EMPRÉSTIMOS ====================
   
   const adicionarEmprestimo = (emprestimoData) => {
+    const emprestimoId = emprestimos.length > 0 ? Math.max(...emprestimos.map(e => e.id)) + 1 : 1;
+    const numeroSequencial = emprestimoId.toString().padStart(6, '0');
+    const codigoEmprestimo = `EMP${numeroSequencial}`;
+    
+    // Buscar dados do livro
+    const livro = livros.find(l => l.id === emprestimoData.livroId);
+    
+    // Buscar dados do leitor
+    const leitor = clientes.find(c => c.id === emprestimoData.clienteId);
+    
+    // Buscar dados da instituição
+    const instituicaoIdAtual = usuarioLogado?.perfil === 'SuperAdmin' ? 0 : instituicaoAtiva;
+    const instituicao = instituicoes.find(i => i.id === instituicaoIdAtual);
+    
+    // Gerar dados completos do termo de empréstimo
+    const dadosTermoEmprestimo = {
+      codigoEmprestimo: codigoEmprestimo,
+      dataEmprestimo: emprestimoData.dataEmprestimo || new Date().toISOString(),
+      dataDevolucao: emprestimoData.dataDevolucaoPrevista,
+      
+      // Dados do Livro
+      livroCodigo: livro?.codigoIdentificacao || 'N/A',
+      livroTitulo: livro?.titulo || 'N/A',
+      livroAutor: livro?.autor || 'N/A',
+      livroISBN: livro?.isbn || 'N/A',
+      livroEditora: livro?.editora || 'N/A',
+      livroTipo: livro?.tipo || 'N/A',
+      
+      // Dados do Leitor
+      leitorCodigo: leitor?.codigoIdentificacao || 'N/A',
+      leitorNome: leitor?.nome || 'N/A',
+      leitorCPF: leitor?.cpf || 'N/A',
+      leitorTelefone: leitor?.telefone || 'N/A',
+      leitorEmail: leitor?.email || 'N/A',
+      leitorEndereco: leitor?.endereco || 'N/A',
+      leitorMatricula: leitor?.matricula || '',
+      
+      // Dados da Instituição
+      instituicaoNome: instituicao?.nomeInstituicao || 'N/A',
+      instituicaoCidade: instituicao?.cidade || 'N/A',
+      responsavelNome: instituicao?.nomeResponsavel || usuarioLogado?.nome || 'N/A',
+      responsavelCargo: instituicao?.cargoResponsavel || usuarioLogado?.cargo || 'Responsável',
+      
+      // Observações
+      observacoes: emprestimoData.observacoes || ''
+    };
+    
     const novoEmprestimo = {
       ...emprestimoData,
-      id: emprestimos.length > 0 ? Math.max(...emprestimos.map(e => e.id)) + 1 : 1,
-      instituicaoId: usuarioLogado?.perfil === 'SuperAdmin' ? 0 : instituicaoAtiva,
-      dataEmprestimo: emprestimoData.dataEmprestimo || new Date().toISOString()
+      id: emprestimoId,
+      codigoEmprestimo: codigoEmprestimo,
+      instituicaoId: instituicaoIdAtual,
+      dataEmprestimo: emprestimoData.dataEmprestimo || new Date().toISOString(),
+      dadosTermoEmprestimo: dadosTermoEmprestimo
     };
     setEmprestimos([...emprestimos, novoEmprestimo]);
     return novoEmprestimo;

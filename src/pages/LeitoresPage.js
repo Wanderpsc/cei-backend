@@ -20,14 +20,20 @@ import {
   Typography,
   MenuItem
 } from '@mui/material';
-import { Add, Edit, Delete, Search, QrCode } from '@mui/icons-material';
+import { Add, Edit, Delete, Search, QrCode, Description, PrintOutlined } from '@mui/icons-material';
 import { useData } from '../context/DataContext';
+import TermoEmprestimo from '../components/TermoEmprestimo';
 
 function LeitoresPage() {
   const { clientes, adicionarCliente, atualizarCliente, removerCliente, emprestimos } = useData();
   const [open, setOpen] = useState(false);
   const [editando, setEditando] = useState(null);
   const [busca, setBusca] = useState('');
+  
+  // Estados para termo de empréstimo
+  const [termoOpen, setTermoOpen] = useState(false);
+  const [tipoTermo, setTipoTermo] = useState('branco');
+  
   const [formData, setFormData] = useState({
     nome: '',
     cpf: '',
@@ -112,7 +118,7 @@ function LeitoresPage() {
 
   return (
     <Layout title="Leitores">
-      <Box sx={{ mb: 2, display: 'flex', gap: 2 }}>
+      <Box sx={{ mb: 2, display: 'flex', gap: 2, flexWrap: 'wrap' }}>
         <TextField
           placeholder="Buscar por nome, CPF ou matrícula..."
           variant="outlined"
@@ -123,7 +129,20 @@ function LeitoresPage() {
           InputProps={{
             startAdornment: <Search sx={{ mr: 1, color: 'text.secondary' }} />
           }}
+          sx={{ flexGrow: 1, minWidth: '200px' }}
         />
+        <Button
+          variant="outlined"
+          startIcon={<Description />}
+          onClick={() => {
+            setTipoTermo('branco');
+            setTermoOpen(true);
+          }}
+          size="small"
+          color="secondary"
+        >
+          Termo em Branco
+        </Button>
         <Button
           variant="contained"
           startIcon={<Add />}
@@ -280,6 +299,14 @@ function LeitoresPage() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Dialog do Termo de Empréstimo */}
+      <TermoEmprestimo
+        open={termoOpen}
+        onClose={() => setTermoOpen(false)}
+        dados={null}
+        tipo={tipoTermo}
+      />
     </Layout>
   );
 }
