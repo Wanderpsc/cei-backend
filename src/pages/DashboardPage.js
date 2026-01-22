@@ -26,17 +26,60 @@ import {
   LibraryBooks,
   AssignmentReturn,
   Description,
-  PrintOutlined
+  PrintOutlined,
+  Backup,
+  CloudDownload,
+  CloudUpload
 } from '@mui/icons-material';
 import { useData } from '../context/DataContext';
 import TermoEmprestimo from '../components/TermoEmprestimo';
 
 function DashboardPage() {
   const navigate = useNavigate();
-  const { livros, patrimonio, clientes, emprestimos, usuarioLogado, instituicoes, instituicaoAtiva, calcularProximoVencimento } = useData();
+  const { 
+    livros, 
+    patrimonio, 
+    clientes, 
+    emprestimos, 
+    usuarioLogado, 
+    instituicoes, 
+    instituicaoAtiva, 
+    calcularProximoVencimento,
+    exportarDados,
+    importarDados
+  } = useData();
   const [alertaFinanceiro, setAlertaFinanceiro] = useState(null);
   const [termoOpen, setTermoOpen] = useState(false);
   const [tipoTermo, setTipoTermo] = useState('branco');
+  
+  // Funções de backup
+  const handleExportarDados = () => {
+    const resultado = exportarDados();
+    if (resultado.sucesso) {
+      alert('✅ ' + resultado.mensagem);
+    } else {
+      alert('❌ ' + resultado.mensagem);
+    }
+  };
+  
+  const handleImportarDados = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.onchange = async (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        try {
+          const resultado = await importarDados(file);
+          alert('✅ ' + resultado.mensagem);
+          window.location.reload(); // Recarregar para aplicar dados importados
+        } catch (error) {
+          alert('❌ ' + error.mensagem);
+        }
+      }
+    };
+    input.click();
+  };
 
   // Buscar informações da instituição ativa
   const instituicaoInfo = instituicoes.find(i => i.id === instituicaoAtiva);
@@ -217,33 +260,62 @@ function DashboardPage() {
 
   return (
     <Layout title="Dashboard">
-      {/* Botões de Ações Rápidas - Termos de Empréstimo */}
-      <Box sx={{ mb: 3, display: 'flex', gap: 1, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-        <Tooltip title="Gerar termo em branco para impressão">
-          <Button
-            variant="outlined"
-            startIcon={<Description />}
-            onClick={() => {
-              setTipoTermo('branco');
-              setTermoOpen(true);
-            }}
-            size="small"
-            color="secondary"
-          >
-            Termo em Branco
-          </Button>
-        </Tooltip>
-        <Tooltip title="Imprimir termos de empréstimos ativos">
-          <Button
-            variant="outlined"
-            startIcon={<PrintOutlined />}
-            onClick={() => navigate('/emprestimos')}
-            size="small"
-            color="info"
-          >
-            Gerenciar Termos
-          </Button>
-        </Tooltip>
+      {/* Botões de Ações Rápidas */}
+      <Box sx={{ mb: 3, display: 'flex', gap: 1, flexWrap: 'wrap', justifyContent: 'space-between' }}>
+        {/* Botões de Backup */}
+        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+          <Tooltip title="Exportar backup de todos os dados do sistema">
+            <Button
+              variant="contained"
+              startIcon={<CloudDownload />}
+              onClick={handleExportarDados}
+              size="small"
+              color="success"
+            >
+              Exportar Backup
+            </Button>
+          </Tooltip>
+          <Tooltip title="Importar dados de um arquivo de backup">
+            <Button
+              variant="outlined"
+              startIcon={<CloudUpload />}
+              onClick={handleImportarDados}
+              size="small"
+              color="success"
+            >
+              Importar Backup
+            </Button>
+          </Tooltip>
+        </Box>
+        
+        {/* Botões de Termos */}
+        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+          <Tooltip title="Gerar termo em branco para impressão">
+            <Button
+              variant="outlined"
+              startIcon={<Description />}
+              onClick={() => {
+                setTipoTermo('branco');
+                setTermoOpen(true);
+              }}
+              size="small"
+              color="secondary"
+            >
+              Termo em Branco
+            </Button>
+          </Tooltip>
+          <Tooltip title="Imprimir termos de empréstimos ativos">
+            <Button
+              variant="outlined"
+              startIcon={<PrintOutlined />}
+              onClick={() => navigate('/emprestimos')}
+              size="small"
+              color="info"
+            >
+              Gerenciar Termos
+            </Button>
+          </Tooltip>
+        </Box>
       </Box>
 
       {/* Alerta Financeiro */}

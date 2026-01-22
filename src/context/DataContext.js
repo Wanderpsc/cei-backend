@@ -2,6 +2,11 @@ import React, { createContext, useState, useContext, useEffect } from 'react';
 import apiService from '../utils/apiService';
 import { initDataProtection, createBackup } from '../utils/dataProtection';
 
+// Versão do sistema - IMPORTANTE: Incrementar a cada atualização significativa
+const SYSTEM_VERSION = '3.5.2';
+const DATA_VERSION_KEY = 'cei_data_version';
+const LAST_UPDATE_KEY = 'cei_last_update';
+
 const DataContext = createContext();
 
 export const useData = () => {
@@ -223,7 +228,50 @@ export const DataProvider = ({ children }) => {
     const carregarDados = async () => {
       console.log('🔄 [INIT] Iniciando carregamento de dados...');
       
-      // 🛡️ PASSO 1: Inicializar sistema de proteção de dados
+      // � PASSO 0: Verificar atualização do sistema e criar backup de segurança
+      const versaoAtual = localStorage.getItem(DATA_VERSION_KEY);
+      const ultimaAtualizacao = localStorage.getItem(LAST_UPDATE_KEY);
+      
+      if (versaoAtual !== SYSTEM_VERSION) {
+        console.log('🔄 [UPDATE] Detectada atualização do sistema!');
+        console.log(`📊 [UPDATE] Versão anterior: ${versaoAtual || 'inicial'} → Nova versão: ${SYSTEM_VERSION}`);
+        
+        // Criar backup de segurança ANTES de qualquer alteração
+        console.log('💾 [UPDATE] Criando backup de segurança antes da atualização...');
+        try {
+          const dadosAtuais = localStorage.getItem('cei_data');
+          if (dadosAtuais) {
+            // Backup da versão anterior
+            localStorage.setItem(`cei_backup_v${versaoAtual || 'old'}_${Date.now()}`, dadosAtuais);
+            console.log('✅ [UPDATE] Backup criado com sucesso!');
+            
+            // Criar backup adicional em formato legível
+            createBackup();
+            
+            // Limpar backups antigos (manter apenas os 5 mais recentes)
+            const allKeys = Object.keys(localStorage);
+            const backupKeys = allKeys.filter(key => key.startsWith('cei_backup_v')).sort().reverse();
+            if (backupKeys.length > 5) {
+              backupKeys.slice(5).forEach(key => {
+                localStorage.removeItem(key);
+                console.log('🗑️ [UPDATE] Backup antigo removido:', key);
+              });
+            }
+          }
+        } catch (error) {
+          console.error('❌ [UPDATE] Erro ao criar backup:', error);
+          alert('⚠️ ATENÇÃO: Não foi possível criar backup antes da atualização. Recomenda-se exportar seus dados manualmente.');
+        }
+        
+        // Atualizar versão
+        localStorage.setItem(DATA_VERSION_KEY, SYSTEM_VERSION);
+        localStorage.setItem(LAST_UPDATE_KEY, new Date().toISOString());
+        
+        console.log('✅ [UPDATE] Sistema atualizado com sucesso!');
+        console.log('📅 [UPDATE] Data da atualização:', new Date().toLocaleString('pt-BR'));
+      }
+      
+      // �🛡️ PASSO 1: Inicializar sistema de proteção de dados
       console.log('🛡️ [INIT] Inicializando proteção de dados...');
       const protectionResult = initDataProtection();
       
@@ -240,8 +288,46 @@ export const DataProvider = ({ children }) => {
       }
       
       // PASSO 2: Carregar dados (agora já migrados se necessário)
-      const dadosSalvos = localStorage.getItem('cei_data');
+      let dadosSalvos = localStorage.getItem('cei_data');
       console.log('🔄 Carregando dados...', dadosSalvos ? 'Dados encontrados' : 'Sem dados salvos');
+      
+      // 🔧 Sistema de recuperação: tentar restaurar backup se dados corrompidos
+      let tentativaRecuperacao = false;
+      
+      if (dadosSalvos) {
+        try {
+          // Testar se os dados são válidos
+          JSON.parse(dadosSalvos);
+        } catch (parseError) {
+          console.error('❌ [RECOVERY] Dados corrompidos detectados!', parseError);
+          tentativaRecuperacao = true;
+          
+          // Tentar recuperar do backup mais recente
+          const allKeys = Object.keys(localStorage);
+          const backupKeys = allKeys.filter(key => key.startsWith('cei_backup_v')).sort().reverse();
+          
+          if (backupKeys.length > 0) {
+            console.log('🔄 [RECOVERY] Tentando recuperar do backup:', backupKeys[0]);
+            const backupData = localStorage.getItem(backupKeys[0]);
+            if (backupData) {
+              try {
+                JSON.parse(backupData); // Validar backup
+                dadosSalvos = backupData;
+                localStorage.setItem('cei_data', backupData); // Restaurar
+                console.log('✅ [RECOVERY] Dados recuperados com sucesso do backup!');
+                alert('✅ Sistema recuperado! Seus dados foram restaurados do backup mais recente.');
+              } catch (backupError) {
+                console.error('❌ [RECOVERY] Backup também corrompido:', backupError);
+              }
+            }
+          }
+          
+          if (tentativaRecuperacao && !dadosSalvos) {
+            alert('❌ Erro crítico: Não foi possível recuperar seus dados. O sistema será reiniciado com dados padrão.');
+            dadosSalvos = null;
+          }
+        }
+      }
       
       if (dadosSalvos) {
         const dados = JSON.parse(dadosSalvos);
@@ -367,18 +453,52 @@ export const DataProvider = ({ children }) => {
     };
     
     try {
-      localStorage.setItem('cei_data', JSON.stringify(dados));
+      // Validar dados antes de salvar
+      const dadosString = JSON.stringify(dados);
+      const dadosSize = new Blob([dadosString]).size;
+      const dadosSizeMB = (dadosSize / (1024 * 1024)).toFixed(2);
+      
+      // Verificar se há espaço suficiente (limite típico: 5-10MB)
+      if (dadosSize > 9 * 1024 * 1024) { // 9MB de limite
+        console.warn('⚠️ [SAVE] Tamanho dos dados próximo do limite:', dadosSizeMB, 'MB');
+        alert(`⚠️ ATENÇÃO: Seus dados estão ocupando ${dadosSizeMB}MB. Considere fazer uma limpeza ou exportar dados antigos.`);
+      }
+      
+      // Salvar dados com registro de versão
+      const dadosComVersao = {
+        ...dados,
+        _metadata: {
+          version: SYSTEM_VERSION,
+          savedAt: new Date().toISOString(),
+          dataSize: dadosSize
+        }
+      };
+      
+      localStorage.setItem('cei_data', JSON.stringify(dadosComVersao));
+      
       console.log('💾 Dados salvos no localStorage:', {
+        version: SYSTEM_VERSION,
+        size: dadosSizeMB + ' MB',
         instituicoes: instituicoes.length,
         usuarios: usuarios.length,
         livros: livros.length,
         clientes: clientes.length,
         emprestimos: emprestimos.length,
-        logs: logAtividades.length
+        logs: logAtividades.length,
+        timestamp: new Date().toLocaleString('pt-BR')
       });
     } catch (error) {
       console.error('❌ [SAVE] Erro ao salvar dados:', error);
-      alert('⚠️ Erro ao salvar dados. Verifique o espaço de armazenamento do navegador.');
+      
+      // Tentar salvar em backup de emergência
+      try {
+        localStorage.setItem('cei_data_emergency', JSON.stringify(dados));
+        console.log('🚨 [SAVE] Dados salvos em backup de emergência');
+        alert('⚠️ Erro ao salvar dados principais. Backup de emergência criado. Verifique o espaço de armazenamento do navegador.');
+      } catch (emergencyError) {
+        console.error('❌ [SAVE] Erro crítico ao salvar backup de emergência:', emergencyError);
+        alert('❌ ERRO CRÍTICO: Não foi possível salvar seus dados. Exporte seus dados imediatamente!');
+      }
     }
   }, [instituicoes, livros, patrimonio, clientes, emprestimos, usuarios, planos, notasFiscais, logAtividades, dadosCarregados]);
 
@@ -1259,6 +1379,162 @@ export const DataProvider = ({ children }) => {
     };
   };
 
+  // ==================== FUNÇÕES DE BACKUP E RECUPERAÇÃO ====================
+  
+  const exportarDados = () => {
+    try {
+      const dadosExportacao = {
+        version: SYSTEM_VERSION,
+        exportDate: new Date().toISOString(),
+        data: {
+          instituicoes,
+          usuarios,
+          livros,
+          patrimonio,
+          clientes,
+          emprestimos,
+          planos,
+          notasFiscais,
+          logAtividades
+        }
+      };
+      
+      const dataStr = JSON.stringify(dadosExportacao, null, 2);
+      const dataBlob = new Blob([dataStr], { type: 'application/json' });
+      const url = URL.createObjectURL(dataBlob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `cei-backup-${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      
+      console.log('✅ [EXPORT] Dados exportados com sucesso!');
+      registrarLog('Sistema', 'Backup', 'Exportação manual de dados realizada', {
+        dataSize: new Blob([dataStr]).size,
+        itemCount: {
+          instituicoes: instituicoes.length,
+          usuarios: usuarios.length,
+          livros: livros.length,
+          clientes: clientes.length,
+          emprestimos: emprestimos.length
+        }
+      });
+      
+      return { sucesso: true, mensagem: 'Dados exportados com sucesso!' };
+    } catch (error) {
+      console.error('❌ [EXPORT] Erro ao exportar dados:', error);
+      return { sucesso: false, mensagem: 'Erro ao exportar dados: ' + error.message };
+    }
+  };
+  
+  const importarDados = (file) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      
+      reader.onload = (e) => {
+        try {
+          const dadosImportados = JSON.parse(e.target.result);
+          
+          // Validar estrutura dos dados
+          if (!dadosImportados.data || !dadosImportados.version) {
+            throw new Error('Arquivo de backup inválido');
+          }
+          
+          // Criar backup antes de importar
+          console.log('📦 [IMPORT] Criando backup de segurança antes da importação...');
+          createBackup();
+          
+          // Importar dados
+          const { data } = dadosImportados;
+          
+          if (data.instituicoes) setInstituicoes(data.instituicoes);
+          if (data.usuarios) setUsuarios(data.usuarios);
+          if (data.livros) setLivros(data.livros);
+          if (data.patrimonio) setPatrimonio(data.patrimonio);
+          if (data.clientes) setClientes(data.clientes);
+          if (data.emprestimos) setEmprestimos(data.emprestimos);
+          if (data.planos) setPlanos(data.planos);
+          if (data.notasFiscais) setNotasFiscais(data.notasFiscais);
+          if (data.logAtividades) setLogAtividades(data.logAtividades);
+          
+          console.log('✅ [IMPORT] Dados importados com sucesso!');
+          registrarLog('Sistema', 'Backup', 'Importação manual de dados realizada', {
+            sourceVersion: dadosImportados.version,
+            exportDate: dadosImportados.exportDate,
+            itemCount: {
+              instituicoes: data.instituicoes?.length || 0,
+              usuarios: data.usuarios?.length || 0,
+              livros: data.livros?.length || 0,
+              clientes: data.clientes?.length || 0,
+              emprestimos: data.emprestimos?.length || 0
+            }
+          });
+          
+          resolve({ 
+            sucesso: true, 
+            mensagem: `Dados importados com sucesso! Versão do backup: ${dadosImportados.version}` 
+          });
+        } catch (error) {
+          console.error('❌ [IMPORT] Erro ao importar dados:', error);
+          reject({ sucesso: false, mensagem: 'Erro ao importar dados: ' + error.message });
+        }
+      };
+      
+      reader.onerror = () => {
+        reject({ sucesso: false, mensagem: 'Erro ao ler arquivo' });
+      };
+      
+      reader.readAsText(file);
+    });
+  };
+  
+  const limparDadosAntigos = (diasRetencao = 365) => {
+    try {
+      const dataLimite = new Date();
+      dataLimite.setDate(dataLimite.getDate() - diasRetencao);
+      
+      // Limpar empréstimos antigos devolvidos
+      const emprestimosAtualizados = emprestimos.filter(emp => {
+        if (emp.status === 'devolvido' && emp.dataDevolucaoReal) {
+          const dataDevolucao = new Date(emp.dataDevolucaoReal);
+          return dataDevolucao > dataLimite;
+        }
+        return true; // Manter empréstimos ativos
+      });
+      
+      // Limpar logs antigos
+      const logsAtualizados = logAtividades.filter(log => {
+        const dataLog = new Date(log.data);
+        return dataLog > dataLimite;
+      });
+      
+      const removidos = {
+        emprestimos: emprestimos.length - emprestimosAtualizados.length,
+        logs: logAtividades.length - logsAtualizados.length
+      };
+      
+      setEmprestimos(emprestimosAtualizados);
+      setLogAtividades(logsAtualizados);
+      
+      console.log('🧹 [CLEANUP] Limpeza realizada:', removidos);
+      registrarLog('Sistema', 'Manutenção', 'Limpeza de dados antigos realizada', {
+        diasRetencao,
+        removidos
+      });
+      
+      return { 
+        sucesso: true, 
+        mensagem: `Limpeza concluída! Removidos: ${removidos.emprestimos} empréstimos e ${removidos.logs} logs antigos.`,
+        removidos 
+      };
+    } catch (error) {
+      console.error('❌ [CLEANUP] Erro ao limpar dados:', error);
+      return { sucesso: false, mensagem: 'Erro ao limpar dados: ' + error.message };
+    }
+  };
+
   // ==================== FUNÇÕES DE PLANOS ====================
   
   const adicionarPlano = (planoData) => {
@@ -1367,6 +1643,11 @@ export const DataProvider = ({ children }) => {
     
     // Sincronização
     sincronizarDados,
+    
+    // Backup e Recuperação
+    exportarDados,
+    importarDados,
+    limparDadosAntigos,
     
     // Busca
     buscar
