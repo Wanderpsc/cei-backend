@@ -45,6 +45,7 @@ import LibraryBooksIcon from '@mui/icons-material/LibraryBooks';
 import ReceiptIcon from '@mui/icons-material/Receipt';
 import InventoryIcon from '@mui/icons-material/Inventory';
 import AssignmentIcon from '@mui/icons-material/Assignment';
+import HistoryEduIcon from '@mui/icons-material/HistoryEdu';
 
 const drawerWidth = 240;
 const mobileDrawerWidth = 200;
@@ -62,6 +63,7 @@ export default function Layout({ children }) {
     if (usuarioLogado?.perfil === 'SuperAdmin') {
       return [
         { text: 'Dashboard', icon: <DashboardIcon />, path: '/' },
+        { text: 'Relatório Usuários', icon: <HistoryEduIcon />, path: '/relatorio-usuarios' },
         { text: 'Gerenciar Escolas', icon: <SchoolIcon />, path: '/gerenciar-escolas' },
         { text: 'Configurar Planos', icon: <SettingsIcon />, path: '/configurar-planos' },
         { text: 'Gestão Financeira', icon: <AccountBalanceWalletIcon />, path: '/financeiro-admin' },
@@ -116,15 +118,16 @@ export default function Layout({ children }) {
   // Atalhos rápidos para clientes
   const quickAccessCards = usuarioLogado?.perfil !== 'SuperAdmin' ? [
     { label: 'Configurações', icon: <SettingsIcon />, path: '/configuracoes', color: '#667eea' },
-    { label: 'Gerenciar Usuários', icon: <PeopleIcon />, path: '/gerenciar-usuarios', color: '#9c27b0' },
+    { label: 'Usuários', icon: <PeopleIcon />, path: '/gerenciar-usuarios', color: '#9c27b0' },
+    { label: 'Logs', icon: <HistoryEduIcon />, path: '/relatorio-usuarios', color: '#00897b' },
     { label: 'Livros', icon: <MenuBookIcon />, path: '/livros', color: '#1976d2' },
     { label: 'Patrimônio', icon: <InventoryIcon />, path: '/patrimonio', color: '#388e3c' },
     { label: 'Leitores', icon: <PeopleIcon />, path: '/clientes', color: '#f57c00' },
     { label: 'Empréstimos', icon: <AssignmentIcon />, path: '/emprestimos', color: '#7b1fa2' },
     { label: 'Devoluções', icon: <AssignmentReturnIcon />, path: '/devolucoes', color: '#d32f2f' },
-    { label: 'Clube de Leitura', icon: <EmojiEventsIcon />, path: '/clube-leitura', color: '#ffa726' },
+    { label: 'Clube Leitura', icon: <EmojiEventsIcon />, path: '/clube-leitura', color: '#ffa726' },
     { label: 'Relatórios', icon: <AssessmentIcon />, path: '/relatorios', color: '#5c6bc0' },
-    { label: 'Relatórios Livros', icon: <LibraryBooksIcon />, path: '/relatorios-livros', color: '#26a69a' },
+    { label: 'Rel. Livros', icon: <LibraryBooksIcon />, path: '/relatorios-livros', color: '#26a69a' },
     { label: 'Busca', icon: <SearchIcon />, path: '/busca', color: '#ab47bc' },
     { label: 'Financeiro', icon: <AccountBalanceWalletIcon />, path: '/financeiro', color: '#66bb6a' },
   ] : [];
@@ -132,12 +135,17 @@ export default function Layout({ children }) {
   // Atalhos rápidos para SuperAdmin
   const quickAccessCardsAdmin = usuarioLogado?.perfil === 'SuperAdmin' ? [
     { label: 'Dashboard', icon: <DashboardIcon />, path: '/', color: '#667eea' },
-    { label: 'Gerenciar Escolas', icon: <SchoolIcon />, path: '/gerenciar-escolas', color: '#1976d2' },
-    { label: 'Configurar Planos', icon: <SettingsIcon />, path: '/configurar-planos', color: '#f57c00' },
-    { label: 'Gestão Financeira', icon: <AccountBalanceWalletIcon />, path: '/financeiro-admin', color: '#66bb6a' },
+    { label: 'Logs', icon: <HistoryEduIcon />, path: '/relatorio-usuarios', color: '#00897b' },
+    { label: 'Escolas', icon: <SchoolIcon />, path: '/gerenciar-escolas', color: '#1976d2' },
+    { label: 'Planos', icon: <SettingsIcon />, path: '/configurar-planos', color: '#f57c00' },
+    { label: 'Financeiro', icon: <AccountBalanceWalletIcon />, path: '/financeiro-admin', color: '#66bb6a' },
     { label: 'Notas Fiscais', icon: <ReceiptIcon />, path: '/notas-fiscais', color: '#9c27b0' },
-    { label: 'Diagrama Sistema', icon: <ArchitectureIcon />, path: '/diagrama-sistema', color: '#5c6bc0' },
+    { label: 'Diagrama', icon: <ArchitectureIcon />, path: '/diagrama-sistema', color: '#5c6bc0' },
   ] : [];
+
+  const quickAccessItems = usuarioLogado?.perfil === 'SuperAdmin'
+    ? quickAccessCardsAdmin
+    : quickAccessCards;
 
   const drawer = (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -344,66 +352,8 @@ export default function Layout({ children }) {
         </Toolbar>
       </AppBar>
 
-      {/* Barra de Atalhos Rápidos - Para SuperAdmin */}
-      {usuarioLogado?.perfil === 'SuperAdmin' && quickAccessCardsAdmin.length > 0 && (
-        <Box
-          sx={{
-            position: 'fixed',
-            top: 64,
-            width: { sm: `calc(100% - ${drawerWidth}px)` },
-            ml: { sm: `${drawerWidth}px` },
-            bgcolor: '#f5f7fa',
-            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
-            py: 1.5,
-            px: 2,
-            zIndex: 1100,
-            overflowX: 'auto',
-            display: 'flex',
-            justifyContent: 'center',
-            '&::-webkit-scrollbar': {
-              height: 6,
-            },
-            '&::-webkit-scrollbar-thumb': {
-              backgroundColor: 'rgba(0, 0, 0, 0.2)',
-              borderRadius: 3,
-            },
-          }}
-        >
-          <Box sx={{ display: 'flex', gap: 2, minWidth: 'max-content' }}>
-            {quickAccessCardsAdmin.map((card, index) => (
-              <Card
-                key={index}
-                onClick={() => handleNavigation(card.path)}
-                sx={{
-                  minWidth: 140,
-                  cursor: 'pointer',
-                  transition: 'all 0.3s',
-                  background: `linear-gradient(135deg, ${card.color} 0%, ${card.color}dd 100%)`,
-                  color: 'white',
-                  '&:hover': {
-                    transform: 'translateY(-4px)',
-                    boxShadow: '0 8px 16px rgba(0, 0, 0, 0.2)',
-                  },
-                }}
-              >
-                <CardActionArea>
-                  <CardContent sx={{ p: 1.5, textAlign: 'center', '&:last-child': { pb: 1.5 } }}>
-                    <Box sx={{ mb: 0.5 }}>
-                      {React.cloneElement(card.icon, { sx: { fontSize: 28 } })}
-                    </Box>
-                    <Typography variant="caption" sx={{ fontWeight: 600, fontSize: '0.7rem' }}>
-                      {card.label}
-                    </Typography>
-                  </CardContent>
-                </CardActionArea>
-              </Card>
-            ))}
-          </Box>
-        </Box>
-      )}
-
-      {/* Barra de Atalhos Rápidos - Para Clientes */}
-      {usuarioLogado?.perfil !== 'SuperAdmin' && quickAccessCards.length > 0 && (
+      {/* Barra de Atalhos Rápidos - Padrão para todos os perfis */}
+      {quickAccessItems.length > 0 && (
         <Box
           sx={{
             position: 'fixed',
@@ -412,12 +362,12 @@ export default function Layout({ children }) {
             ml: { sm: `${drawerWidth}px` },
             bgcolor: '#f5f7fa',
             boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
-            py: { xs: 0.8, sm: 1.5 },
+            py: { xs: 0.9, sm: 1.1 },
             px: { xs: 1, sm: 2 },
             zIndex: 1100,
             overflowX: 'auto',
             '&::-webkit-scrollbar': {
-              height: 4,
+              height: 5,
             },
             '&::-webkit-scrollbar-thumb': {
               backgroundColor: 'rgba(102, 126, 234, 0.3)',
@@ -425,11 +375,13 @@ export default function Layout({ children }) {
             },
           }}
         >
-          <Grid container spacing={{ xs: 0.5, sm: 1 }} wrap="nowrap">
-            {quickAccessCards.map((card, index) => (
+          <Grid container spacing={{ xs: 0.7, sm: 1 }} wrap="nowrap">
+            {quickAccessItems.map((card, index) => (
               <Grid item key={index}>
                 <Card
                   sx={{
+                    width: { xs: 120, sm: 138 },
+                    height: { xs: 46, sm: 52 },
                     boxShadow: location.pathname === card.path ? 4 : 1,
                     transition: 'all 0.2s',
                     border: location.pathname === card.path ? `2px solid ${card.color}` : 'none',
@@ -446,14 +398,15 @@ export default function Layout({ children }) {
                       setMobileOpen(false);
                     }}
                     sx={{ 
-                      px: { xs: 0.8, sm: 1.3 }, 
-                      py: { xs: 0.5, sm: 0.7 },
+                      px: { xs: 0.8, sm: 1 }, 
+                      py: 0,
+                      width: '100%',
+                      height: '100%',
                       display: 'flex',
                       flexDirection: 'row',
                       alignItems: 'center',
-                      gap: { xs: 0.5, sm: 0.7 },
-                      minWidth: 'fit-content',
-                      maxWidth: { xs: 140, sm: 160 },
+                      justifyContent: 'center',
+                      gap: { xs: 0.55, sm: 0.7 },
                     }}
                   >
                     <Box sx={{ 
@@ -469,10 +422,12 @@ export default function Layout({ children }) {
                       variant="caption" 
                       fontWeight={location.pathname === card.path ? 700 : 600}
                       sx={{ 
-                        fontSize: { xs: '0.6rem', sm: '0.65rem' },
-                        lineHeight: 1.2,
-                        whiteSpace: 'normal',
-                        wordBreak: 'break-word',
+                        fontSize: { xs: '0.67rem', sm: '0.72rem' },
+                        lineHeight: 1.15,
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        maxWidth: { xs: 75, sm: 90 },
                         color: location.pathname === card.path ? card.color : 'inherit',
                       }}
                     >
@@ -536,11 +491,8 @@ export default function Layout({ children }) {
       >
         <Toolbar />
         {/* Espaço adicional quando há barra de atalhos */}
-        {(usuarioLogado?.perfil !== 'SuperAdmin' && quickAccessCards.length > 0) && (
-          <Box sx={{ height: { xs: 48, sm: 60 } }} />
-        )}
-        {usuarioLogado?.perfil === 'SuperAdmin' && quickAccessCardsAdmin.length > 0 && (
-          <Box sx={{ height: { xs: 48, sm: 60 } }} />
+        {quickAccessItems.length > 0 && (
+          <Box sx={{ height: { xs: 56, sm: 62 } }} />
         )}
         <Box sx={{ flexGrow: 1 }}>
           {/* Aviso de Licença */}

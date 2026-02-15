@@ -20,8 +20,7 @@ A página **Diagrama do Sistema** é uma funcionalidade exclusiva para **Super A
 
 ### Passo 1: Login como Super Admin
 ```
-Login: admin
-Senha: admin123
+Use as credenciais de Super Administrador configuradas no ambiente
 ```
 
 ### Passo 2: Acessar o Menu
@@ -81,14 +80,14 @@ Senha: admin123
 Diagrama visual mostrando 4 camadas:
 - 📱 **Frontend**: React + Material-UI (Surge.sh)
 - ⚙️ **Backend**: Node.js + Express (localhost:3001)
-- 💾 **Dados**: LocalStorage → PostgreSQL (futuro)
-- 🔗 **Integrações**: Mercado Pago, E-mail
+- 💾 **Dados**: Arquitetura híbrida (LocalStorage + Supabase PostgreSQL)
+- 🔗 **Integrações**: Mercado Pago, Google Books API, Google Gemini AI
 
 ### 3. Stack Tecnológico
 Tecnologias divididas em categorias:
-- **Frontend**: React, Material-UI, React Router
+- **Frontend**: React, Material-UI, React Router, ZXing/html5-qrcode
 - **Backend**: Node.js, Express, Mercado Pago SDK
-- **Segurança**: SSL/TLS, AES-256, bcrypt, SHA-256
+- **Segurança**: SSL/TLS, RLS (Row Level Security), JWT/Supabase Auth
 - **Integrações**: APIs externas
 
 ### 4. Fluxo de Dados
@@ -96,6 +95,7 @@ Diagrama ASCII mostrando:
 - Navegação do usuário
 - Fluxo de autenticação
 - Operações CRUD
+- Scanner híbrido (câmera mobile + leitor laser USB HID)
 - Processamento de pagamentos
 - Webhooks e confirmações
 
@@ -120,18 +120,26 @@ Detalhamento de cada módulo:
 - Dashboard
 - Livros
 - Empréstimos
-- Alunos
+- Leitores
 - Patrimônio
 - Relatórios
 - Financeiro
 - Busca
+- Notas Fiscais (ISS) - **exclusivo Super Admin**
 
 ### 7. Métricas Técnicas
 - 10.000+ linhas de código
 - 30+ arquivos
-- 15+ páginas funcionais
+- 18+ páginas funcionais
 - 99% uptime
 - SSL/TLS + LGPD
+
+## 🆕 Atualizações Recentes (Jan/Fev 2026)
+
+- ✅ **Acesso exclusivo do diagrama:** apenas Super Administrador visualiza a página técnica
+- ✅ **Notas Fiscais (ISS):** menu e emissão restritos ao Super Admin
+- ✅ **Scanner híbrido:** suporte conjunto a câmera mobile e leitor laser USB (HID)
+- ✅ **Sincronização em nuvem:** operação híbrida com LocalStorage + Supabase
 
 ### 8. Certificado de Autenticidade
 Aviso legal com:
@@ -249,4 +257,4 @@ Dúvidas sobre o diagrama?
 **© 2026 Wander Pires Silva Coelho - Todos os direitos reservados**  
 **Sistema CEI - Controle Escolar Inteligente®**
 
-*Documento gerado automaticamente em: 05/01/2026*
+*Documento atualizado em: 14/02/2026*

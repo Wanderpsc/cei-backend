@@ -136,7 +136,7 @@ export default function ConfiguracoesPage() {
         }
       };
 
-      atualizarInstituicao(instituicaoAtualizada);
+      atualizarInstituicao(instituicao.id, instituicaoAtualizada);
       setSucesso(true);
       setErro('');
 

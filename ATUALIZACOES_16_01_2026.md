@@ -2,6 +2,13 @@
 
 ## Versão: 3.3.0
 
+## 📌 Metadados Padronizados
+
+- **Data:** 16/01/2026
+- **Tipo:** Nova funcionalidade (scanner laser USB)
+- **Escopo:** Cadastro de livros por ISBN com leitura automática
+- **Perfis impactados:** Admin, Bibliotecário, SuperAdmin
+
 ### 🎉 NOVA FUNCIONALIDADE PRINCIPAL
 
 ---

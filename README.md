@@ -299,7 +299,9 @@ Código Penal, Art. 184 (Crime de Violação)
 ## 🔗 LINKS ÚTEIS
 
 - 🌐 **Site Oficial**: https://cei-controle-escolar.surge.sh
-- 📘 **Documentação**: [A definir]
+- 📘 **Documentação**: [DIAGRAMA_SISTEMA_GUIA.md](DIAGRAMA_SISTEMA_GUIA.md)
+- 📚 **Índice de Atualizações**: [ATUALIZACOES_INDEX.md](ATUALIZACOES_INDEX.md)
+- 📝 **Último Changelog**: [ATUALIZACOES_14_02_2026.md](ATUALIZACOES_14_02_2026.md)
 - 💬 **Suporte**: suporte@sistemaeci.com.br
 - 🛒 **Contratar**: vendas@sistemaeci.com.br
 
@@ -334,6 +336,14 @@ Agradeço a todos os usuários que confiam no Sistema CEI para gerenciar suas bi
 ---
 
 ## 📅 CHANGELOG
+
+### Versão 3.6.0 (14/02/2026)
+- 🏗️ Atualização do diagrama de arquitetura no acesso Super Admin
+- 🔐 Acesso ao Diagrama do Sistema reforçado como exclusivo do Super Admin
+- 🧾 Notas Fiscais (ISS) documentadas como exclusivas do Super Admin
+- 📷 Scanner híbrido documentado (mobile + laser USB HID)
+- ☁️ Alinhamento documental com arquitetura híbrida LocalStorage + Supabase
+- 📄 Detalhes completos: [ATUALIZACOES_14_02_2026.md](ATUALIZACOES_14_02_2026.md)
 
 ### Versão 1.0.0 (05/01/2026)
 - 🚀 Lançamento inicial

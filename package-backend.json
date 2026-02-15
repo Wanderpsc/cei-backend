@@ -14,7 +14,8 @@
     "express": "^4.18.2",
     "cors": "^2.8.5",
     "dotenv": "^16.0.3",
-    "mercadopago": "^2.0.0"
+    "mercadopago": "^2.0.0",
+    "nodemailer": "^6.10.1"
   },
   "author": "Wander Pires Silva Coelho",
   "license": "PROPRIETARY"

@@ -62,16 +62,62 @@ export default function MobileBarcodeScanner({ open, onClose, onBookFound }) {
       const constraints = {
         video: {
           facingMode: { ideal: 'environment' }, // Câmera traseira preferencial
-          width: { ideal: 1280 },
-          height: { ideal: 720 }
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+          focusMode: { ideal: 'continuous' }, // Foco contínuo
+          aspectRatio: { ideal: 1.7777777778 }, // 16:9
+          zoom: { ideal: 1 }
         }
       };
 
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      // Tentar com advanced constraints primeiro
+      let stream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia(constraints);
+      } catch (err) {
+        // Fallback para constraints simples
+        console.log('⚠️ Usando constraints simplificados');
+        const simpleConstraints = {
+          video: {
+            facingMode: 'environment',
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          }
+        };
+        stream = await navigator.mediaDevices.getUserMedia(simpleConstraints);
+      }
+
       
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        videoRef.current.play();
+        
+        // Aplicar configurações avançadas de foco no track de vídeo
+        const videoTrack = stream.getVideoTracks()[0];
+        const capabilities = videoTrack.getCapabilities();
+        
+        console.log('📷 Capabilities da câmera:', capabilities);
+        
+        // Tentar habilitar autofocus se disponível
+        if (capabilities.focusMode && capabilities.focusMode.includes('continuous')) {
+          try {
+            await videoTrack.applyConstraints({
+              advanced: [{ focusMode: 'continuous' }]
+            });
+            console.log('✅ Autofocus contínuo ativado');
+          } catch (e) {
+            console.log('⚠️ Autofocus não suportado:', e.message);
+          }
+        }
+        
+        // Iniciar reprodução
+        await videoRef.current.play();
+        
+        // Aguardar o vídeo estar pronto
+        await new Promise(resolve => {
+          videoRef.current.onloadedmetadata = resolve;
+        });
+        
+        console.log('✅ Câmera iniciada, começando detecção...');
         
         // Iniciar detecção contínua
         detectCode();
@@ -93,40 +139,51 @@ export default function MobileBarcodeScanner({ open, onClose, onBookFound }) {
   };
 
   const detectCode = async () => {
-    if (!videoRef.current || !codeReaderRef.current) return;
+    if (!videoRef.current || !codeReaderRef.current || !cameraActive) {
+      console.log('❌ Detecção cancelada: câmera inativa');
+      return;
+    }
 
     try {
-      const result = await codeReaderRef.current.decodeOnceFromVideoDevice(
-        undefined,
-        videoRef.current
-      );
+      // Usar decodeFromVideoElement para leitura contínua
+      const result = await codeReaderRef.current.decodeFromVideoElement(videoRef.current);
 
       if (result) {
         const code = result.getText();
         console.log('📷 Código detectado:', code);
         
         // Validar se parece com ISBN
-        const isbnLimpo = code.replace(/[^0-9X]/gi, '');
+        const isbnLimpo = code.replace(/[^0-9X]/gi, '').toUpperCase();
+        console.log('📋 ISBN limpo:', isbnLimpo, '(tamanho:', isbnLimpo.length, ')');
+        
         if (isbnLimpo.length === 10 || isbnLimpo.length === 13) {
+          console.log('✅ ISBN válido detectado!');
           setIsbn(isbnLimpo);
           stopCamera();
+          
+          // Buscar livro automaticamente
           await buscarLivro(isbnLimpo);
+          return; // Não continuar o loop
         } else {
+          console.log('⚠️ Código não é ISBN válido (tamanho incorreto)');
           setError('Código detectado não é um ISBN válido');
-          // Continuar tentando
-          setTimeout(detectCode, 1000);
+          // Limpar erro após 2 segundos e continuar tentando
+          setTimeout(() => setError(''), 2000);
         }
       }
     } catch (err) {
       if (err instanceof NotFoundException) {
-        // Nenhum código encontrado, tentar novamente
-        if (cameraActive) {
-          setTimeout(detectCode, 100);
-        }
+        // Nenhum código encontrado, isso é normal
+        // console.log('🔍 Procurando código...');
       } else {
-        console.error('Erro na detecção:', err);
-        setError('Erro ao detectar código');
+        console.error('❌ Erro na detecção:', err);
+        // Não mostrar erro ao usuário para não atrapalhar
       }
+    }
+    
+    // Continuar o loop se a câmera ainda estiver ativa
+    if (cameraActive) {
+      setTimeout(detectCode, 300); // Tentar a cada 300ms
     }
   };
 

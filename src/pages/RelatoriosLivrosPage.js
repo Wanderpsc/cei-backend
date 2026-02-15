@@ -27,6 +27,7 @@ import {
   CheckCircle,
   Print
 } from '@mui/icons-material';
+import { imprimirEscopo } from '../utils/printUtils';
 
 function TabPanel({ children, value, index }) {
   return (
@@ -62,16 +63,24 @@ export default function RelatoriosLivrosPage() {
   const totalBaixas = livrosComBaixa.length;
 
   const handlePrint = () => {
-    window.print();
+    imprimirEscopo();
   };
 
   return (
     <Layout title="Relatórios de Livros">
-      <Box sx={{ mb: 3 }}>
+      <Box sx={{ mb: 3 }} className="print-actions no-print">
         <Button startIcon={<Print />} onClick={handlePrint} variant="outlined">
           Imprimir Relatório
         </Button>
       </Box>
+
+      <Box className="print-scope">
+        <Typography className="print-only" variant="h6" fontWeight="bold" sx={{ mb: 1 }}>
+          Relatórios de Livros
+        </Typography>
+        <Typography className="print-only" variant="body2" sx={{ mb: 2 }}>
+          Emitido em: {new Date().toLocaleString('pt-BR')}
+        </Typography>
 
       {/* Cards de Estatísticas */}
       <Grid container spacing={3} sx={{ mb: 3 }}>
@@ -386,6 +395,7 @@ export default function RelatoriosLivrosPage() {
           </TableContainer>
         </TabPanel>
       </Paper>
+      </Box>
     </Layout>
   );
 }

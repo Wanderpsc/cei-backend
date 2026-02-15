@@ -9,6 +9,7 @@ import {
   Box,
   Chip,
   Alert,
+  Snackbar,
   Button,
   Tooltip
 } from '@mui/material';
@@ -26,6 +27,8 @@ import {
   LibraryBooks,
   AssignmentReturn,
   Description,
+  Receipt,
+  ContentCopy,
   PrintOutlined,
   Backup,
   CloudDownload,
@@ -34,7 +37,19 @@ import {
 import { useData } from '../context/DataContext';
 import TermoEmprestimo from '../components/TermoEmprestimo';
 
+const DEMO_DEVICE_ID_KEY = 'cei_demo_device_id';
+
+const formatarIdentificadorDemo = (deviceId) => {
+  if (!deviceId) return 'Não disponível';
+  const partes = deviceId.split('-');
+  const base = (partes[partes.length - 1] || deviceId).slice(0, 6).toUpperCase();
+  return `DEMO-${base}`;
+};
+
 function DashboardPage() {
+  const DATA_LANCAMENTO_TESTE_EMAIL = new Date('2026-02-14T00:00:00');
+  const DIAS_DESTAQUE_NOVO = 30;
+
   const navigate = useNavigate();
   const { 
     livros, 
@@ -51,14 +66,52 @@ function DashboardPage() {
   const [alertaFinanceiro, setAlertaFinanceiro] = useState(null);
   const [termoOpen, setTermoOpen] = useState(false);
   const [tipoTermo, setTipoTermo] = useState('branco');
+  const [snackbar, setSnackbar] = useState({ open: false, mensagem: '', tipo: 'info' });
+  const [ultimaAtualizacaoDados, setUltimaAtualizacaoDados] = useState(null);
+
+  const diasDesdeLancamento = Math.floor((Date.now() - DATA_LANCAMENTO_TESTE_EMAIL.getTime()) / (1000 * 60 * 60 * 24));
+  const exibirBadgeNovoTesteEmail = diasDesdeLancamento >= 0 && diasDesdeLancamento <= DIAS_DESTAQUE_NOVO;
+  const exibirInfoSessaoDemo = Boolean(usuarioLogado?.contaTeste);
+  const identificadorDemo = formatarIdentificadorDemo(localStorage.getItem(DEMO_DEVICE_ID_KEY));
+
+  const handleCopiarIdentificadorDemo = async () => {
+    try {
+      await navigator.clipboard.writeText(identificadorDemo);
+      setSnackbar({
+        open: true,
+        mensagem: `Identificador copiado: ${identificadorDemo}`,
+        tipo: 'success'
+      });
+    } catch (error) {
+      console.error('Erro ao copiar identificador demo:', error);
+      setSnackbar({
+        open: true,
+        mensagem: `Não foi possível copiar automaticamente. ID: ${identificadorDemo}`,
+        tipo: 'warning'
+      });
+    }
+  };
+
+  const fecharSnackbar = (_, reason) => {
+    if (reason === 'clickaway') return;
+    setSnackbar(prev => ({ ...prev, open: false }));
+  };
   
   // Funções de backup
   const handleExportarDados = () => {
     const resultado = exportarDados();
     if (resultado.sucesso) {
-      alert('✅ ' + resultado.mensagem);
+      setSnackbar({
+        open: true,
+        mensagem: resultado.mensagem,
+        tipo: 'success'
+      });
     } else {
-      alert('❌ ' + resultado.mensagem);
+      setSnackbar({
+        open: true,
+        mensagem: resultado.mensagem,
+        tipo: 'error'
+      });
     }
   };
   
@@ -71,10 +124,18 @@ function DashboardPage() {
       if (file) {
         try {
           const resultado = await importarDados(file);
-          alert('✅ ' + resultado.mensagem);
-          window.location.reload(); // Recarregar para aplicar dados importados
+          setSnackbar({
+            open: true,
+            mensagem: resultado.mensagem,
+            tipo: 'success'
+          });
+          setUltimaAtualizacaoDados(new Date());
         } catch (error) {
-          alert('❌ ' + error.mensagem);
+          setSnackbar({
+            open: true,
+            mensagem: error?.mensagem || 'Erro ao importar dados.',
+            tipo: 'error'
+          });
         }
       }
     };
@@ -290,6 +351,29 @@ function DashboardPage() {
         
         {/* Botões de Termos */}
         <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+          {usuarioLogado?.perfil === 'SuperAdmin' && (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Tooltip title="Abrir tela de Notas Fiscais para testar envio de e-mails">
+                <Button
+                  variant="contained"
+                  startIcon={<Receipt />}
+                  onClick={() => navigate('/notas-fiscais')}
+                  size="small"
+                  color="primary"
+                >
+                  Testar E-mails
+                </Button>
+              </Tooltip>
+              {exibirBadgeNovoTesteEmail && (
+                <Chip
+                  label="NOVO"
+                  size="small"
+                  color="warning"
+                  sx={{ fontWeight: 'bold' }}
+                />
+              )}
+            </Box>
+          )}
           <Tooltip title="Gerar termo em branco para impressão">
             <Button
               variant="outlined"
@@ -317,6 +401,33 @@ function DashboardPage() {
           </Tooltip>
         </Box>
       </Box>
+
+      {ultimaAtualizacaoDados && (
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2 }}>
+          Dados atualizados agora ({ultimaAtualizacaoDados.toLocaleTimeString('pt-BR')}).
+        </Typography>
+      )}
+
+      {exibirInfoSessaoDemo && (
+        <Alert severity="info" sx={{ mb: 3 }}>
+          <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+            Sessão de demonstração ativa neste dispositivo
+          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+            <Typography variant="body2">
+              Identificador da sessão demo: {identificadorDemo}
+            </Typography>
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={<ContentCopy />}
+              onClick={handleCopiarIdentificadorDemo}
+            >
+              Copiar ID
+            </Button>
+          </Box>
+        </Alert>
+      )}
 
       {/* Alerta Financeiro */}
       {alertaFinanceiro && (
@@ -448,6 +559,17 @@ function DashboardPage() {
         dados={null}
         tipo={tipoTermo}
       />
+
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={3000}
+        onClose={fecharSnackbar}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert onClose={fecharSnackbar} severity={snackbar.tipo} variant="filled" sx={{ width: '100%' }}>
+          {snackbar.mensagem}
+        </Alert>
+      </Snackbar>
     </Layout>
   );
 }

@@ -2,6 +2,13 @@
 
 ## Versão: 2.1.0
 
+## 📌 Metadados Padronizados
+
+- **Data:** 08/01/2026
+- **Tipo:** Correções de UI, permissões e PWA
+- **Escopo:** Menu administrativo, nomenclatura de usuários e atualização de cache
+- **Perfis impactados:** SuperAdmin, Admin, Bibliotecário
+
 ### ✅ Alterações Implementadas
 
 #### 1. **Nota Fiscal Movida para Administração**

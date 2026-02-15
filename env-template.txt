@@ -1,0 +1,80 @@
+# ============================================
+# VARIÁVEIS DE AMBIENTE - CEI SISTEMA
+# ============================================
+# 
+# INSTRUÇÕES:
+# 1. Crie uma conta no Supabase: https://supabase.com
+# 2. Crie um novo projeto
+# 3. Vá em Settings → API
+# 4. Copie as credenciais abaixo
+# 5. Salve este arquivo como: .env.local
+# 6. IMPORTANTE: .env.local já está no .gitignore
+#
+# ============================================
+
+# === SUPABASE (BANCO DE DADOS NA NUVEM) ===
+REACT_APP_SUPABASE_URL=https://seu-projeto.supabase.co
+REACT_APP_SUPABASE_ANON_KEY=sua-chave-publica-aqui
+
+# === GOOGLE GEMINI AI (INTELIGÊNCIA ARTIFICIAL) ===
+REACT_APP_GEMINI_API_KEY=sua-chave-gemini-aqui
+
+# === MERCADO PAGO (PAGAMENTOS) ===
+REACT_APP_MP_PUBLIC_KEY=sua-chave-publica-mercadopago
+
+# === BACKEND API (PAGAMENTOS/EMAIL) ===
+REACT_APP_API_URL=http://localhost:3001
+
+# === NOTIFICAÇÕES DE E-MAIL (BACKEND) ===
+# Configure no backend (.env) para envio real com SMTP
+OWNER_NOTIFICATION_EMAIL=wanderpsc@gmail.com
+SUPPORT_EMAIL=wanderpsc@gmail.com
+SUPPORT_WHATSAPP=+55XXXXXXXXXXX
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=seu-email@gmail.com
+SMTP_PASS=sua-senha-de-app
+SMTP_FROM="CEI Sistema <seu-email@gmail.com>"
+TEST_EMAIL_TOKEN=defina-um-token-forte-opcional
+REACT_APP_TEST_EMAIL_TOKEN=defina-o-mesmo-token-no-frontend-opcional
+
+# === ALERTAS WHATSAPP (CALLMEBOT) ===
+# Número do proprietário com DDI+DDD+número, sem espaços/símbolos
+OWNER_WHATSAPP=5589981398723
+# Chave da API CallMeBot (WhatsApp)
+CALLMEBOT_API_KEY=sua-chave-callmebot-aqui
+
+# === AMBIENTE ===
+REACT_APP_ENVIRONMENT=production
+
+# === TOUR EM VÍDEO (LOGIN) - LINKS OFICIAIS ===
+REACT_APP_DEMO_VIDEO_LIVROS=
+REACT_APP_DEMO_VIDEO_EMPRESTIMOS=
+REACT_APP_DEMO_VIDEO_SCANNER=
+REACT_APP_DEMO_VIDEO_RELATORIOS=
+REACT_APP_DEMO_VIDEO_FINANCEIRO=
+REACT_APP_DEMO_VIDEO_FISCAL=
+
+# ============================================
+# INSTRUÇÕES DE USO
+# ============================================
+#
+# PASSO 1: SUPABASE
+# - Acesse: https://supabase.com
+# - Crie projeto: "cei-sistema"
+# - Region: South America (São Paulo)
+# - Copie Project URL → REACT_APP_SUPABASE_URL
+# - Copie anon/public key → REACT_APP_SUPABASE_ANON_KEY
+#
+# PASSO 2: GEMINI AI
+# - Acesse: https://aistudio.google.com/app/apikey
+# - Crie API Key
+# - Copie → REACT_APP_GEMINI_API_KEY
+#
+# PASSO 3: MERCADO PAGO
+# - Acesse: https://www.mercadopago.com.br/developers
+# - Suas integrações → Criar aplicação
+# - Copie Public Key → REACT_APP_MP_PUBLIC_KEY
+#
+# ============================================

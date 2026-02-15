@@ -103,7 +103,9 @@ export default function PagamentoPage() {
         console.log('ID do pagamento:', data.payment.id);
         
         // Iniciar verificação do pagamento
-        iniciarVerificacaoPagamento(data.payment.id);
+        iniciarVerificacaoPagamento(data.payment.id, {
+          metodoPagamento: 'pix'
+        });
       } else {
         setErro(data.error || 'Erro ao gerar PIX. Tente novamente.');
       }
@@ -116,7 +118,8 @@ export default function PagamentoPage() {
   };
 
   // Verificar pagamento PIX
-  const iniciarVerificacaoPagamento = (paymentId) => {
+  const iniciarVerificacaoPagamento = (paymentId, options = {}) => {
+    const { metodoPagamento = 'pix', parcelas = null } = options;
     setVerificandoPagamento(true);
     
     // Verificar a cada 5 segundos
@@ -138,8 +141,10 @@ export default function PagamentoPage() {
               state: { 
                 dadosCadastro, 
                 planoSelecionado,
-                metodoPagamento: 'pix',
-                transacaoId: paymentId
+                metodoPagamento,
+                parcelas,
+                transacaoId: paymentId,
+                status: 'approved'
               } 
             });
           }, 2000);
@@ -270,7 +275,7 @@ export default function PagamentoPage() {
 
       console.log('📥 Resposta do backend:', data);
 
-      if (data.success && (data.payment.status === 'approved' || data.payment.status === 'pending')) {
+      if (data.success && data.payment.status === 'approved') {
         setSucesso(true);
         console.log('✅ Pagamento processado:', data.payment.status);
         
@@ -283,10 +288,17 @@ export default function PagamentoPage() {
               metodoPagamento: 'cartao',
               parcelas: dadosCartao.parcelas,
               transacaoId: data.payment.id,
-              status: data.payment.status
+              status: 'approved'
             } 
           });
         }, 2000);
+      } else if (data.success && data.payment.status === 'pending') {
+        console.log('⏳ Pagamento pendente. Aguardando confirmação da operadora...');
+        setSucesso(true);
+        iniciarVerificacaoPagamento(data.payment.id, {
+          metodoPagamento: 'cartao',
+          parcelas: dadosCartao.parcelas
+        });
       } else {
         // Pagamento rejeitado ou erro
         const mensagemErro = data.error || data.payment?.status_detail || 'Pagamento recusado. Verifique os dados do cartão.';

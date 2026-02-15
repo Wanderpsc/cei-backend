@@ -33,9 +33,11 @@ import {
   CalendarToday,
   Add,
   School,
-  Edit
+  Edit,
+  Print
 } from '@mui/icons-material';
 import { useData } from '../context/DataContext';
+import { imprimirEscopo } from '../utils/printUtils';
 
 export default function GerenciarEscolasPage() {
   const { 
@@ -107,6 +109,10 @@ export default function GerenciarEscolasPage() {
     setAcao('');
     setDiasValidade(365);
     setMotivoBloqueio('');
+  };
+
+  const handleImprimirDetalhes = () => {
+    imprimirEscopo();
   };
 
   const handleConfirmarAcao = () => {
@@ -192,6 +198,26 @@ export default function GerenciarEscolasPage() {
       
       // Se senha foi alterada (não é ********), incluir no update
       if (formCadastro.senhaAdmin !== '********') {
+        if (formCadastro.senhaAdmin.length < 8) {
+          alert('A senha deve ter no mínimo 8 caracteres.');
+          return;
+        }
+        if (!/[A-Z]/.test(formCadastro.senhaAdmin)) {
+          alert('A senha deve conter pelo menos 1 letra maiúscula.');
+          return;
+        }
+        if (!/[a-z]/.test(formCadastro.senhaAdmin)) {
+          alert('A senha deve conter pelo menos 1 letra minúscula.');
+          return;
+        }
+        if (!/[0-9]/.test(formCadastro.senhaAdmin)) {
+          alert('A senha deve conter pelo menos 1 número.');
+          return;
+        }
+        if (!/[^A-Za-z0-9]/.test(formCadastro.senhaAdmin)) {
+          alert('A senha deve conter pelo menos 1 caractere especial.');
+          return;
+        }
         dadosAtualizados.senhaAdmin = formCadastro.senhaAdmin;
       } else {
         delete dadosAtualizados.senhaAdmin; // Não alterar senha
@@ -206,6 +232,27 @@ export default function GerenciarEscolasPage() {
     // Modo cadastro (validar senha obrigatória)
     if (!formCadastro.senhaAdmin) {
       alert('Senha do Admin é obrigatória para novo cadastro');
+      return;
+    }
+
+    if (formCadastro.senhaAdmin.length < 8) {
+      alert('A senha deve ter no mínimo 8 caracteres.');
+      return;
+    }
+    if (!/[A-Z]/.test(formCadastro.senhaAdmin)) {
+      alert('A senha deve conter pelo menos 1 letra maiúscula.');
+      return;
+    }
+    if (!/[a-z]/.test(formCadastro.senhaAdmin)) {
+      alert('A senha deve conter pelo menos 1 letra minúscula.');
+      return;
+    }
+    if (!/[0-9]/.test(formCadastro.senhaAdmin)) {
+      alert('A senha deve conter pelo menos 1 número.');
+      return;
+    }
+    if (!/[^A-Za-z0-9]/.test(formCadastro.senhaAdmin)) {
+      alert('A senha deve conter pelo menos 1 caractere especial.');
       return;
     }
 
@@ -643,7 +690,13 @@ export default function GerenciarEscolasPage() {
               )}
 
               {acao === 'info' && (
-                <Box>
+                <Box className="print-scope">
+                  <Typography className="print-only" variant="h6" fontWeight="bold" sx={{ mb: 1 }}>
+                    Detalhes da Instituição
+                  </Typography>
+                  <Typography className="print-only" variant="body2" sx={{ mb: 2 }}>
+                    Emitido em: {new Date().toLocaleString('pt-BR')}
+                  </Typography>
                   <Typography variant="body2"><strong>Instituição:</strong> {instituicaoSelecionada.nomeInstituicao}</Typography>
                   <Typography variant="body2"><strong>CNPJ:</strong> {instituicaoSelecionada.cnpj || '-'}</Typography>
                   <Typography variant="body2"><strong>Endereço:</strong> {instituicaoSelecionada.endereco}</Typography>
@@ -664,7 +717,12 @@ export default function GerenciarEscolasPage() {
             </Box>
           )}
         </DialogContent>
-        <DialogActions>
+        <DialogActions className="no-print">
+          {acao === 'info' && (
+            <Button variant="outlined" startIcon={<Print />} onClick={handleImprimirDetalhes}>
+              Imprimir Detalhes
+            </Button>
+          )}
           <Button onClick={handleFecharDialog}>
             {acao === 'info' ? 'Fechar' : 'Cancelar'}
           </Button>

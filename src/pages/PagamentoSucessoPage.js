@@ -22,9 +22,10 @@ import CreditCardIcon from '@mui/icons-material/CreditCard';
 export default function PagamentoSucessoPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { adicionarInstituicao } = useData();
-  const { dadosCadastro, planoSelecionado, metodoPagamento, parcelas } = location.state || {};
+  const { adicionarInstituicao, gerarNotaFiscalAutomaticaPagamento } = useData();
+  const { dadosCadastro, planoSelecionado, metodoPagamento, parcelas, transacaoId } = location.state || {};
   const [instituicaoJaCadastrada, setInstituicaoJaCadastrada] = React.useState(false);
+  const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
 
   useEffect(() => {
     // Redirecionar se não houver dados
@@ -35,31 +36,81 @@ export default function PagamentoSucessoPage() {
 
     // Registrar a instituição no sistema APENAS UMA VEZ
     if (!instituicaoJaCadastrada) {
-      try {
-        const dataPagamento = new Date();
-        const dadosInstituicao = {
-          ...dadosCadastro,
-          plano: planoSelecionado.nome,
-          diasLicenca: planoSelecionado.dias,
-          valorMensal: planoSelecionado.valor,
-          pagamentoConfirmado: true,
-          metodoPagamento: metodoPagamento || 'pix',
-          dataPagamento: dataPagamento.toISOString(),
-          ultimoPagamento: dataPagamento.toISOString(), // ✅ Registrar data do pagamento
-          status: 'ativo', // ✅ Já vem ativo após pagamento
-          statusFinanceiro: 'em_dia' // ✅ Em dia após pagamento
-        };
-        
-        adicionarInstituicao(dadosInstituicao);
-        setInstituicaoJaCadastrada(true);
-        
-        // Limpar o state da navegação para evitar recadastro no refresh
-        window.history.replaceState({}, document.title);
-      } catch (error) {
-        console.error('Erro ao registrar instituição:', error);
-      }
+      const processarCompra = async () => {
+        try {
+          const dataPagamento = new Date();
+          const dadosInstituicao = {
+            ...dadosCadastro,
+            plano: planoSelecionado.nome,
+            diasLicenca: planoSelecionado.dias,
+            valorMensal: planoSelecionado.valor,
+            pagamentoConfirmado: true,
+            metodoPagamento: metodoPagamento || 'pix',
+            dataPagamento: dataPagamento.toISOString(),
+            ultimoPagamento: dataPagamento.toISOString(), // ✅ Registrar data do pagamento
+            status: 'ativo', // ✅ Já vem ativo após pagamento
+            statusFinanceiro: 'em_dia' // ✅ Em dia após pagamento
+          };
+
+          const instituicaoRegistrada = adicionarInstituicao(dadosInstituicao);
+
+          const notaGerada = gerarNotaFiscalAutomaticaPagamento({
+            instituicaoId: instituicaoRegistrada?.id,
+            valor: planoSelecionado.valor,
+            plano: planoSelecionado.nome,
+            transacaoId,
+            metodoPagamento: metodoPagamento || 'pix',
+            dataPagamento: dataPagamento.toISOString()
+          });
+
+          try {
+            await fetch(`${API_URL}/api/send-purchase-confirmation`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                compradorEmail: dadosCadastro.email,
+                compradorNome: dadosCadastro.nomeResponsavel,
+                instituicaoNome: dadosCadastro.nomeInstituicao,
+                planoNome: planoSelecionado.nome,
+                valor: planoSelecionado.valor,
+                metodoPagamento: metodoPagamento || 'pix',
+                dataPagamento: dataPagamento.toISOString(),
+                transacaoId,
+                notaNumero: notaGerada?.numero,
+                notaSerie: notaGerada?.serie,
+                notaCompetencia: notaGerada?.competencia,
+                notaChaveControle: notaGerada?.chaveControle,
+                loginAdmin: dadosCadastro.loginAdmin
+              })
+            });
+          } catch (emailError) {
+            console.error('Erro ao enviar e-mails de confirmação:', emailError);
+          }
+
+          setInstituicaoJaCadastrada(true);
+
+          // Limpar o state da navegação para evitar recadastro no refresh
+          window.history.replaceState({}, document.title);
+        } catch (error) {
+          console.error('Erro ao registrar instituição:', error);
+        }
+      };
+
+      processarCompra();
     }
-  }, [dadosCadastro, planoSelecionado, metodoPagamento, navigate, adicionarInstituicao, instituicaoJaCadastrada]);
+  }, [
+    dadosCadastro,
+    planoSelecionado,
+    metodoPagamento,
+    transacaoId,
+    API_URL,
+    navigate,
+    adicionarInstituicao,
+    gerarNotaFiscalAutomaticaPagamento,
+    instituicaoJaCadastrada
+  ]);
 
   if (!dadosCadastro || !planoSelecionado) {
     return null;

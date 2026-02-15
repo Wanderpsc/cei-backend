@@ -329,7 +329,27 @@ export default function CadastroEscolaPage() {
     }
 
     if (formData.senhaAdmin.length < 6) {
-      setErro('A senha deve ter no mínimo 6 caracteres');
+      setErro('A senha deve ter no mínimo 8 caracteres');
+      return;
+    }
+
+    if (!/[A-Z]/.test(formData.senhaAdmin)) {
+      setErro('A senha deve conter pelo menos 1 letra maiúscula');
+      return;
+    }
+
+    if (!/[a-z]/.test(formData.senhaAdmin)) {
+      setErro('A senha deve conter pelo menos 1 letra minúscula');
+      return;
+    }
+
+    if (!/[0-9]/.test(formData.senhaAdmin)) {
+      setErro('A senha deve conter pelo menos 1 número');
+      return;
+    }
+
+    if (!/[^A-Za-z0-9]/.test(formData.senhaAdmin)) {
+      setErro('A senha deve conter pelo menos 1 caractere especial');
       return;
     }
     

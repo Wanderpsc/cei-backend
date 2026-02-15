@@ -1,6 +1,8 @@
 const express = require('express');
 const cors = require('cors');
 const { MercadoPagoConfig, Payment } = require('mercadopago');
+const nodemailer = require('nodemailer');
+const https = require('https');
 require('dotenv').config();
 
 // Sistema de segurança e proteção anti-pirataria
@@ -51,6 +53,246 @@ const client = new MercadoPagoConfig({
   options: { timeout: 5000 }
 });
 const payment = new Payment(client);
+
+const purchaseNotificationSent = new Set();
+
+const EMAIL_OWNER = process.env.OWNER_NOTIFICATION_EMAIL || 'wanderpsc@gmail.com';
+const SUPPORT_EMAIL = process.env.SUPPORT_EMAIL || EMAIL_OWNER;
+const SUPPORT_WHATSAPP = process.env.SUPPORT_WHATSAPP || '';
+const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
+const OWNER_WHATSAPP = (process.env.OWNER_WHATSAPP || '5589981398723').replace(/\D/g, '');
+const CALLMEBOT_API_KEY = process.env.CALLMEBOT_API_KEY || '';
+
+const hasSmtpConfig = !!(
+  process.env.SMTP_HOST &&
+  process.env.SMTP_PORT &&
+  process.env.SMTP_USER &&
+  process.env.SMTP_PASS &&
+  process.env.SMTP_FROM
+);
+
+const emailTransporter = hasSmtpConfig
+  ? nodemailer.createTransport({
+      host: process.env.SMTP_HOST,
+      port: Number(process.env.SMTP_PORT),
+      secure: String(process.env.SMTP_SECURE || 'false').toLowerCase() === 'true',
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS
+      }
+    })
+  : null;
+
+async function enviarEmailConfirmacaoCompraENota(payload) {
+  if (!emailTransporter) {
+    console.warn('⚠️ SMTP não configurado. E-mail de confirmação não enviado.');
+    return { success: false, skipped: true, reason: 'SMTP_NOT_CONFIGURED' };
+  }
+
+  const {
+    compradorEmail,
+    compradorNome,
+    instituicaoNome,
+    planoNome,
+    valor,
+    metodoPagamento,
+    dataPagamento,
+    transacaoId,
+    notaNumero,
+    notaSerie,
+    notaCompetencia,
+    notaChaveControle,
+    loginAdmin
+  } = payload;
+
+  const dataFormatada = dataPagamento
+    ? new Date(dataPagamento).toLocaleString('pt-BR')
+    : new Date().toLocaleString('pt-BR');
+
+  const valorFormatado = Number(valor || 0).toLocaleString('pt-BR', {
+    style: 'currency',
+    currency: 'BRL'
+  });
+
+  const assunto = `CEI | Pagamento confirmado e Nota Fiscal emitida - ${instituicaoNome || 'Nova instituição'}`;
+
+  const orientacoesHtml = `
+    <h3>✅ Próximos passos para funcionamento do programa</h3>
+    <ol>
+      <li>Acesse o sistema em <a href="${FRONTEND_URL}">${FRONTEND_URL}</a>.</li>
+      <li>Faça login com o usuário administrador da instituição.</li>
+      <li>Cadastre livros, leitores e configure preferências da biblioteca.</li>
+      <li>Acesse relatórios e financeiro para acompanhamento completo.</li>
+    </ol>
+    <h3>🛟 Assistência e suporte</h3>
+    <p><strong>E-mail de suporte:</strong> ${SUPPORT_EMAIL}</p>
+    ${SUPPORT_WHATSAPP ? `<p><strong>WhatsApp:</strong> ${SUPPORT_WHATSAPP}</p>` : ''}
+  `;
+
+  const htmlBase = `
+    <p>Olá,</p>
+    <p>Seu pagamento foi confirmado e a nota fiscal foi gerada automaticamente no CEI.</p>
+    <h3>📦 Resumo da compra</h3>
+    <ul>
+      <li><strong>Instituição:</strong> ${instituicaoNome || '-'}</li>
+      <li><strong>Responsável:</strong> ${compradorNome || '-'}</li>
+      <li><strong>Plano:</strong> ${planoNome || '-'}</li>
+      <li><strong>Valor:</strong> ${valorFormatado}</li>
+      <li><strong>Método de pagamento:</strong> ${(metodoPagamento || '-').toUpperCase()}</li>
+      <li><strong>Data/hora:</strong> ${dataFormatada}</li>
+      <li><strong>ID da transação:</strong> ${transacaoId || '-'}</li>
+    </ul>
+    <h3>🧾 Nota Fiscal</h3>
+    <ul>
+      <li><strong>Número:</strong> ${notaNumero || '-'}</li>
+      <li><strong>Série:</strong> ${notaSerie || '-'}</li>
+      <li><strong>Competência:</strong> ${notaCompetencia || '-'}</li>
+      <li><strong>Chave de controle:</strong> ${notaChaveControle || '-'}</li>
+    </ul>
+    ${loginAdmin ? `<p><strong>Login administrador:</strong> ${loginAdmin}</p>` : ''}
+    ${orientacoesHtml}
+    <hr />
+    <p>CEI - Controle Escolar Inteligente</p>
+  `;
+
+  const textoBase = `
+Pagamento confirmado e nota fiscal emitida no CEI.
+
+Instituição: ${instituicaoNome || '-'}
+Responsável: ${compradorNome || '-'}
+Plano: ${planoNome || '-'}
+Valor: ${valorFormatado}
+Método: ${(metodoPagamento || '-').toUpperCase()}
+Data/Hora: ${dataFormatada}
+Transação: ${transacaoId || '-'}
+
+Nota Fiscal
+- Número: ${notaNumero || '-'}
+- Série: ${notaSerie || '-'}
+- Competência: ${notaCompetencia || '-'}
+- Chave de controle: ${notaChaveControle || '-'}
+
+Próximos passos:
+1) Acesse ${FRONTEND_URL}
+2) Faça login no sistema
+3) Configure a biblioteca e inicie o uso
+
+Suporte: ${SUPPORT_EMAIL}
+${SUPPORT_WHATSAPP ? `WhatsApp: ${SUPPORT_WHATSAPP}` : ''}
+  `.trim();
+
+  const destinatarios = [compradorEmail, EMAIL_OWNER]
+    .filter(Boolean)
+    .map((email) => String(email).trim().toLowerCase())
+    .filter((email, index, arr) => arr.indexOf(email) === index);
+
+  await Promise.all(
+    destinatarios.map((to) =>
+      emailTransporter.sendMail({
+        from: process.env.SMTP_FROM,
+        to,
+        subject: assunto,
+        html: htmlBase,
+        text: textoBase
+      })
+    )
+  );
+
+  return { success: true, recipients: destinatarios };
+}
+
+function enviarRequisicaoHttps(url) {
+  return new Promise((resolve, reject) => {
+    https
+      .get(url, (response) => {
+        let rawData = '';
+        response.on('data', (chunk) => {
+          rawData += chunk;
+        });
+        response.on('end', () => {
+          resolve({ statusCode: response.statusCode, body: rawData });
+        });
+      })
+      .on('error', (error) => {
+        reject(error);
+      });
+  });
+}
+
+async function enviarWhatsAppCallMeBot(texto) {
+  if (!OWNER_WHATSAPP || !CALLMEBOT_API_KEY) {
+    return { success: false, skipped: true, reason: 'WHATSAPP_NOT_CONFIGURED' };
+  }
+
+  const textoCodificado = encodeURIComponent(texto);
+  const url = `https://api.callmebot.com/whatsapp.php?phone=${OWNER_WHATSAPP}&text=${textoCodificado}&apikey=${CALLMEBOT_API_KEY}`;
+  const response = await enviarRequisicaoHttps(url);
+
+  if (!response.statusCode || response.statusCode < 200 || response.statusCode >= 300) {
+    throw new Error(`Falha no WhatsApp (status ${response.statusCode}).`);
+  }
+
+  return { success: true };
+}
+
+async function enviarNotificacaoWhatsAppCompra(payload) {
+  const {
+    compradorNome,
+    compradorEmail,
+    instituicaoNome,
+    planoNome,
+    valor,
+    metodoPagamento,
+    transacaoId,
+    notaNumero,
+    notaSerie,
+    notaCompetencia,
+    notaChaveControle,
+    dataPagamento
+  } = payload;
+
+  const valorFormatado = Number(valor || 0).toLocaleString('pt-BR', {
+    style: 'currency',
+    currency: 'BRL'
+  });
+
+  const dataFormatada = dataPagamento
+    ? new Date(dataPagamento).toLocaleString('pt-BR')
+    : new Date().toLocaleString('pt-BR');
+
+  const mensagem = [
+    '✅ CEI | Nova compra confirmada',
+    `👤 Comprador: ${compradorNome || '-'}`,
+    `📧 E-mail: ${compradorEmail || '-'}`,
+    `🏫 Instituição: ${instituicaoNome || '-'}`,
+    `📦 Plano: ${planoNome || '-'}`,
+    `💰 Valor: ${valorFormatado}`,
+    `💳 Método: ${(metodoPagamento || '-').toUpperCase()}`,
+    `🕒 Data/Hora: ${dataFormatada}`,
+    `🧾 NF: ${notaNumero || '-'} | Série: ${notaSerie || '-'}`,
+    `📅 Competência: ${notaCompetencia || '-'}`,
+    `🔐 Chave: ${notaChaveControle || '-'}`,
+    `🔁 Transação: ${transacaoId || '-'}`
+  ].join('\n');
+
+  return enviarWhatsAppCallMeBot(mensagem);
+}
+
+async function enviarNotificacaoWhatsAppAcesso(payload) {
+  const { usuario, perfil, instituicao, origem, ip, userAgent } = payload;
+  const mensagem = [
+    '👁️ CEI | Novo acesso ao sistema',
+    `👤 Usuário: ${usuario || '-'}`,
+    `🛡️ Perfil: ${perfil || '-'}`,
+    `🏫 Instituição: ${instituicao || '-'}`,
+    `🌐 Origem: ${origem || '-'}`,
+    `🧭 IP: ${ip || '-'}`,
+    `🖥️ Agente: ${userAgent || '-'}`,
+    `🕒 Data/Hora: ${new Date().toLocaleString('pt-BR')}`
+  ].join('\n');
+
+  return enviarWhatsAppCallMeBot(mensagem);
+}
 
 // ==========================================
 // BANCO DE DADOS DE LICENÇAS (em memória - use banco real em produção)
@@ -602,6 +844,187 @@ app.post('/api/webhooks', async (req, res) => {
   } catch (error) {
     console.error('❌ Erro no webhook:', error);
     res.status(500).send('Error');
+  }
+});
+
+// ==========================================
+// E-MAILS AUTOMÁTICOS DE COMPRA + NOTA
+// ==========================================
+app.post('/api/send-purchase-confirmation', async (req, res) => {
+  try {
+    const {
+      compradorEmail,
+      transacaoId
+    } = req.body || {};
+
+    if (!compradorEmail) {
+      return res.status(400).json({
+        success: false,
+        error: 'E-mail do comprador é obrigatório.'
+      });
+    }
+
+    if (transacaoId && purchaseNotificationSent.has(transacaoId)) {
+      return res.json({
+        success: true,
+        skipped: true,
+        reason: 'ALREADY_SENT'
+      });
+    }
+
+    const resultEmail = await enviarEmailConfirmacaoCompraENota(req.body || {});
+
+    let resultWhatsApp = { success: false, skipped: true, reason: 'NOT_TRIGGERED' };
+    try {
+      resultWhatsApp = await enviarNotificacaoWhatsAppCompra(req.body || {});
+    } catch (whatsError) {
+      console.error('❌ Erro ao enviar notificação WhatsApp da compra:', whatsError.message);
+      resultWhatsApp = { success: false, error: whatsError.message };
+    }
+
+    if (resultEmail.success && transacaoId) {
+      purchaseNotificationSent.add(transacaoId);
+    }
+
+    res.json({
+      success: true,
+      email: resultEmail,
+      whatsapp: resultWhatsApp
+    });
+  } catch (error) {
+    console.error('❌ Erro ao enviar confirmações por e-mail:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Falha ao enviar e-mails de confirmação.',
+      details: error.message
+    });
+  }
+});
+
+app.post('/api/notify-access', async (req, res) => {
+  try {
+    const {
+      usuario,
+      perfil,
+      instituicao,
+      origem
+    } = req.body || {};
+
+    const forwarded = req.headers['x-forwarded-for'];
+    const ip = Array.isArray(forwarded)
+      ? forwarded[0]
+      : (forwarded || req.ip || req.connection?.remoteAddress || 'não identificado');
+
+    const userAgent = req.headers['user-agent'] || 'não informado';
+
+    const resultWhatsApp = await enviarNotificacaoWhatsAppAcesso({
+      usuario,
+      perfil,
+      instituicao,
+      origem,
+      ip,
+      userAgent
+    });
+
+    res.json({ success: true, whatsapp: resultWhatsApp });
+  } catch (error) {
+    console.error('❌ Erro ao notificar acesso:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/test-smtp', async (req, res) => {
+  try {
+    if (!emailTransporter) {
+      return res.status(400).json({
+        success: false,
+        error: 'SMTP não configurado. Defina SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS e SMTP_FROM.'
+      });
+    }
+
+    const destino = (req.body?.email || EMAIL_OWNER || '').trim();
+    if (!destino) {
+      return res.status(400).json({
+        success: false,
+        error: 'Informe um e-mail de destino em req.body.email ou configure OWNER_NOTIFICATION_EMAIL.'
+      });
+    }
+
+    await emailTransporter.verify();
+
+    await emailTransporter.sendMail({
+      from: process.env.SMTP_FROM,
+      to: destino,
+      subject: '✅ CEI - Teste SMTP concluído',
+      text: `Teste SMTP concluído com sucesso em ${new Date().toLocaleString('pt-BR')}.`,
+      html: `<p><strong>Teste SMTP concluído com sucesso.</strong></p><p>Data/Hora: ${new Date().toLocaleString('pt-BR')}</p>`
+    });
+
+    return res.json({
+      success: true,
+      message: 'E-mail de teste enviado com sucesso.',
+      to: destino
+    });
+  } catch (error) {
+    console.error('❌ Erro no teste SMTP:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Falha no teste SMTP.',
+      details: error.message
+    });
+  }
+});
+
+app.post('/api/test-email', async (req, res) => {
+  try {
+    const testToken = process.env.TEST_EMAIL_TOKEN;
+    if (testToken) {
+      const receivedToken = req.headers['x-test-token'] || req.body?.token;
+      if (!receivedToken || receivedToken !== testToken) {
+        return res.status(401).json({
+          success: false,
+          error: 'Token de teste inválido.'
+        });
+      }
+    }
+
+    const compradorEmail = req.body?.compradorEmail || 'comprador.teste@exemplo.com';
+    const compradorNome = req.body?.compradorNome || 'Comprador de Teste';
+    const instituicaoNome = req.body?.instituicaoNome || 'Instituição de Teste CEI';
+    const planoNome = req.body?.planoNome || 'Plano 1 Ano (365 dias)';
+    const valor = req.body?.valor ?? 970;
+    const metodoPagamento = req.body?.metodoPagamento || 'pix';
+    const dataPagamento = req.body?.dataPagamento || new Date().toISOString();
+    const transacaoId = req.body?.transacaoId || `TEST-${Date.now()}`;
+
+    const result = await enviarEmailConfirmacaoCompraENota({
+      compradorEmail,
+      compradorNome,
+      instituicaoNome,
+      planoNome,
+      valor,
+      metodoPagamento,
+      dataPagamento,
+      transacaoId,
+      notaNumero: req.body?.notaNumero || 9999,
+      notaSerie: req.body?.notaSerie || 'T1',
+      notaCompetencia: req.body?.notaCompetencia || new Date().toISOString().slice(0, 7),
+      notaChaveControle: req.body?.notaChaveControle || `TEST-KEY-${Date.now()}`,
+      loginAdmin: req.body?.loginAdmin || 'admin.teste'
+    });
+
+    res.json({
+      success: true,
+      message: 'E-mails de teste processados.',
+      email: result
+    });
+  } catch (error) {
+    console.error('❌ Erro no envio de e-mail de teste:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Falha ao enviar e-mails de teste.',
+      details: error.message
+    });
   }
 });
 

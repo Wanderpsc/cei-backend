@@ -17,6 +17,7 @@ import {
   Alert,
   Grid,
   Avatar,
+  Button,
   FormControl,
   InputLabel,
   Select,
@@ -31,8 +32,13 @@ import {
   Edit,
   Delete,
   Add,
-  AssignmentReturn
+  AssignmentReturn,
+  Login,
+  Logout,
+  Visibility,
+  Print
 } from '@mui/icons-material';
+import { imprimirEscopo } from '../utils/printUtils';
 
 export default function RelatorioUsuariosPage() {
   const { 
@@ -46,6 +52,10 @@ export default function RelatorioUsuariosPage() {
   const [filtroAcao, setFiltroAcao] = useState('todas');
   const [dataInicio, setDataInicio] = useState('');
   const [dataFim, setDataFim] = useState('');
+
+  const handleImprimir = () => {
+    imprimirEscopo();
+  };
 
   // Verificar se é usuário master
   const isMaster = usuarioLogado?.tipo === 'master' || usuarioLogado?.perfil === 'Admin';
@@ -78,6 +88,9 @@ export default function RelatorioUsuariosPage() {
 
   const getIconeAcao = (acao) => {
     switch (acao) {
+      case 'acesso': return <Visibility sx={{ fontSize: 20 }} />;
+      case 'login': return <Login sx={{ fontSize: 20 }} />;
+      case 'logout': return <Logout sx={{ fontSize: 20 }} />;
       case 'adicionar': return <Add sx={{ fontSize: 20 }} />;
       case 'editar': return <Edit sx={{ fontSize: 20 }} />;
       case 'excluir': return <Delete sx={{ fontSize: 20 }} />;
@@ -89,6 +102,9 @@ export default function RelatorioUsuariosPage() {
 
   const getCorAcao = (acao) => {
     switch (acao) {
+      case 'acesso': return 'secondary';
+      case 'login': return 'success';
+      case 'logout': return 'default';
       case 'adicionar': return 'success';
       case 'editar': return 'info';
       case 'excluir': return 'error';
@@ -107,6 +123,8 @@ export default function RelatorioUsuariosPage() {
     return {
       usuario: usuario.nome,
       total: logsUsuario.length,
+      acessos: logsUsuario.filter(l => l.acao === 'acesso').length,
+      logins: logsUsuario.filter(l => l.acao === 'login').length,
       adicoes: logsUsuario.filter(l => l.acao === 'adicionar').length,
       edicoes: logsUsuario.filter(l => l.acao === 'editar').length,
       exclusoes: logsUsuario.filter(l => l.acao === 'excluir').length,
@@ -127,6 +145,20 @@ export default function RelatorioUsuariosPage() {
 
   return (
     <Layout title="Relatório de Atividades dos Usuários">
+      <Box sx={{ mb: 2 }} className="print-actions no-print">
+        <Button variant="outlined" startIcon={<Print />} onClick={handleImprimir}>
+          Imprimir Relatório
+        </Button>
+      </Box>
+
+      <Box className="print-scope">
+      <Typography className="print-only" variant="h6" fontWeight="bold" sx={{ mb: 1 }}>
+        Relatório de Atividades dos Usuários
+      </Typography>
+      <Typography className="print-only" variant="body2" sx={{ mb: 2 }}>
+        Emitido em: {new Date().toLocaleString('pt-BR')}
+      </Typography>
+
       <Box sx={{ mb: 3 }}>
         <Alert severity="info">
           <Typography variant="body2">
@@ -136,7 +168,7 @@ export default function RelatorioUsuariosPage() {
       </Box>
 
       {/* Estatísticas por Usuário */}
-      <Card sx={{ mb: 3 }}>
+      <Card sx={{ mb: 3 }} className="no-print">
         <CardContent>
           <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <Person /> Estatísticas por Usuário
@@ -147,6 +179,8 @@ export default function RelatorioUsuariosPage() {
                 <TableRow>
                   <TableCell>Usuário</TableCell>
                   <TableCell align="center">Total</TableCell>
+                  <TableCell align="center">Acessos</TableCell>
+                  <TableCell align="center">Logins</TableCell>
                   <TableCell align="center">Adições</TableCell>
                   <TableCell align="center">Edições</TableCell>
                   <TableCell align="center">Exclusões</TableCell>
@@ -166,6 +200,8 @@ export default function RelatorioUsuariosPage() {
                       </Box>
                     </TableCell>
                     <TableCell align="center"><Chip label={stat.total} size="small" /></TableCell>
+                    <TableCell align="center"><Chip label={stat.acessos} size="small" color="secondary" /></TableCell>
+                    <TableCell align="center"><Chip label={stat.logins} size="small" color="success" /></TableCell>
                     <TableCell align="center"><Chip label={stat.adicoes} size="small" color="success" /></TableCell>
                     <TableCell align="center"><Chip label={stat.edicoes} size="small" color="info" /></TableCell>
                     <TableCell align="center"><Chip label={stat.exclusoes} size="small" color="error" /></TableCell>
@@ -216,6 +252,9 @@ export default function RelatorioUsuariosPage() {
                   <MenuItem value="adicionar">Adições</MenuItem>
                   <MenuItem value="editar">Edições</MenuItem>
                   <MenuItem value="excluir">Exclusões</MenuItem>
+                  <MenuItem value="acesso">Acessos</MenuItem>
+                  <MenuItem value="login">Logins</MenuItem>
+                  <MenuItem value="logout">Logouts</MenuItem>
                   <MenuItem value="emprestimo">Empréstimos</MenuItem>
                   <MenuItem value="devolucao">Devoluções</MenuItem>
                 </Select>
@@ -312,6 +351,7 @@ export default function RelatorioUsuariosPage() {
           </TableContainer>
         </CardContent>
       </Card>
+      </Box>
     </Layout>
   );
 }

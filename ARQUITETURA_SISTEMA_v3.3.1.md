@@ -1,8 +1,8 @@
-# 🏗️ ARQUITETURA DO SISTEMA CEI v3.3.1
+# 🏗️ ARQUITETURA DO SISTEMA CEI v3.6.0
 ## Controle Escolar Inteligente - Biblioteca
 
-**Última Atualização:** 08/01/2026  
-**Versão:** 3.3.1 - Seleção de Leitor Corrigida
+**Última Atualização:** 14/02/2026  
+**Versão:** 3.6.0 - Diagrama Super Admin, Scanner Híbrido e Supabase
 
 ---
 
@@ -12,11 +12,12 @@
 - **PWA (Progressive Web App)** - Aplicação Web Progressiva
 - **SPA (Single Page Application)** - Aplicação de Página Única
 - **Multi-tenant** - Múltiplas instituições no mesmo sistema
+- **Arquitetura Híbrida de Dados** - LocalStorage + Supabase PostgreSQL
 
 ### Modelo de Negócio
 - **SaaS (Software as a Service)** - Software como Serviço
 - **Licenciamento por assinatura mensal**
-- **Notas Fiscais emitidas para escolas que adquirem licenças**
+- **Notas Fiscais emitidas para escolas que adquirem licenças (exclusivo SuperAdmin)**
 
 ---
 
@@ -50,6 +51,7 @@
 - ✅ Financeiro (pagamentos de mensalidade ao SuperAdmin)
 - ❌ NÃO acessa dados de outras instituições
 - ❌ NÃO gerencia planos ou configura preços
+- ❌ NÃO acessa módulo de Notas Fiscais (ISS)
 - ❌ NÃO vê diagrama técnico do sistema
 
 **Dashboard Cliente:**
@@ -173,7 +175,7 @@
 ```
 1. Usuário clica em "Adicionar Livro"
 2. Sistema abre formulário com ISBN em primeiro lugar (obrigatório)
-3. Usuário digita ISBN
+3. Usuário informa ISBN por digitação, scanner mobile ou leitor laser USB (HID)
 4. Sistema busca na Google Books API (pt-BR prioritário)
 5. Sistema preenche automaticamente todos os campos
 6. Sistema busca foto da capa (prioridade: extraLarge > large > medium > thumbnail)
@@ -238,22 +240,26 @@ ETAPA 2 - Selecionar Leitor:
 ## 🛠️ STACK TECNOLÓGICO
 
 ### Frontend
-- **React 18** - Framework JavaScript
-- **React Router v6** - Navegação entre páginas
-- **Material-UI v5 (MUI)** - Componentes visuais
+- **React 19** - Framework JavaScript
+- **React Router v7** - Navegação entre páginas
+- **Material-UI v7 (MUI)** - Componentes visuais
 - **React Context API** - Gerenciamento de estado global
 - **Axios** - Cliente HTTP
+- **@zxing/library + html5-qrcode** - Scanner mobile de códigos
 - **Service Worker** - Cache e PWA
 
 ### APIs Externas
 - **Google Books API** - Busca de livros por ISBN
   - Estratégia dual: pt-restricted primeiro, depois global
   - Fetch de capas com fallback de qualidade
+- **Google Gemini AI** - Busca inteligente complementar de dados de livros
+- **Mercado Pago API** - Pagamentos e webhooks de confirmação
 
 ### Armazenamento
-- **localStorage** - Persistência local dos dados
+- **localStorage** - Cache local e operação offline
+- **Supabase PostgreSQL** - Persistência em nuvem e sincronização multi-dispositivo
 - **Service Worker Cache** - Cache de recursos estáticos
-- **Versionamento de Cache** - cei-v3.3.1
+- **Versionamento de Cache** - cei-v2.1.0+
 
 ### Hospedagem
 - **Surge.sh** - Hosting de arquivos estáticos
@@ -385,6 +391,8 @@ CEI/
 - Auto-preenchimento de campos
 - Busca de foto da capa
 - Validação de campos
+- Captura automática de scanner laser USB (HID)
+- Diferenciação entre digitação humana e scanner por velocidade
 
 ### 4. ProtectedRoute.js
 - Proteção de rotas por perfil
@@ -393,7 +401,7 @@ CEI/
 
 ---
 
-## 📈 FEATURES IMPLEMENTADAS v3.3.1
+## 📈 FEATURES IMPLEMENTADAS v3.6.0
 
 ### ✅ Cadastro de Livros
 - [x] ISBN obrigatório e primeiro campo
@@ -437,8 +445,20 @@ CEI/
 - [x] Alertas de vencimento de licença
 - [x] Alertas de inadimplência
 
+### ✅ Scanner Híbrido (Mobile + Laser USB)
+- [x] Scanner mobile por câmera (ZXing/html5-qrcode)
+- [x] Scanner laser USB (HID keyboard)
+- [x] Detecção automática por velocidade (<50ms)
+- [x] Busca automática por ISBN e auto-preenchimento
+
+### ✅ Supabase e Sincronização
+- [x] Arquitetura híbrida LocalStorage + Supabase
+- [x] Sincronização automática entre dispositivos
+- [x] Políticas de segurança com RLS
+- [x] Operação offline-first com cache local
+
 ### ✅ PWA e Performance
-- [x] Service Worker v3.3.1
+- [x] Service Worker versionado
 - [x] Cache busting automático
 - [x] Instalação como app
 - [x] Funciona offline
@@ -449,14 +469,11 @@ CEI/
 ## 🚀 MELHORIAS FUTURAS
 
 ### Planejado
-- [ ] Backend com Node.js + PostgreSQL
-- [ ] Autenticação JWT
-- [ ] Sincronização em nuvem
+- [ ] Melhorias avançadas de auditoria e observabilidade
 - [ ] Upload de fotos de leitores
 - [ ] QR Code para empréstimos rápidos
 - [ ] Notificações push (vencimentos)
 - [ ] Relatórios em PDF
-- [ ] Integração com Mercado Pago (pagamentos)
 - [ ] API REST para integrações
 - [ ] Backup automático
 
@@ -494,8 +511,8 @@ CEI/
 
 **Desenvolvedor:** Wander Pires Silva Coelho  
 **Email:** wanderpsc@gmail.com  
-**Versão Atual:** 3.3.1  
-**Data:** 08/01/2026
+**Versão Atual:** 3.6.0  
+**Data:** 14/02/2026
 
 ---
 

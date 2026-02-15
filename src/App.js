@@ -52,9 +52,56 @@ const theme = createTheme({
   },
 });
 
+const ROUTE_TITLES = {
+  '/': 'Dashboard',
+  '/gerenciar-escolas': 'Gerenciar Escolas',
+  '/configurar-planos': 'Configurar Planos',
+  '/financeiro-admin': 'Financeiro Admin',
+  '/financeiro': 'Financeiro',
+  '/livros': 'Livros',
+  '/patrimonio': 'Patrimônio',
+  '/clientes': 'Leitores',
+  '/emprestimos': 'Empréstimos',
+  '/devolucoes': 'Devoluções',
+  '/relatorios': 'Relatórios',
+  '/busca': 'Busca',
+  '/diagrama-sistema': 'Diagrama do Sistema',
+  '/limpar-duplicatas': 'Limpar Duplicatas',
+  '/clube-leitura': 'Clube de Leitura',
+  '/relatorios-livros': 'Relatórios de Livros',
+  '/notas-fiscais': 'Notas Fiscais',
+  '/gerenciar-usuarios': 'Gerenciar Usuários',
+  '/relatorio-usuarios': 'Relatório de Usuários',
+  '/configuracoes': 'Configurações'
+};
+
 function PrivateRoute({ children }) {
-  const { usuarioLogado, autenticacaoCarregada } = useData();
+  const { usuarioLogado, autenticacaoCarregada, registrarAcessoPagina } = useData();
   const location = useLocation();
+
+  const isAdminDaEscola = (
+    usuarioLogado?.tipo === 'master' ||
+    usuarioLogado?.perfil === 'Admin' ||
+    usuarioLogado?.perfil === 'AdminEscola'
+  );
+
+  const permissoesUsuario = Array.isArray(usuarioLogado?.permissoes) ? usuarioLogado.permissoes : null;
+
+  const temPermissaoRota = () => {
+    if (!usuarioLogado) {
+      return false;
+    }
+
+    if (usuarioLogado.perfil === 'SuperAdmin' || isAdminDaEscola) {
+      return true;
+    }
+
+    if (!permissoesUsuario || permissoesUsuario.length === 0) {
+      return true; // usuários legados sem permissões explícitas
+    }
+
+    return location.pathname === '/' || permissoesUsuario.includes(location.pathname);
+  };
   
   // Log detalhado para debug
   console.log('🔍 PrivateRoute - Verificando acesso:', {
@@ -90,6 +137,17 @@ function PrivateRoute({ children }) {
   
   // Se está logado, verificar licença
   console.log('✅ Usuário autenticado:', usuarioLogado.nome, '- Verificando licença...');
+
+  if (!temPermissaoRota()) {
+    console.log('⛔ Acesso negado por permissão para rota:', location.pathname);
+    return <Navigate to="/" replace />;
+  }
+
+  React.useEffect(() => {
+    if (!usuarioLogado || !autenticacaoCarregada) return;
+    registrarAcessoPagina(location.pathname, ROUTE_TITLES[location.pathname] || location.pathname);
+  }, [location.pathname, usuarioLogado?.id, autenticacaoCarregada, registrarAcessoPagina]);
+
   return <ProtectedRoute>{children}</ProtectedRoute>;
 }
 

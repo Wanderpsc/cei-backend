@@ -39,50 +39,92 @@ body {
   background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
 }
 
-/* Estilos de impressão para o diagrama do sistema */
+/* Sistema global de impressão (relatórios e detalhes) */
 @media print {
-  /* Ocultar elementos de navegação e botões */
+  @page {
+    size: A4;
+    margin: 1.2cm;
+  }
+
+  body {
+    background: #ffffff !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
   header,
   nav,
   .MuiAppBar-root,
   .MuiDrawer-root,
-  button,
-  .no-print {
+  .no-print,
+  .print-actions,
+  .print-hide,
+  button {
     display: none !important;
   }
 
-  /* Ajustar layout para impressão */
-  body {
-    background-color: white !important;
-  }
-
-  /* Forçar quebra de página antes de seções importantes */
   .page-break {
     page-break-before: always;
+    break-before: page;
   }
 
-  /* Evitar quebra de página dentro de elementos */
+  .avoid-break,
   .MuiCard-root,
-  .MuiPaper-root {
+  .MuiPaper-root,
+  .MuiTableRow-root,
+  .MuiTableContainer-root {
     page-break-inside: avoid;
+    break-inside: avoid;
   }
 
-  /* Ajustar cores para impressão */
   .MuiPaper-root {
     box-shadow: none !important;
-    border: 1px solid #ddd !important;
+    border: 1px solid #d9d9d9 !important;
   }
 
-  /* Ajustar tamanho de fonte */
-  pre {
-    font-size: 10px !important;
-  }
-
-  /* Garantir que o conteúdo use toda a página */
   .MuiContainer-root {
     max-width: 100% !important;
+    width: 100% !important;
     padding: 0 !important;
   }
+
+  .MuiTableCell-root {
+    font-size: 11px !important;
+    padding: 6px !important;
+  }
+
+  pre {
+    font-size: 10px !important;
+    white-space: pre-wrap !important;
+    word-break: break-word !important;
+  }
+
+  /* Modo de impressão por escopo */
+  body.print-scope-active * {
+    visibility: hidden !important;
+  }
+
+  body.print-scope-active .print-scope,
+  body.print-scope-active .print-scope * {
+    visibility: visible !important;
+  }
+
+  body.print-scope-active .print-scope {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    background: #fff;
+  }
+
+  .print-only {
+    display: block !important;
+  }
+}
+
+.print-only {
+  display: none !important;
 }
 
 /* Melhorias para Mobile */

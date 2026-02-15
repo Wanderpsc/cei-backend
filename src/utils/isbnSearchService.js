@@ -31,9 +31,9 @@ import axios from 'axios';
 // Configuração de timeout padrão - aumentado para APIs mais lentas
 const DEFAULT_TIMEOUT = 15000; // 15 segundos
 
-// Google Books API sem key (100 requisições/dia)
+// Google Books API com key (10.000 requisições/dia)
 // Para aumentar o limite, obtenha uma chave em: https://console.cloud.google.com/
-const GOOGLE_BOOKS_API_KEY = ''; // Removida - usar sem key funciona melhor
+const GOOGLE_BOOKS_API_KEY = 'AIzaSyDH1zz_4BOhOWZMniNHwhiU304lilovkzs';
 
 // 🤖 Google Gemini API Key (GRATUITO - 60 requisições/minuto)
 // 📌 CONFIGURAÇÃO SEGURA VIA VARIÁVEL DE AMBIENTE:

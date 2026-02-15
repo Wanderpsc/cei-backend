@@ -26,8 +26,97 @@ import LoginIcon from '@mui/icons-material/Login';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import LockResetIcon from '@mui/icons-material/LockReset';
 import EmailIcon from '@mui/icons-material/Email';
+import SmartDisplayIcon from '@mui/icons-material/SmartDisplay';
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
+import CloseIcon from '@mui/icons-material/Close';
+import MenuBookIcon from '@mui/icons-material/MenuBook';
+import AssignmentReturnIcon from '@mui/icons-material/AssignmentReturn';
+import QrCodeScannerIcon from '@mui/icons-material/QrCodeScanner';
+import AssessmentIcon from '@mui/icons-material/Assessment';
+import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
+import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
+
+const DEMO_VIDEOS = [
+  {
+    id: 'livros',
+    titulo: 'Catálogo Inteligente de Livros',
+    descricao: 'Cadastro completo, busca avançada e organização por categorias em segundos.',
+    metricA: '1.500+ livros',
+    metricB: 'Busca em 0,4s',
+    destaque: ['Cadastro rápido', 'Filtros inteligentes', 'Localização imediata'],
+    gradiente: 'linear-gradient(135deg, #0f2027 0%, #203a43 45%, #2c5364 100%)',
+    icon: MenuBookIcon
+  },
+  {
+    id: 'emprestimos',
+    titulo: 'Empréstimos e Devoluções em Tempo Real',
+    descricao: 'Fluxo rápido para emprestar, devolver, renovar e acompanhar prazos automaticamente.',
+    metricA: 'Processo em 12s',
+    metricB: 'Alertas automáticos',
+    destaque: ['Empréstimo', 'Renovação', 'Devolução com histórico'],
+    gradiente: 'linear-gradient(135deg, #232526 0%, #414345 100%)',
+    icon: AssignmentReturnIcon
+  },
+  {
+    id: 'scanner',
+    titulo: 'Scanner Híbrido (Mobile + USB)',
+    descricao: 'Leitura de códigos de barras por câmera e leitor laser para máxima produtividade.',
+    metricA: 'Modo câmera + USB',
+    metricB: 'Leitura instantânea',
+    destaque: ['Compatível HID', 'Mobile otimizado', 'Fallback inteligente'],
+    gradiente: 'linear-gradient(135deg, #1f1c2c 0%, #928dab 100%)',
+    icon: QrCodeScannerIcon
+  },
+  {
+    id: 'relatorios',
+    titulo: 'Relatórios Profissionais',
+    descricao: 'Relatórios operacionais e gerenciais com impressão padronizada e visão executiva.',
+    metricA: 'Insights em 1 clique',
+    metricB: 'Impressão A4',
+    destaque: ['Gestão de livros', 'Produtividade', 'Auditoria completa'],
+    gradiente: 'linear-gradient(135deg, #141e30 0%, #243b55 100%)',
+    icon: AssessmentIcon
+  },
+  {
+    id: 'financeiro',
+    titulo: 'Financeiro e Indicadores',
+    descricao: 'Painéis para gestão financeira, planos, inadimplência e acompanhamento de receita.',
+    metricA: 'Dashboard executivo',
+    metricB: 'Status em tempo real',
+    destaque: ['Planos', 'Receita', 'Inadimplência'],
+    gradiente: 'linear-gradient(135deg, #0f2027 0%, #2c5364 100%)',
+    icon: AccountBalanceWalletIcon
+  },
+  {
+    id: 'fiscal',
+    titulo: 'Pagamentos + Nota Fiscal Automática',
+    descricao: 'Confirmação de pagamento, emissão de nota e notificações por e-mail e WhatsApp.',
+    metricA: 'Pagamento confirmado',
+    metricB: 'NF gerada automática',
+    destaque: ['PIX/Cartão', 'NFS automática', 'Notificação WhatsApp'],
+    gradiente: 'linear-gradient(135deg, #2b5876 0%, #4e4376 100%)',
+    icon: ReceiptLongIcon
+  }
+];
+
+const CREDENCIAIS_DEMO = {
+  login: 'demo',
+  senha: 'demo2026'
+};
+
+const DEMO_DEVICE_ID_KEY = 'cei_demo_device_id';
+
+const formatarIdentificadorDemo = (deviceId) => {
+  if (!deviceId) return 'Será gerado ao clicar em Usar demo';
+
+  const partes = deviceId.split('-');
+  const base = (partes[partes.length - 1] || deviceId).slice(0, 6).toUpperCase();
+  return `DEMO-${base}`;
+};
 
 export default function LoginPage() {
+  const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
+  const identificadorDemo = formatarIdentificadorDemo(localStorage.getItem(DEMO_DEVICE_ID_KEY));
   const [login, setLogin] = useState('');
   const [senha, setSenha] = useState('');
   const [erro, setErro] = useState('');
@@ -40,6 +129,8 @@ export default function LoginPage() {
   const [sucessoRecuperacao, setSucessoRecuperacao] = useState('');
   const [mostrarNovaSenha, setMostrarNovaSenha] = useState(false);
   const [etapaRecuperacao, setEtapaRecuperacao] = useState(1); // 1: email, 2: nova senha
+  const [dialogTourVideo, setDialogTourVideo] = useState(false);
+  const [videoSelecionado, setVideoSelecionado] = useState(DEMO_VIDEOS[0]);
   const { login: fazerLogin, recuperarSenha, usuarioLogado } = useData();
   const navigate = useNavigate();
   const location = useLocation();
@@ -53,18 +144,62 @@ export default function LoginPage() {
     }
   }, [usuarioLogado, navigate, location]);
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    setErro('');
-    
-    if (fazerLogin(login, senha)) {
-      // Redirecionar para a página de origem ou para home
+  useEffect(() => {
+    if (!dialogTourVideo) return;
+
+    const intervalo = setInterval(() => {
+      setVideoSelecionado((atual) => {
+        const idxAtual = DEMO_VIDEOS.findIndex((item) => item.id === atual.id);
+        const proximoIndice = idxAtual >= DEMO_VIDEOS.length - 1 ? 0 : idxAtual + 1;
+        return DEMO_VIDEOS[proximoIndice];
+      });
+    }, 7000);
+
+    return () => clearInterval(intervalo);
+  }, [dialogTourVideo]);
+
+  const processarLogin = (usuario, senhaUsuario) => {
+    if (fazerLogin(usuario, senhaUsuario)) {
+      try {
+        fetch(`${API_URL}/api/notify-access`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            usuario,
+            perfil: 'Autenticado',
+            instituicao: 'Login CEI',
+            origem: window.location.origin
+          })
+        }).catch((error) => {
+          console.error('Erro ao notificar acesso no backend:', error);
+        });
+      } catch (error) {
+        console.error('Erro ao iniciar notificação de acesso:', error);
+      }
+
       const from = location.state?.from?.pathname || '/';
       console.log('✅ Login realizado, redirecionando para:', from);
       navigate(from, { replace: true });
-    } else {
-      setErro('Login ou senha inválidos');
+      return;
     }
+
+    setErro('Login ou senha inválidos');
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    setErro('');
+
+    processarLogin(login, senha);
+  };
+
+  const handleUsarCredenciaisDemo = () => {
+    setLogin(CREDENCIAIS_DEMO.login);
+    setSenha(CREDENCIAIS_DEMO.senha);
+    setErro('');
+    processarLogin(CREDENCIAIS_DEMO.login, CREDENCIAIS_DEMO.senha);
   };
 
   const handleAbrirRecuperacao = () => {
@@ -114,8 +249,28 @@ export default function LoginPage() {
       return;
     }
 
-    if (novaSenha.length < 6) {
-      setErroRecuperacao('A senha deve ter no mínimo 6 caracteres');
+    if (novaSenha.length < 8) {
+      setErroRecuperacao('A senha deve ter no mínimo 8 caracteres');
+      return;
+    }
+
+    if (!/[A-Z]/.test(novaSenha)) {
+      setErroRecuperacao('A senha deve conter pelo menos 1 letra maiúscula');
+      return;
+    }
+
+    if (!/[a-z]/.test(novaSenha)) {
+      setErroRecuperacao('A senha deve conter pelo menos 1 letra minúscula');
+      return;
+    }
+
+    if (!/[0-9]/.test(novaSenha)) {
+      setErroRecuperacao('A senha deve conter pelo menos 1 número');
+      return;
+    }
+
+    if (!/[^A-Za-z0-9]/.test(novaSenha)) {
+      setErroRecuperacao('A senha deve conter pelo menos 1 caractere especial');
       return;
     }
 
@@ -236,6 +391,29 @@ export default function LoginPage() {
               Bem-vindo! Faça login para continuar
             </Typography>
           </Box>
+
+          <Alert severity="info" sx={{ mb: 2 }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 0.5 }}>
+              ACESSO DEMONSTRAÇÃO
+            </Typography>
+            <Typography variant="body2" sx={{ fontWeight: 700 }}>
+              Login: {CREDENCIAIS_DEMO.login} | Senha: {CREDENCIAIS_DEMO.senha}
+            </Typography>
+            <Typography variant="caption" display="block" sx={{ mt: 0.5 }}>
+              Teste por 30 dias com até 20 livros, 20 leitores e movimentação completa de empréstimos/devoluções.
+            </Typography>
+            <Typography variant="caption" display="block" sx={{ mt: 0.5, fontWeight: 700 }}>
+              Sessão demo deste dispositivo: cada cliente usa um perfil de demonstração próprio.
+            </Typography>
+            <Typography variant="caption" display="block" sx={{ mt: 0.5 }}>
+              Identificador da sessão demo: {identificadorDemo}
+            </Typography>
+            <Box sx={{ mt: 1.2, display: 'flex', justifyContent: 'flex-end' }}>
+              <Button size="small" variant="outlined" onClick={handleUsarCredenciaisDemo}>
+                Usar demo
+              </Button>
+            </Box>
+          </Alert>
 
           {erro && (
             <Alert severity="error" sx={{ mb: 2 }}>
@@ -385,6 +563,29 @@ export default function LoginPage() {
               }}
             >
               Cadastrar Nova Instituição
+            </Button>
+
+            <Button
+              variant="contained"
+              fullWidth
+              startIcon={<SmartDisplayIcon />}
+              onClick={() => setDialogTourVideo(true)}
+              sx={{
+                mt: 1.5,
+                borderRadius: 2,
+                py: 1,
+                fontWeight: 700,
+                background: 'linear-gradient(135deg, #00c6ff 0%, #0072ff 100%)',
+                boxShadow: '0 8px 24px rgba(0, 114, 255, 0.35)',
+                transition: 'all 0.3s',
+                '&:hover': {
+                  transform: 'translateY(-2px)',
+                  boxShadow: '0 12px 28px rgba(0, 114, 255, 0.45)',
+                  background: 'linear-gradient(135deg, #0072ff 0%, #00c6ff 100%)',
+                }
+              }}
+            >
+              Ver Tour em Vídeo do Sistema
             </Button>
           </Box>
 
@@ -563,6 +764,169 @@ export default function LoginPage() {
                 Redefinir Senha
               </Button>
             )}
+          </DialogActions>
+        </Dialog>
+
+        <Dialog
+          open={dialogTourVideo}
+          onClose={() => setDialogTourVideo(false)}
+          maxWidth="lg"
+          fullWidth
+          PaperProps={{
+            sx: {
+              borderRadius: 3,
+              overflow: 'hidden'
+            }
+          }}
+        >
+          <DialogTitle
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              background: 'linear-gradient(135deg, #0f2027 0%, #203a43 50%, #2c5364 100%)',
+              color: 'white'
+            }}
+          >
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <AutoAwesomeIcon />
+              <Typography variant="h6" fontWeight="bold">
+                CEI Experience - Tour Completo de Funcionalidades
+              </Typography>
+            </Box>
+            <IconButton onClick={() => setDialogTourVideo(false)} sx={{ color: 'white' }}>
+              <CloseIcon />
+            </IconButton>
+          </DialogTitle>
+
+          <DialogContent sx={{ p: 0 }}>
+            <Box sx={{ p: 2, bgcolor: '#f6f9ff' }}>
+              <Box
+                sx={{
+                  borderRadius: 2,
+                  overflow: 'hidden',
+                  boxShadow: '0 12px 30px rgba(0,0,0,0.2)',
+                  bgcolor: 'black',
+                  minHeight: 300,
+                  background: videoSelecionado.gradiente,
+                  color: 'white',
+                  position: 'relative'
+                }}
+              >
+                <Box sx={{ p: { xs: 2, md: 3 }, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                    {(() => {
+                      const IconComp = videoSelecionado.icon;
+                      return <IconComp sx={{ fontSize: 36 }} />;
+                    })()}
+                    <Typography variant="h5" fontWeight="bold">Demonstração Inteligente CEI</Typography>
+                  </Box>
+
+                  <Box
+                    sx={{
+                      display: 'grid',
+                      gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
+                      gap: 2
+                    }}
+                  >
+                    <Box sx={{ p: 2, borderRadius: 2, bgcolor: 'rgba(255,255,255,0.12)', backdropFilter: 'blur(6px)' }}>
+                      <Typography variant="caption" sx={{ opacity: 0.85 }}>Performance</Typography>
+                      <Typography variant="h6" fontWeight="bold">{videoSelecionado.metricA}</Typography>
+                    </Box>
+                    <Box sx={{ p: 2, borderRadius: 2, bgcolor: 'rgba(255,255,255,0.12)', backdropFilter: 'blur(6px)' }}>
+                      <Typography variant="caption" sx={{ opacity: 0.85 }}>Tecnologia</Typography>
+                      <Typography variant="h6" fontWeight="bold">{videoSelecionado.metricB}</Typography>
+                    </Box>
+                  </Box>
+
+                  <Box sx={{ p: 2, borderRadius: 2, bgcolor: 'rgba(0,0,0,0.25)' }}>
+                    {videoSelecionado.destaque.map((item) => (
+                      <Typography key={item} variant="body2" sx={{ mb: 0.8 }}>
+                        • {item}
+                      </Typography>
+                    ))}
+                  </Box>
+
+                  <Box sx={{ display: 'flex', gap: 1 }}>
+                    {[1, 2, 3].map((bar) => (
+                      <Box
+                        key={bar}
+                        sx={{
+                          height: 8,
+                          flex: 1,
+                          borderRadius: 99,
+                          bgcolor: 'rgba(255,255,255,0.25)',
+                          overflow: 'hidden'
+                        }}
+                      >
+                        <Box
+                          sx={{
+                            height: '100%',
+                            width: `${65 + bar * 10}%`,
+                            borderRadius: 99,
+                            bgcolor: '#7cf3ff',
+                            boxShadow: '0 0 12px rgba(124,243,255,0.9)',
+                            transition: 'all 0.8s ease'
+                          }}
+                        />
+                      </Box>
+                    ))}
+                  </Box>
+                </Box>
+              </Box>
+
+              <Box sx={{ mt: 1.5, mb: 2 }}>
+                <Typography variant="h6" fontWeight="bold" color="primary.main">
+                  {videoSelecionado.titulo}
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  {videoSelecionado.descricao}
+                </Typography>
+              </Box>
+
+              <Box
+                sx={{
+                  display: 'grid',
+                  gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', md: '1fr 1fr 1fr' },
+                  gap: 1.2
+                }}
+              >
+                {DEMO_VIDEOS.map((video) => (
+                  <Button
+                    key={video.id}
+                    variant={videoSelecionado.id === video.id ? 'contained' : 'outlined'}
+                    startIcon={<SmartDisplayIcon />}
+                    onClick={() => {
+                      setVideoSelecionado(video);
+                    }}
+                    sx={{
+                      justifyContent: 'flex-start',
+                      textTransform: 'none',
+                      borderRadius: 2,
+                      py: 1,
+                      px: 1.5,
+                      fontWeight: 600
+                    }}
+                  >
+                    {video.titulo}
+                  </Button>
+                ))}
+              </Box>
+            </Box>
+          </DialogContent>
+
+          <DialogActions sx={{ px: 3, py: 1.5, bgcolor: '#f6f9ff' }}>
+            <Button
+              variant="contained"
+              onClick={() => {
+                setDialogTourVideo(false);
+                navigate('/termos-de-uso');
+              }}
+              startIcon={<PersonAddIcon />}
+              sx={{ borderRadius: 2, fontWeight: 700 }}
+            >
+              Quero Adquirir o Sistema
+            </Button>
           </DialogActions>
         </Dialog>
       </Container>

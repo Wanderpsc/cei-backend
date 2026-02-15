@@ -34,6 +34,7 @@ import {
   Image as ImageIcon
 } from '@mui/icons-material';
 import { useData } from '../context/DataContext';
+import { imprimirEscopo } from '../utils/printUtils';
 
 function RelatoriosPage() {
   const { 
@@ -55,7 +56,6 @@ function RelatoriosPage() {
     logoUrl: ''
   });
   const logoInputRef = useRef(null);
-  const printAreaRef = useRef(null);
 
   // Carregar configuração salva da instituição
   React.useEffect(() => {
@@ -439,11 +439,11 @@ function RelatoriosPage() {
   };
 
   const handleImprimir = () => {
-    window.print();
+    imprimirEscopo();
   };
 
   const handleDownloadPDF = () => {
-    window.print(); // Usar print com @media print para gerar PDF
+    imprimirEscopo(); // Usar impressão do navegador para salvar em PDF
   };
 
   const handleDownloadExcel = () => {
@@ -473,7 +473,7 @@ function RelatoriosPage() {
 
   return (
     <Layout title="Relatórios">
-      <Box sx={{ mb: 3 }}>
+      <Box sx={{ mb: 3 }} className="print-actions no-print">
         <Grid container spacing={2} alignItems="center">
           <Grid item xs={12} md={6}>
             <TextField
@@ -527,7 +527,7 @@ function RelatoriosPage() {
       </Box>
 
       {/* Área de Impressão */}
-      <Box ref={printAreaRef} className="print-area">
+      <Box className="print-scope">
         <Card>
           <CardContent>
             {/* Cabeçalho Personalizado */}
@@ -703,26 +703,6 @@ function RelatoriosPage() {
         </DialogActions>
       </Dialog>
 
-      {/* CSS para impressão */}
-      <style>{`
-        @media print {
-          body * {
-            visibility: hidden;
-          }
-          .print-area, .print-area * {
-            visibility: visible;
-          }
-          .print-area {
-            position: absolute;
-            left: 0;
-            top: 0;
-            width: 100%;
-          }
-          button, .MuiButton-root {
-            display: none !important;
-          }
-        }
-      `}</style>
     </Layout>
   );
 }
