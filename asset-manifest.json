@@ -1,13 +1,13 @@
 {
   "files": {
     "main.css": "/cei-backend/static/css/main.81390280.css",
-    "main.js": "/cei-backend/static/js/main.68035dfe.js",
+    "main.js": "/cei-backend/static/js/main.ffce25da.js",
     "index.html": "/cei-backend/index.html",
     "main.81390280.css.map": "/cei-backend/static/css/main.81390280.css.map",
-    "main.68035dfe.js.map": "/cei-backend/static/js/main.68035dfe.js.map"
+    "main.ffce25da.js.map": "/cei-backend/static/js/main.ffce25da.js.map"
   },
   "entrypoints": [
     "static/css/main.81390280.css",
-    "static/js/main.68035dfe.js"
+    "static/js/main.ffce25da.js"
   ]
 }
