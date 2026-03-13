@@ -4,8 +4,26 @@
   <meta charset="utf-8">
   <title>CEI - Controle Escolar Inteligente</title>
   <script type="text/javascript">
-    // Redirecionar para a página principal
-    window.location.href = '/cei-backend/';
+    // Preserva a rota atual para que o BrowserRouter consiga restaurá-la após o refresh.
+    (function () {
+      var pathSegmentsToKeep = 1;
+      var location = window.location;
+      var repoBase = '/' + location.pathname.split('/').filter(Boolean).slice(0, pathSegmentsToKeep).join('/');
+      var appPath = location.pathname.slice(repoBase.length).replace(/^\//, '');
+      var encodedSearch = location.search ? location.search.slice(1).replace(/&/g, '~and~') : '';
+      var redirectUrl =
+        location.protocol +
+        '//' +
+        location.hostname +
+        (location.port ? ':' + location.port : '') +
+        repoBase +
+        '/?/' +
+        appPath +
+        (encodedSearch ? '&' + encodedSearch : '') +
+        location.hash;
+
+      location.replace(redirectUrl);
+    })();
   </script>
 </head>
 <body>
