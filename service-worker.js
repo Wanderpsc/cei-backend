@@ -1,6 +1,6 @@
 // Service Worker para CEI - Controle Escolar Inteligente
 // 🛡️ Sistema de Atualização Automática com Proteção de Dados
-const CACHE_NAME = 'cei-v3.5.2'; // NOVA VERSÃO - Sistema de proteção de dados
+const CACHE_NAME = 'cei-v3.5.3-icons-fix'; // Força renovação do cache para corrigir ícones inválidos
 const urlsToCache = [
   '/',
   '/index.html',
