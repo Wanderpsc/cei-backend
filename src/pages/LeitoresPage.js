@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import Layout from '../components/Layout';
 import {
   Box,
@@ -18,15 +18,180 @@ import {
   IconButton,
   Chip,
   Typography,
-  MenuItem
+  MenuItem,
+  Tooltip
 } from '@mui/material';
-import { Add, Edit, Delete, Search, QrCode, Description, PrintOutlined } from '@mui/icons-material';
+import { Add, Edit, Delete, DeleteForever, Search, Description, ToggleOn, ToggleOff, UploadFile } from '@mui/icons-material';
 import { useData } from '../context/DataContext';
 import TermoEmprestimo from '../components/TermoEmprestimo';
 
+const normalizarTexto = (valor) => String(valor || '')
+  .trim()
+  .toLowerCase()
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .replace(/[º°]/g, 'o')
+  .replace(/[ª]/g, 'a')
+  .replace(/[^a-z0-9\s-]/g, ' ')
+  .replace(/\s+/g, ' ');
+
+const compactarTexto = (valor) => normalizarTexto(valor).replace(/[^a-z0-9]/g, '');
+
+const tokenizarTexto = (...valores) => {
+  const texto = normalizarTexto(valores.filter(Boolean).join(' '));
+  if (!texto) return [];
+  return texto.split(/[^a-z0-9]+/).filter(Boolean);
+};
+
+const extrairNumeroSerie = (valor) => {
+  const texto = normalizarTexto(valor);
+  if (!texto) return '';
+
+  const match = texto.match(/(\d{1,2})\s*(?:a|o)?\s*(?:serie|ano)?/);
+  return match ? match[1] : '';
+};
+
+const extrairSalaTurma = (valor) => {
+  const texto = normalizarTexto(valor).toUpperCase();
+  if (!texto) return '';
+
+  const padraoIB = texto.match(/\b[IA]\s*-\s*([A-Z])\b/);
+  if (padraoIB) {
+    return padraoIB[1];
+  }
+
+  const inicio = texto.match(/^([A-Z])\b/);
+  if (inicio) {
+    return inicio[1];
+  }
+
+  const final = texto.match(/\b([A-Z])\b$/);
+  if (final) {
+    return final[1];
+  }
+
+  return '';
+};
+
+const extrairCursoAcademico = (...valores) => {
+  const tokens = tokenizarTexto(...valores);
+  if (tokens.length === 0) return '';
+
+  const tokenSet = new Set(tokens);
+  const textoCompacto = tokens.join('');
+
+  if (tokens.some((token) => token.includes('farm'))) return 'farm';
+  if (tokens.some((token) => token.includes('mark')) || tokenSet.has('dig')) return 'mark';
+  if (tokens.some((token) => token.includes('emp'))) return 'emp';
+  if (tokens.some((token) => token.includes('prop')) || tokens.some((token) => token.includes('admi'))) return 'prop';
+
+  const temDs = tokenSet.has('ds')
+    || (tokenSet.has('d') && tokenSet.has('s'))
+    || tokens.some((token) => token.includes('des'))
+    || tokens.some((token) => token === 'sis');
+
+  if (temDs || textoCompacto.includes('dessis')) return 'ds';
+  if (tokenSet.has('int')) return 'int';
+
+  return '';
+};
+const somenteDigitos = (valor) => String(valor || '').replace(/\D/g, '');
+
+const extrairSerieETurma = (valor) => {
+  const texto = String(valor || '').replace(/[–—]/g, '-').replace(/\s+/g, ' ').trim();
+  if (!texto) {
+    return { serie: '', turma: '' };
+  }
+
+  const partes = texto.split('-').map((item) => item.trim()).filter(Boolean);
+  if (partes.length >= 2) {
+    return {
+      serie: partes.slice(0, -1).join(' - ').trim(),
+      turma: partes[partes.length - 1].trim()
+    };
+  }
+
+  return { serie: texto, turma: '' };
+};
+
+const parseLinhaImportacao = (linha) => {
+  const conteudo = String(linha || '').replace(/^\uFEFF/, '').trim();
+  if (!conteudo) return null;
+
+  const linhaNormalizada = normalizarTexto(conteudo);
+  if (
+    linhaNormalizada.startsWith('nome') ||
+    linhaNormalizada.startsWith('cpf') ||
+    linhaNormalizada.includes('nome	cpf')
+  ) {
+    return null;
+  }
+
+  const separador = conteudo.includes('\t')
+    ? '\t'
+    : conteudo.includes(';')
+      ? ';'
+      : conteudo.includes(',')
+        ? ','
+        : null;
+
+  if (!separador) {
+    return null;
+  }
+
+  const partes = conteudo.split(separador).map((item) => String(item || '').trim());
+  if (partes.length < 3) {
+    return null;
+  }
+
+  const possuiIndice = /^\d+$/.test(partes[0] || '');
+  const deslocamento = possuiIndice ? 1 : 0;
+  const colunasUteis = partes.length - deslocamento;
+
+  if (colunasUteis < 3) {
+    return null;
+  }
+
+  const nome = partes[deslocamento] || '';
+  const cpf = partes[deslocamento + 1] || '';
+  const matricula = partes[deslocamento + 4] || '';
+
+  let serie = '';
+  let turma = '';
+
+  if (colunasUteis >= 4) {
+    serie = partes[deslocamento + 2] || '';
+    turma = partes[deslocamento + 3] || '';
+  } else {
+    const extraido = extrairSerieETurma(partes[deslocamento + 2]);
+    serie = extraido.serie;
+    turma = extraido.turma;
+  }
+
+  return {
+    nome,
+    cpf,
+    serie,
+    turma,
+    matricula
+  };
+};
+
 function LeitoresPage() {
-  const { clientes, adicionarCliente, atualizarCliente, removerCliente, emprestimos } = useData();
+  const {
+    clientes,
+    adicionarCliente,
+    adicionarClientesEmLote,
+    atualizarCliente,
+    removerCliente,
+    removerTodosClientes,
+    emprestimos,
+    seriesAcademicas,
+    turmasAcademicas
+  } = useData();
   const [open, setOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+  const [textoImportacao, setTextoImportacao] = useState('');
   const [editando, setEditando] = useState(null);
   const [busca, setBusca] = useState('');
   
@@ -41,17 +206,162 @@ function LeitoresPage() {
     email: '',
     endereco: '',
     tipo: 'Aluno',
+    categoria: '',
+    serie: '',
+    serieId: '',
     turma: '',
+    turmaId: '',
     matricula: '',
     ativo: true
   });
 
   const tiposCliente = ['Aluno', 'Professor', 'Funcionário', 'Visitante'];
 
+  const localizarSeriePorNome = (nomeSerie) => {
+    const nomeNormalizado = normalizarTexto(nomeSerie);
+    if (!nomeNormalizado) return null;
+
+    const nomeCompacto = compactarTexto(nomeSerie);
+    const numeroSerie = extrairNumeroSerie(nomeSerie);
+
+    const correspondenciaExata = seriesAcademicas.find((serie) => normalizarTexto(serie.nomeSerie) === nomeNormalizado);
+    if (correspondenciaExata) return correspondenciaExata;
+
+    if (nomeCompacto) {
+      const correspondenciaCompacta = seriesAcademicas.find((serie) => {
+        const serieCompacta = compactarTexto(serie.nomeSerie);
+        return (
+          serieCompacta === nomeCompacto
+          || serieCompacta.includes(nomeCompacto)
+          || nomeCompacto.includes(serieCompacta)
+        );
+      });
+
+      if (correspondenciaCompacta) {
+        return correspondenciaCompacta;
+      }
+    }
+
+    if (numeroSerie) {
+      const correspondenciasPorNumero = seriesAcademicas.filter(
+        (serie) => extrairNumeroSerie(serie.nomeSerie) === numeroSerie
+      );
+
+      if (correspondenciasPorNumero.length === 1) {
+        return correspondenciasPorNumero[0];
+      }
+    }
+
+    return null;
+  };
+
+  const localizarTurmaPorNome = (nomeTurma, serieId = '', nomeSerie = '') => {
+    const turmaNormalizada = normalizarTexto(nomeTurma);
+    if (!turmaNormalizada) return null;
+
+    const turmaCompacta = compactarTexto(nomeTurma);
+    const serieIdNormalizada = String(serieId || '').trim();
+    const serieInformada = localizarSeriePorNome(nomeSerie);
+    const serieIdResolvida = serieIdNormalizada || (serieInformada ? String(serieInformada.id) : '');
+    const serieTextoReferencia = String(nomeSerie || serieInformada?.nomeSerie || '').trim();
+    const nomeSerieNormalizado = normalizarTexto(serieTextoReferencia);
+    const nomeSerieCompacto = compactarTexto(serieTextoReferencia);
+    const numeroSerieReferencia = extrairNumeroSerie(serieTextoReferencia);
+    const salaReferencia = extrairSalaTurma(nomeTurma);
+    const cursoReferencia = extrairCursoAcademico(nomeTurma, serieTextoReferencia);
+
+    const candidatosSerie = turmasAcademicas.filter((turma) => {
+      if (serieIdResolvida) {
+        return String(turma.serieId || '') === serieIdResolvida;
+      }
+
+      if (!nomeSerieNormalizado && !numeroSerieReferencia) {
+        return true;
+      }
+
+      const nomeSerieTurma = normalizarTexto(turma.nomeSerie);
+      const nomeSerieTurmaCompacto = compactarTexto(turma.nomeSerie);
+      const numeroSerieTurma = extrairNumeroSerie(turma.nomeSerie);
+
+      return (
+        (!nomeSerieNormalizado || nomeSerieTurma === nomeSerieNormalizado)
+        || (nomeSerieCompacto && nomeSerieTurmaCompacto === nomeSerieCompacto)
+        || (nomeSerieCompacto && nomeSerieTurmaCompacto.includes(nomeSerieCompacto))
+        || (nomeSerieCompacto && nomeSerieCompacto.includes(nomeSerieTurmaCompacto))
+        || (numeroSerieReferencia && numeroSerieTurma && numeroSerieReferencia === numeroSerieTurma)
+      );
+    });
+
+    const candidatos = candidatosSerie.length > 0 ? candidatosSerie : turmasAcademicas;
+
+    const correspondenciaExata = candidatos.find(
+      (turma) => normalizarTexto(turma.nomeTurma) === turmaNormalizada
+    );
+    if (correspondenciaExata) {
+      return correspondenciaExata;
+    }
+
+    if (turmaCompacta) {
+      const correspondenciaCompacta = candidatos.find((turma) => {
+        const nomeTurmaCompacto = compactarTexto(turma.nomeTurma);
+        return (
+          nomeTurmaCompacto === turmaCompacta
+          || nomeTurmaCompacto.includes(turmaCompacta)
+          || turmaCompacta.includes(nomeTurmaCompacto)
+        );
+      });
+
+      if (correspondenciaCompacta) {
+        return correspondenciaCompacta;
+      }
+    }
+
+    if (!salaReferencia && !cursoReferencia) {
+      return null;
+    }
+
+    const candidatosAssinatura = candidatos.filter((turma) => {
+      const salaTurma = extrairSalaTurma(turma.nomeTurma);
+      const cursoTurma = extrairCursoAcademico(turma.nomeTurma, turma.nomeSerie);
+      const numeroSerieTurma = extrairNumeroSerie(turma.nomeSerie);
+      const possuiEixoComparavel = (salaReferencia && salaTurma) || (cursoReferencia && cursoTurma);
+
+      if (!possuiEixoComparavel) {
+        return false;
+      }
+
+      const salaCompativel = !salaReferencia || !salaTurma || salaReferencia === salaTurma;
+      const cursoCompativel = !cursoReferencia || !cursoTurma || cursoReferencia === cursoTurma;
+      const serieCompativel = !numeroSerieReferencia || !numeroSerieTurma || numeroSerieReferencia === numeroSerieTurma;
+
+      return salaCompativel && cursoCompativel && serieCompativel;
+    });
+
+    if (candidatosAssinatura.length === 1) {
+      return candidatosAssinatura[0];
+    }
+
+    if (cursoReferencia) {
+      const candidatosPorCurso = candidatosAssinatura.filter(
+        (turma) => extrairCursoAcademico(turma.nomeTurma, turma.nomeSerie) === cursoReferencia
+      );
+
+      if (candidatosPorCurso.length === 1) {
+        return candidatosPorCurso[0];
+      }
+    }
+
+    return null;
+  };
+
   const handleOpen = (cliente = null) => {
     if (cliente) {
       setEditando(cliente.id);
-      setFormData(cliente);
+      setFormData({
+        ...cliente,
+        serieId: cliente.serieId ? String(cliente.serieId) : '',
+        turmaId: cliente.turmaId ? String(cliente.turmaId) : ''
+      });
     } else {
       setEditando(null);
       setFormData({
@@ -61,7 +371,11 @@ function LeitoresPage() {
         email: '',
         endereco: '',
         tipo: 'Aluno',
+        categoria: '',
+        serie: '',
+        serieId: '',
         turma: '',
+        turmaId: '',
         matricula: '',
         ativo: true
       });
@@ -75,27 +389,108 @@ function LeitoresPage() {
   };
 
   const handleSubmit = () => {
+    const dadosParaSalvar = { ...formData };
+
     // Gerar código automático se for novo leitor
     if (!editando) {
       const numeroSequencial = (clientes.length + 1).toString().padStart(6, '0');
       const codigoLeitor = `LEIT${numeroSequencial}`;
-      formData.codigoIdentificacao = codigoLeitor;
+      dadosParaSalvar.codigoIdentificacao = codigoLeitor;
+    }
+
+    if (dadosParaSalvar.tipo === 'Aluno') {
+      const serieEncontrada = dadosParaSalvar.serieId
+        ? (
+          seriesAcademicas.find((serie) => String(serie.id) === String(dadosParaSalvar.serieId))
+          || localizarSeriePorNome(dadosParaSalvar.serie)
+        )
+        : localizarSeriePorNome(dadosParaSalvar.serie);
+
+      if (serieEncontrada) {
+        dadosParaSalvar.serieId = String(serieEncontrada.id);
+        dadosParaSalvar.serie = serieEncontrada.nomeSerie;
+      } else {
+        dadosParaSalvar.serieId = '';
+      }
+
+      const turmaEncontrada = dadosParaSalvar.turmaId
+        ? (
+          turmasAcademicas.find((turma) => String(turma.id) === String(dadosParaSalvar.turmaId))
+          || localizarTurmaPorNome(dadosParaSalvar.turma, dadosParaSalvar.serieId, dadosParaSalvar.serie)
+        )
+        : localizarTurmaPorNome(dadosParaSalvar.turma, dadosParaSalvar.serieId, dadosParaSalvar.serie);
+
+      if (turmaEncontrada) {
+        dadosParaSalvar.turmaId = String(turmaEncontrada.id);
+        dadosParaSalvar.turma = turmaEncontrada.nomeTurma;
+
+        if (!dadosParaSalvar.serieId && turmaEncontrada.serieId) {
+          dadosParaSalvar.serieId = String(turmaEncontrada.serieId);
+          dadosParaSalvar.serie = turmaEncontrada.nomeSerie || dadosParaSalvar.serie;
+        }
+      } else {
+        dadosParaSalvar.turmaId = '';
+      }
+    } else {
+      dadosParaSalvar.serie = '';
+      dadosParaSalvar.serieId = '';
+      dadosParaSalvar.turma = '';
+      dadosParaSalvar.turmaId = '';
     }
     
     if (editando) {
-      atualizarCliente(editando, formData);
+      atualizarCliente(editando, dadosParaSalvar);
     } else {
-      adicionarCliente(formData);
+      adicionarCliente(dadosParaSalvar);
     }
     handleClose();
   };
 
-  const handleDelete = (id) => {
-    // Verificar se o leitor tem empréstimos ativos
-    const emprestimoAtivo = emprestimos.find(e => 
-      e.clienteId === id && e.status === 'Emprestado'
-    );
-    
+  const isEmprestimoAtivo = (status) => {
+    const statusNormalizado = String(status || '').toLowerCase();
+    return statusNormalizado === 'ativo' || statusNormalizado === 'emprestado';
+  };
+
+  const possuiEmprestimoAtivo = (clienteId) => {
+    const idNormalizado = String(clienteId);
+    return emprestimos.some((e) => {
+      const clienteIdEmprestimo = e.clienteId ?? e.leitorId;
+      return (
+        clienteIdEmprestimo !== undefined &&
+        clienteIdEmprestimo !== null &&
+        String(clienteIdEmprestimo) === idNormalizado &&
+        isEmprestimoAtivo(e.status)
+      );
+    });
+  };
+
+  const handleToggleStatus = (cliente) => {
+    const novoStatus = !cliente.ativo;
+    const acao = novoStatus ? 'ativar' : 'inativar';
+
+    if (!novoStatus && possuiEmprestimoAtivo(cliente.id)) {
+      const confirmar = window.confirm(
+        'Este leitor possui empréstimo(s) ativo(s).\n\n' +
+        'A inativação não apaga dados e apenas evita novos empréstimos para este cadastro.\n\n' +
+        'Deseja continuar?'
+      );
+
+      if (!confirmar) {
+        return;
+      }
+    } else if (!window.confirm(`Deseja realmente ${acao} este leitor?`)) {
+      return;
+    }
+
+    atualizarCliente(cliente.id, { ativo: novoStatus });
+  };
+
+  const handleDelete = async (id) => {
+    const idNormalizado = String(id);
+    const cliente = clientes.find((c) => String(c.id) === idNormalizado);
+
+    const emprestimoAtivo = possuiEmprestimoAtivo(id);
+
     if (emprestimoAtivo) {
       alert(
         'Não é possível excluir este leitor!\n\n' +
@@ -104,21 +499,216 @@ function LeitoresPage() {
       );
       return;
     }
-    
-    if (window.confirm('Deseja realmente remover este leitor?')) {
-      removerCliente(id);
+
+    const possuiHistoricoEmprestimos = emprestimos.some((e) => {
+      const clienteIdEmprestimo = e.clienteId ?? e.leitorId;
+      return clienteIdEmprestimo !== undefined && clienteIdEmprestimo !== null && String(clienteIdEmprestimo) === idNormalizado;
+    });
+
+    if (possuiHistoricoEmprestimos) {
+      const desejaInativar = window.confirm(
+        'Não é possível excluir este leitor porque há histórico de empréstimos vinculado ao cadastro.\n\n' +
+        'Para preservar os dados já cadastrados, mantenha o leitor como inativo.\n\n' +
+        'Deseja inativar este leitor agora?'
+      );
+
+      if (desejaInativar && cliente?.ativo) {
+        atualizarCliente(cliente.id, { ativo: false });
+      }
+
+      return;
     }
+
+    if (window.confirm('Deseja realmente remover este leitor?')) {
+      await removerCliente(id);
+    }
+  };
+
+  const handleDeleteAll = async () => {
+    const totalSemHistorico = clientes.filter((c) => {
+      const idStr = String(c.id);
+      return !emprestimos.some((e) => {
+        const eid = e.clienteId ?? e.leitorId;
+        return eid !== undefined && eid !== null && String(eid) === idStr;
+      });
+    }).length;
+
+    const totalComHistorico = clientes.length - totalSemHistorico;
+
+    const mensagem =
+      `Tem certeza que deseja EXCLUIR TODOS os leitores?
+
+` +
+      `Total de leitores: ${clientes.length}
+` +
+      `Sem histórico (serão excluídos): ${totalSemHistorico}
+` +
+      `Com histórico (serão preservados): ${totalComHistorico}
+
+` +
+      `Esta ação não pode ser desfeita!`;
+
+    if (!window.confirm(mensagem)) return;
+    if (!window.confirm('Confirme novamente: excluir TODOS os leitores sem histórico de empréstimo?')) return;
+
+    const resultado = await removerTodosClientes();
+    if (resultado?.falhas > 0) {
+      alert(
+        `Concluído com ressalvas.\n\n` +
+        `Excluídos: ${resultado.removidos}\n` +
+        `Falhas na nuvem: ${resultado.falhas}`
+      );
+      return;
+    }
+
+    alert(`Concluído. ${resultado.removidos} leitor(es) excluído(s).`);
+  };
+
+  const handleImportarEmLote = () => {
+    const linhas = String(textoImportacao || '')
+      .replace(/\u0000/g, '')
+      .split(/\r\n|\n|\r/)
+      .map((linha) => linha.trim())
+      .filter(Boolean);
+
+    if (linhas.length === 0) {
+      alert('Cole a lista de alunos antes de importar.');
+      return;
+    }
+
+    const registrosProcessados = linhas.map((linha) => parseLinhaImportacao(linha));
+    const registros = registrosProcessados.filter(Boolean);
+
+    if (registros.length === 0) {
+      alert('Formato inválido. Use linhas como: Nome;CPF;Série;Turma;Matrícula');
+      return;
+    }
+
+    let ignoradosFormato = registrosProcessados.length - registros.length;
+
+    const loteParaAdicionar = registros.reduce((acumulador, registro) => {
+      const nome = String(registro.nome || '').trim();
+      const cpf = String(registro.cpf || '').trim();
+      const cpfDigitos = somenteDigitos(cpf);
+
+      if (!nome || !cpf || cpfDigitos.length !== 11) {
+        ignoradosFormato += 1;
+        return acumulador;
+      }
+
+      const serieEncontrada = localizarSeriePorNome(registro.serie);
+      const turmaEncontrada = localizarTurmaPorNome(
+        registro.turma,
+        serieEncontrada ? String(serieEncontrada.id) : '',
+        registro.serie
+      );
+
+      acumulador.push({
+        nome,
+        cpf,
+        telefone: '',
+        email: '',
+        endereco: '',
+        tipo: 'Aluno',
+        serie: serieEncontrada?.nomeSerie || String(registro.serie || '').trim(),
+        serieId: serieEncontrada ? String(serieEncontrada.id) : '',
+        turma: turmaEncontrada?.nomeTurma || String(registro.turma || '').trim(),
+        turmaId: turmaEncontrada ? String(turmaEncontrada.id) : '',
+        matricula: String(registro.matricula || '').trim(),
+        ativo: true
+      });
+
+      return acumulador;
+    }, []);
+
+    const resultadoLote = adicionarClientesEmLote(loteParaAdicionar);
+    const inseridos = Number(resultadoLote?.inseridos || 0);
+    const ignoradosContexto = Number(resultadoLote?.ignorados || 0);
+    const ignorados = ignoradosFormato + ignoradosContexto;
+
+    const ignoradosPorLimite = Array.isArray(resultadoLote?.detalhesIgnorados)
+      ? resultadoLote.detalhesIgnorados.filter((item) => String(item?.motivo || '').includes('limite')).length
+      : 0;
+
+    const resumoLimite = ignoradosPorLimite > 0
+      ? `\nIgnorados por limite da conta: ${ignoradosPorLimite}`
+      : '';
+
+    alert(
+      `Importação concluída.\n\n` +
+      `Inseridos: ${inseridos}\n` +
+      `Ignorados: ${ignorados}` +
+      resumoLimite
+    );
+
+    setTextoImportacao('');
+    setImportOpen(false);
   };
 
   const clientesFiltrados = clientes.filter(cliente =>
     cliente.nome.toLowerCase().includes(busca.toLowerCase()) ||
     cliente.cpf.includes(busca) ||
-    cliente.matricula?.includes(busca)
+    cliente.matricula?.includes(busca) ||
+    cliente.turma?.toLowerCase().includes(busca.toLowerCase()) ||
+    cliente.serie?.toLowerCase().includes(busca.toLowerCase())
   );
+
+  const turmasCadastradas = useMemo(() => {
+    const serieSelecionadaId = String(formData.serieId || '');
+    const serieSelecionadaNome = normalizarTexto(formData.serie);
+    const nomesTurma = new Set();
+
+    turmasAcademicas.forEach((turma) => {
+      const mesmaSeriePorId = serieSelecionadaId
+        ? String(turma.serieId || '') === serieSelecionadaId
+        : true;
+      const mesmaSeriePorNome = !serieSelecionadaId && serieSelecionadaNome
+        ? normalizarTexto(turma.nomeSerie) === serieSelecionadaNome
+        : true;
+
+      if (mesmaSeriePorId && mesmaSeriePorNome) {
+        nomesTurma.add(String(turma.nomeTurma || '').trim());
+      }
+    });
+
+    clientes
+      .filter((cliente) => String(cliente.tipo || '').toLowerCase() === 'aluno')
+      .forEach((cliente) => {
+        const mesmaSerie = serieSelecionadaNome
+          ? normalizarTexto(cliente.serie) === serieSelecionadaNome
+          : true;
+
+        if (mesmaSerie) {
+          nomesTurma.add(String(cliente.turma || '').trim());
+        }
+      });
+
+    return Array.from(nomesTurma)
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  }, [clientes, turmasAcademicas, formData.serie, formData.serieId]);
+
+  const seriesCadastradas = useMemo(() => {
+    const nomesSeries = new Set(
+      seriesAcademicas
+        .map((serie) => String(serie.nomeSerie || '').trim())
+        .filter(Boolean)
+    );
+
+    clientes
+      .filter((cliente) => String(cliente.tipo || '').toLowerCase() === 'aluno')
+      .forEach((cliente) => {
+        nomesSeries.add(String(cliente.serie || '').trim());
+      });
+
+    return Array.from(nomesSeries)
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  }, [clientes, seriesAcademicas]);
 
   return (
     <Layout title="Leitores">
-      <Box sx={{ mb: 2, display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+      <Box sx={{ mb: 2, display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
         <TextField
           placeholder="Buscar por nome, CPF ou matrícula..."
           variant="outlined"
@@ -150,6 +740,21 @@ function LeitoresPage() {
         >
           Novo Leitor
         </Button>
+        <Button
+          variant="outlined"
+          startIcon={<UploadFile />}
+          onClick={() => setImportOpen(true)}
+        >
+          Importar Alunos
+        </Button>
+        <Button
+          variant="outlined"
+          color="error"
+          startIcon={<DeleteForever />}
+          onClick={handleDeleteAll}
+        >
+          Excluir Todos
+        </Button>
       </Box>
 
       <TableContainer component={Paper}>
@@ -160,7 +765,9 @@ function LeitoresPage() {
               <TableCell>Nome</TableCell>
               <TableCell>CPF</TableCell>
               <TableCell>Tipo</TableCell>
+              <TableCell>Categoria</TableCell>
               <TableCell>Matrícula</TableCell>
+              <TableCell>Série</TableCell>
               <TableCell>Turma</TableCell>
               <TableCell>Status</TableCell>
               <TableCell>Ações</TableCell>
@@ -169,7 +776,7 @@ function LeitoresPage() {
           <TableBody>
             {clientesFiltrados.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} align="center">
+                <TableCell colSpan={10} align="center">
                   <Typography color="text.secondary">
                     Nenhum leitor cadastrado
                   </Typography>
@@ -191,7 +798,9 @@ function LeitoresPage() {
                   <TableCell>
                     <Chip label={cliente.tipo} size="small" />
                   </TableCell>
+                  <TableCell>{cliente.categoria || '-'}</TableCell>
                   <TableCell>{cliente.matricula || '-'}</TableCell>
+                  <TableCell>{cliente.serie || '-'}</TableCell>
                   <TableCell>{cliente.turma || '-'}</TableCell>
                   <TableCell>
                     <Chip 
@@ -204,6 +813,15 @@ function LeitoresPage() {
                     <IconButton onClick={() => handleOpen(cliente)} size="small">
                       <Edit />
                     </IconButton>
+                    <Tooltip title={cliente.ativo ? 'Inativar leitor' : 'Ativar leitor'}>
+                      <IconButton
+                        onClick={() => handleToggleStatus(cliente)}
+                        size="small"
+                        color={cliente.ativo ? 'warning' : 'success'}
+                      >
+                        {cliente.ativo ? <ToggleOff /> : <ToggleOn />}
+                      </IconButton>
+                    </Tooltip>
                     <IconButton onClick={() => handleDelete(cliente.id)} size="small" color="error">
                       <Delete />
                     </IconButton>
@@ -264,6 +882,18 @@ function LeitoresPage() {
                 <MenuItem key={tipo} value={tipo}>{tipo}</MenuItem>
               ))}
             </TextField>
+            <TextField
+              label="Categoria"
+              fullWidth
+              select
+              value={formData.categoria || ''}
+              onChange={(e) => setFormData({ ...formData, categoria: e.target.value })}
+            >
+              <MenuItem value="">— Não informado —</MenuItem>
+              {['Estudante', 'Professor', 'Funcionário', 'Comunidade'].map((cat) => (
+                <MenuItem key={cat} value={cat}>{cat}</MenuItem>
+              ))}
+            </TextField>
             {formData.tipo === 'Aluno' && (
               <>
                 <TextField
@@ -273,11 +903,77 @@ function LeitoresPage() {
                   onChange={(e) => setFormData({ ...formData, matricula: e.target.value })}
                 />
                 <TextField
+                  label="Série/Ano"
+                  fullWidth
+                  value={formData.serie}
+                  onChange={(e) => {
+                    const valorSerie = e.target.value;
+                    const serieEncontrada = localizarSeriePorNome(valorSerie);
+
+                    setFormData((prev) => {
+                      const proximo = {
+                        ...prev,
+                        serie: valorSerie,
+                        serieId: serieEncontrada ? String(serieEncontrada.id) : ''
+                      };
+
+                      if (prev.turmaId) {
+                        const turmaAtual = turmasAcademicas.find(
+                          (turma) => String(turma.id) === String(prev.turmaId)
+                        );
+
+                        if (turmaAtual && proximo.serieId && String(turmaAtual.serieId || '') !== proximo.serieId) {
+                          proximo.turma = '';
+                          proximo.turmaId = '';
+                        }
+                      }
+
+                      return proximo;
+                    });
+                  }}
+                  inputProps={{ list: 'lista-series-cadastradas' }}
+                  placeholder="Ex: 6º Ano, 1ª Série, EJA Módulo I"
+                />
+                <TextField
                   label="Turma"
                   fullWidth
                   value={formData.turma}
-                  onChange={(e) => setFormData({ ...formData, turma: e.target.value })}
+                  onChange={(e) => {
+                    const valorTurma = e.target.value;
+
+                    setFormData((prev) => {
+                      const turmaEncontrada = localizarTurmaPorNome(valorTurma, prev.serieId, prev.serie);
+
+                      if (!turmaEncontrada) {
+                        return {
+                          ...prev,
+                          turma: valorTurma,
+                          turmaId: ''
+                        };
+                      }
+
+                      return {
+                        ...prev,
+                        turma: turmaEncontrada.nomeTurma || valorTurma,
+                        turmaId: String(turmaEncontrada.id),
+                        serie: turmaEncontrada.nomeSerie || prev.serie,
+                        serieId: turmaEncontrada.serieId ? String(turmaEncontrada.serieId) : prev.serieId
+                      };
+                    });
+                  }}
+                  inputProps={{ list: 'lista-turmas-cadastradas' }}
+                  placeholder="Ex: A, B, C, Integral"
                 />
+                <datalist id="lista-series-cadastradas">
+                  {seriesCadastradas.map((serie) => (
+                    <option key={serie} value={serie} />
+                  ))}
+                </datalist>
+                <datalist id="lista-turmas-cadastradas">
+                  {turmasCadastradas.map((turma) => (
+                    <option key={turma} value={turma} />
+                  ))}
+                </datalist>
               </>
             )}
             <TextField
@@ -296,6 +992,35 @@ function LeitoresPage() {
           <Button onClick={handleClose}>Cancelar</Button>
           <Button onClick={handleSubmit} variant="contained">
             {editando ? 'Salvar' : 'Adicionar'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={importOpen} onClose={() => setImportOpen(false)} maxWidth="md" fullWidth>
+        <DialogTitle>Importar Alunos em Lote</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+            Cole uma linha por aluno no formato:
+          </Typography>
+          <Typography variant="body2" sx={{ mb: 2 }}>
+            Nome;CPF;Série;Turma;Matrícula
+          </Typography>
+          <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: 'block' }}>
+            Também aceita colunas separadas por TAB (copiar/colar de planilha).
+          </Typography>
+          <TextField
+            multiline
+            minRows={12}
+            fullWidth
+            placeholder={'Exemplo:\nMaria da Silva;123.456.789-10;9º ANO;I-A;MAT001'}
+            value={textoImportacao}
+            onChange={(e) => setTextoImportacao(e.target.value)}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setImportOpen(false)}>Cancelar</Button>
+          <Button variant="contained" onClick={handleImportarEmLote}>
+            Importar
           </Button>
         </DialogActions>
       </Dialog>
