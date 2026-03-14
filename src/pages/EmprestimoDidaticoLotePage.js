@@ -123,6 +123,61 @@ const buildLegacyTurmaKey = (serieNome, turmaNome) => {
   return `legacy:${normalizarTexto(serieNome)}|${normalizarTexto(turmaNome)}`;
 };
 
+const extrairSerieTurmaCombinada = (valor) => {
+  const textoNormalizado = String(valor || '')
+    .replace(/[–—]/g, ' - ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (!textoNormalizado) {
+    return { serie: '', turma: '' };
+  }
+
+  const partes = textoNormalizado
+    .split(' - ')
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+  if (partes.length >= 2) {
+    return {
+      serie: partes.slice(0, -1).join(' - ').trim(),
+      turma: partes[partes.length - 1].trim()
+    };
+  }
+
+  return { serie: textoNormalizado, turma: '' };
+};
+
+const obterTurmaSerieTextoAluno = (aluno) => {
+  const turmaDireta = String(aluno?.turma || aluno?.nomeTurma || '').trim();
+  const serieDireta = String(aluno?.serie || aluno?.nomeSerie || '').trim();
+
+  if (turmaDireta || serieDireta) {
+    return {
+      turma: turmaDireta,
+      serie: serieDireta
+    };
+  }
+
+  const campoCombinado = String(
+    aluno?.anoSerieTurma
+    || aluno?.serieTurma
+    || aluno?.turmaSerie
+    || aluno?.serie_turma
+    || ''
+  ).trim();
+
+  if (!campoCombinado) {
+    return { turma: '', serie: '' };
+  }
+
+  const extraido = extrairSerieTurmaCombinada(campoCombinado);
+  return {
+    turma: String(extraido?.turma || '').trim(),
+    serie: String(extraido?.serie || '').trim()
+  };
+};
+
 const seriesSaoCompativeis = (serieA, serieB) => {
   const serieANormalizada = normalizarTexto(serieA);
   const serieBNormalizada = normalizarTexto(serieB);
@@ -207,8 +262,9 @@ const isAlunoDaTurmaSelecionada = (aluno, turmaSelecionadaInfo, turmasAcademicas
       return turmasAcademicasMap.get(turmaId);
     }
 
-    const turmaNome = String(aluno?.turma || aluno?.nomeTurma || '').trim();
-    const serieNome = String(aluno?.serie || aluno?.nomeSerie || '').trim();
+    const turmaSerieAluno = obterTurmaSerieTextoAluno(aluno);
+    const turmaNome = String(turmaSerieAluno.turma || '').trim();
+    const serieNome = String(turmaSerieAluno.serie || '').trim();
     return { nomeTurma: turmaNome, nomeSerie: serieNome };
   })();
 
@@ -221,12 +277,13 @@ const localizarTurmaAcademicaDoAluno = (aluno, turmasAcademicasMap) => {
     return turmasAcademicasMap.get(turmaId);
   }
 
-  const turmaNomeAluno = String(aluno?.turma || aluno?.nomeTurma || '').trim();
+  const turmaSerieAluno = obterTurmaSerieTextoAluno(aluno);
+  const turmaNomeAluno = String(turmaSerieAluno.turma || '').trim();
   if (!turmaNomeAluno) {
     return null;
   }
 
-  const serieNomeAluno = String(aluno?.serie || aluno?.nomeSerie || '').trim();
+  const serieNomeAluno = String(turmaSerieAluno.serie || '').trim();
   const serieIdAluno = String(aluno?.serieId || '').trim();
 
   const turmaNomeNormalizado = normalizarTexto(turmaNomeAluno);
@@ -314,14 +371,21 @@ const isTipoParadidatico = (tipoLivro) => {
 const isAlunoLote = (cliente) => {
   const tipoNormalizado = normalizarTexto(cliente?.tipo);
   const categoriaNormalizada = normalizarTexto(cliente?.categoria);
+  const turmaSerieAluno = obterTurmaSerieTextoAluno(cliente);
+  const possuiCampoCombinado = String(
+    cliente?.anoSerieTurma
+    || cliente?.serieTurma
+    || cliente?.turmaSerie
+    || cliente?.serie_turma
+    || ''
+  ).trim().length > 0;
 
   const possuiVinculoAcademico =
     String(cliente?.turmaId || '').trim().length > 0
     || String(cliente?.serieId || '').trim().length > 0
-    || normalizarTexto(cliente?.turma).length > 0
-    || normalizarTexto(cliente?.nomeTurma).length > 0
-    || normalizarTexto(cliente?.serie).length > 0
-    || normalizarTexto(cliente?.nomeSerie).length > 0;
+    || normalizarTexto(turmaSerieAluno.turma).length > 0
+    || normalizarTexto(turmaSerieAluno.serie).length > 0
+    || possuiCampoCombinado;
 
   const perfisNaoAluno = [
     'professor',
@@ -358,12 +422,13 @@ const obterChaveTurmaAluno = (aluno, turmasAcademicasMap) => {
     return String(turmaAssociada.id);
   }
 
-  const turmaNome = String(aluno?.turma || aluno?.nomeTurma || '').trim();
+  const turmaSerieAluno = obterTurmaSerieTextoAluno(aluno);
+  const turmaNome = String(turmaSerieAluno.turma || '').trim();
   if (!turmaNome) {
     return '';
   }
 
-  const serieNome = String(aluno?.serie || aluno?.nomeSerie || '').trim();
+  const serieNome = String(turmaSerieAluno.serie || '').trim();
   return buildLegacyTurmaKey(serieNome, turmaNome);
 };
 
@@ -377,8 +442,9 @@ const obterRotuloTurmaAluno = (aluno, turmasAcademicasMap) => {
     return nomeSerie ? `${nomeSerie} - ${nomeTurma}` : nomeTurma;
   }
 
-  const nomeTurmaLegacy = String(aluno?.turma || aluno?.nomeTurma || '').trim();
-  const nomeSerieLegacy = String(aluno?.serie || aluno?.nomeSerie || '').trim();
+  const turmaSerieAluno = obterTurmaSerieTextoAluno(aluno);
+  const nomeTurmaLegacy = String(turmaSerieAluno.turma || '').trim();
+  const nomeSerieLegacy = String(turmaSerieAluno.serie || '').trim();
   if (!nomeTurmaLegacy) {
     return 'Sem turma';
   }
@@ -470,7 +536,8 @@ export default function EmprestimoDidaticoLotePage() {
     clientes
       .filter((cliente) => isAlunoLote(cliente))
       .forEach((cliente) => {
-        const turmaNome = String(cliente.turma || cliente.nomeTurma || '').trim();
+        const turmaSerieAluno = obterTurmaSerieTextoAluno(cliente);
+        const turmaNome = String(turmaSerieAluno.turma || '').trim();
         if (!turmaNome) return;
 
         const turmaAssociada = localizarTurmaAcademicaDoAluno(cliente, turmasAcademicasMap);
@@ -478,7 +545,7 @@ export default function EmprestimoDidaticoLotePage() {
           return;
         }
 
-        const serieNome = String(cliente.serie || cliente.nomeSerie || '').trim();
+        const serieNome = String(turmaSerieAluno.serie || '').trim();
         const chave = buildLegacyTurmaKey(serieNome, turmaNome);
 
         if (!mapaTurmas.has(chave)) {
