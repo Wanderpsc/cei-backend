@@ -1,14 +1,21 @@
-import React, { createContext, useState, useContext, useEffect } from 'react';
+import React, { createContext, useState, useContext, useEffect, useRef } from 'react';
 import apiService from '../utils/apiService';
 import { initDataProtection, createBackup } from '../utils/dataProtection';
+import { isCloudEnabled } from '../services/supabaseClient';
+import { syncFromCloud, syncToCloud, deleteFromCloud } from '../services/syncService';
 
 // Versão do sistema - IMPORTANTE: Incrementar a cada atualização significativa
 const SYSTEM_VERSION = '3.5.2';
 const DATA_VERSION_KEY = 'cei_data_version';
 const LAST_UPDATE_KEY = 'cei_last_update';
+const GLOBAL_IDS_MIGRATION_KEY = 'cei_global_ids_migrated_v1';
+const LEGACY_STORAGE_MIGRATION_KEY = 'cei_legacy_storage_migrated_v1';
+const LEGACY_CLIENTES_KEY = 'cei_clientes';
+const LEGACY_TURMAS_KEY = 'cei_turmas_academicas';
 const STORAGE_PRESTADOR = 'cei_nf_prestador_config';
 const STORAGE_PREFEITURA = 'cei_nf_prefeitura_config';
 const DEMO_DEVICE_ID_KEY = 'cei_demo_device_id';
+const DEMO_CONTACT_KEY = 'cei_demo_contact';
 
 const DEFAULT_PREFEITURA_CURIMATA = {
   razaoSocial: 'PREFEITURA MUNICIPAL DE CURIMATÁ',
@@ -64,7 +71,9 @@ export const DataProvider = ({ children }) => {
     '/relatorios-livros',
     '/patrimonio',
     '/clientes',
+    '/series-turmas',
     '/emprestimos',
+    '/emprestimos-didaticos-lote',
     '/devolucoes',
     '/clube-leitura',
     '/busca',
@@ -202,6 +211,8 @@ export const DataProvider = ({ children }) => {
   const [livros, setLivros] = useState([]);
   const [patrimonio, setPatrimonio] = useState([]);
   const [clientes, setClientes] = useState([]);
+  const [seriesAcademicas, setSeriesAcademicas] = useState([]);
+  const [turmasAcademicas, setTurmasAcademicas] = useState([]);
   const [emprestimos, setEmprestimos] = useState([]);
   const [usuarios, setUsuarios] = useState([]);
   const [usuarioLogado, setUsuarioLogado] = useState(() => {
@@ -237,6 +248,1506 @@ export const DataProvider = ({ children }) => {
   const [logAtividades, setLogAtividades] = useState([]);
   const [sincronizando, setSincronizando] = useState(false);
   const [dadosCarregados, setDadosCarregados] = useState(false);
+  const cloudPullingRef = useRef(false);
+  const cloudPushingRef = useRef(false);
+  const instituicoesRef = useRef([]);
+  const usuariosRef = useRef([]);
+  const livrosRef = useRef([]);
+  const clientesRef = useRef([]);
+  const patrimonioRef = useRef([]);
+  const emprestimosRef = useRef([]);
+
+  const dataTypesSync = ['instituicoes', 'usuarios', 'livros', 'clientes', 'patrimonio', 'emprestimos'];
+
+  const normalizeInstitutionId = (value) => {
+    if (value === null || value === undefined || value === '') {
+      return null;
+    }
+
+    const numericId = Number(value);
+    return Number.isFinite(numericId) ? numericId : null;
+  };
+
+  const getItemInstitutionRaw = (item) => {
+    if (!item || typeof item !== 'object') {
+      return null;
+    }
+
+    if (item.instituicaoId !== undefined && item.instituicaoId !== null && item.instituicaoId !== '') {
+      return item.instituicaoId;
+    }
+
+    if (item.instituicao_id !== undefined && item.instituicao_id !== null && item.instituicao_id !== '') {
+      return item.instituicao_id;
+    }
+
+    return null;
+  };
+
+  const getLegacyInstitutionFallback = () => {
+    const activeInstitutionId = normalizeInstitutionId(instituicaoAtiva);
+    if (activeInstitutionId !== null) {
+      return activeInstitutionId;
+    }
+
+    const institutionIds = (instituicoes || [])
+      .map((institution) => normalizeInstitutionId(institution?.id))
+      .filter((id) => id !== null && id !== 0);
+
+    return institutionIds.length === 1 ? institutionIds[0] : null;
+  };
+
+  const resolveInstitutionId = (value, fallbackValue = null) => {
+    const normalized = normalizeInstitutionId(value);
+    if (normalized !== null) {
+      return normalized;
+    }
+
+    return normalizeInstitutionId(fallbackValue);
+  };
+
+  const normalizeInstitutionText = (value) => String(value || '').trim().toLowerCase();
+
+  const normalizeInstitutionDocument = (value) => String(value || '').replace(/\D/g, '');
+
+  const getInstitutionAliasIds = (targetInstitutionId) => {
+    const targetId = normalizeInstitutionId(targetInstitutionId);
+    if (targetId === null) {
+      return [targetInstitutionId];
+    }
+
+    const targetInstitution = (instituicoes || []).find(
+      (institution) => normalizeInstitutionId(institution?.id) === targetId
+    );
+
+    if (!targetInstitution) {
+      return [targetId];
+    }
+
+    const targetName = normalizeInstitutionText(targetInstitution.nomeInstituicao);
+    const targetDocument = normalizeInstitutionDocument(targetInstitution.cnpj);
+    const aliasIds = new Set([targetId]);
+
+    (instituicoes || []).forEach((institution) => {
+      const institutionId = normalizeInstitutionId(institution?.id);
+      if (institutionId === null || institutionId === 0) {
+        return;
+      }
+
+      const sameName =
+        targetName &&
+        normalizeInstitutionText(institution?.nomeInstituicao) === targetName;
+      const sameDocument =
+        targetDocument &&
+        normalizeInstitutionDocument(institution?.cnpj) === targetDocument;
+
+      if (sameName || sameDocument) {
+        aliasIds.add(institutionId);
+      }
+    });
+
+    return Array.from(aliasIds);
+  };
+
+  const belongsToInstitution = (item, targetInstitutionId, options = {}) => {
+    const {
+      includeLegacyWithoutInstitution = false,
+      includeInstitutionAliases = false
+    } = options;
+
+    const targetId = normalizeInstitutionId(targetInstitutionId);
+    if (targetId === null) {
+      return false;
+    }
+
+    const targetIds = includeInstitutionAliases
+      ? new Set(getInstitutionAliasIds(targetId))
+      : new Set([targetId]);
+
+    const itemInstitutionId = normalizeInstitutionId(getItemInstitutionRaw(item));
+    if (itemInstitutionId === null) {
+      if (!includeLegacyWithoutInstitution) {
+        return false;
+      }
+
+      const legacyFallback = getLegacyInstitutionFallback();
+      return legacyFallback !== null && targetIds.has(legacyFallback);
+    }
+
+    return targetIds.has(itemInstitutionId);
+  };
+
+  const normalizeCollectionInstitutionIds = (items = [], fallbackInstitutionId = null) => {
+    const fallbackId = normalizeInstitutionId(fallbackInstitutionId);
+
+    return (items || []).map((item) => {
+      if (!item || typeof item !== 'object') {
+        return item;
+      }
+
+      const institutionRaw = getItemInstitutionRaw(item);
+      const normalizedInstitutionId = resolveInstitutionId(institutionRaw, fallbackId);
+      const normalizedCurrent = normalizeInstitutionId(institutionRaw);
+
+      if (normalizedInstitutionId === null || normalizedCurrent === normalizedInstitutionId) {
+        return item;
+      }
+
+      return {
+        ...item,
+        instituicaoId: normalizedInstitutionId
+      };
+    });
+  };
+
+  const inferFallbackInstitutionId = (data = {}) => {
+    const storedInstitutionId = normalizeInstitutionId(localStorage.getItem('cei_instituicao_ativa'));
+    if (storedInstitutionId !== null) {
+      return storedInstitutionId;
+    }
+
+    const institutionIds = (data.instituicoes || [])
+      .map((institution) => normalizeInstitutionId(institution?.id))
+      .filter((id) => id !== null && id !== 0);
+
+    if (institutionIds.length === 1) {
+      return institutionIds[0];
+    }
+
+    const userInstitutionIds = (data.usuarios || [])
+      .filter((user) => user?.perfil !== 'SuperAdmin')
+      .map((user) => normalizeInstitutionId(getItemInstitutionRaw(user)))
+      .filter((id) => id !== null && id !== 0);
+
+    return userInstitutionIds.length === 1 ? userInstitutionIds[0] : null;
+  };
+
+  const normalizeAllInstitutionData = (data = {}, fallbackInstitutionId = null) => {
+    const fallbackId = normalizeInstitutionId(fallbackInstitutionId);
+    const clientesLegacy = Array.isArray(data.clientes)
+      ? data.clientes
+      : Array.isArray(data.leitores)
+        ? data.leitores
+        : [];
+
+    return {
+      ...data,
+      usuarios: normalizeCollectionInstitutionIds(data.usuarios, fallbackId).map((user) => {
+        if (!user || user.perfil === 'SuperAdmin') {
+          return user;
+        }
+
+        const institutionRaw = getItemInstitutionRaw(user);
+        const institutionId = resolveInstitutionId(institutionRaw, fallbackId);
+        const normalizedCurrent = normalizeInstitutionId(institutionRaw);
+
+        if (institutionId === null || normalizedCurrent === institutionId) {
+          return user;
+        }
+
+        return {
+          ...user,
+          instituicaoId: institutionId
+        };
+      }),
+      livros: normalizeCollectionInstitutionIds(data.livros, fallbackId),
+      patrimonio: normalizeCollectionInstitutionIds(data.patrimonio, fallbackId),
+      clientes: normalizeCollectionInstitutionIds(clientesLegacy, fallbackId),
+      seriesAcademicas: normalizeCollectionInstitutionIds(data.seriesAcademicas, fallbackId),
+      turmasAcademicas: normalizeCollectionInstitutionIds(data.turmasAcademicas, fallbackId),
+      emprestimos: normalizeCollectionInstitutionIds(data.emprestimos, fallbackId),
+      notasFiscais: normalizeCollectionInstitutionIds(data.notasFiscais, fallbackId)
+    };
+  };
+
+  const unwrapDataSnapshot = (parsedSnapshot) => {
+    if (!parsedSnapshot || typeof parsedSnapshot !== 'object') {
+      return null;
+    }
+
+    if (typeof parsedSnapshot.data === 'string') {
+      try {
+        return JSON.parse(parsedSnapshot.data);
+      } catch (_error) {
+        return null;
+      }
+    }
+
+    if (
+      parsedSnapshot.data &&
+      typeof parsedSnapshot.data === 'object' &&
+      (parsedSnapshot.version || parsedSnapshot.exportDate || parsedSnapshot.checksum)
+    ) {
+      return parsedSnapshot.data;
+    }
+
+    return parsedSnapshot;
+  };
+
+  const parseDataSnapshot = (rawSnapshot) => {
+    if (!rawSnapshot) {
+      return null;
+    }
+
+    try {
+      const parsedSnapshot = JSON.parse(rawSnapshot);
+      return unwrapDataSnapshot(parsedSnapshot);
+    } catch (_error) {
+      return null;
+    }
+  };
+
+  const getInstitutionAliasIdsFromData = (data = {}, targetInstitutionId) => {
+    const targetId = normalizeInstitutionId(targetInstitutionId);
+    if (targetId === null) {
+      return [];
+    }
+
+    const institutions = Array.isArray(data.instituicoes) ? data.instituicoes : [];
+    const targetInstitution = institutions.find(
+      (institution) => normalizeInstitutionId(institution?.id) === targetId
+    );
+
+    if (!targetInstitution) {
+      return [targetId];
+    }
+
+    const targetName = normalizeInstitutionText(targetInstitution.nomeInstituicao);
+    const targetDocument = normalizeInstitutionDocument(targetInstitution.cnpj);
+    const aliasIds = new Set([targetId]);
+
+    institutions.forEach((institution) => {
+      const institutionId = normalizeInstitutionId(institution?.id);
+      if (institutionId === null || institutionId === 0) {
+        return;
+      }
+
+      const sameName =
+        targetName &&
+        normalizeInstitutionText(institution?.nomeInstituicao) === targetName;
+      const sameDocument =
+        targetDocument &&
+        normalizeInstitutionDocument(institution?.cnpj) === targetDocument;
+
+      if (sameName || sameDocument) {
+        aliasIds.add(institutionId);
+      }
+    });
+
+    return Array.from(aliasIds);
+  };
+
+  const countReadersForInstitutionInData = (data = {}, targetInstitutionId) => {
+    const readers = Array.isArray(data.clientes)
+      ? data.clientes
+      : Array.isArray(data.leitores)
+        ? data.leitores
+        : [];
+
+    if (readers.length === 0) {
+      return 0;
+    }
+
+    const targetId = normalizeInstitutionId(targetInstitutionId);
+    if (targetId === null) {
+      return readers.length;
+    }
+
+    const aliasIds = getInstitutionAliasIdsFromData(data, targetId);
+    const aliasSet = new Set(aliasIds);
+    const fallbackInstitutionId = aliasIds.length === 1 ? aliasIds[0] : null;
+
+    return readers.filter((reader) => {
+      const institutionId = resolveInstitutionId(getItemInstitutionRaw(reader), fallbackInstitutionId);
+      return institutionId !== null && aliasSet.has(institutionId);
+    }).length;
+  };
+
+  const countStudentsForInstitutionInData = (data = {}, targetInstitutionId) => {
+    const readers = Array.isArray(data.clientes)
+      ? data.clientes
+      : Array.isArray(data.leitores)
+        ? data.leitores
+        : [];
+
+    if (readers.length === 0) {
+      return 0;
+    }
+
+    const targetId = normalizeInstitutionId(targetInstitutionId);
+    const aliasIds = targetId === null
+      ? []
+      : getInstitutionAliasIdsFromData(data, targetId);
+    const aliasSet = new Set(aliasIds);
+    const fallbackInstitutionId = aliasIds.length === 1 ? aliasIds[0] : null;
+
+    return readers.filter((reader) => {
+      const isAluno = String(reader?.tipo || '').trim().toLowerCase() === 'aluno';
+      if (!isAluno) {
+        return false;
+      }
+
+      if (targetId === null) {
+        return true;
+      }
+
+      const institutionId = resolveInstitutionId(getItemInstitutionRaw(reader), fallbackInstitutionId);
+      return institutionId !== null && aliasSet.has(institutionId);
+    }).length;
+  };
+
+  const getReadersCollection = (data = {}) => {
+    if (Array.isArray(data.clientes)) {
+      return data.clientes;
+    }
+
+    if (Array.isArray(data.leitores)) {
+      return data.leitores;
+    }
+
+    return [];
+  };
+
+  const mergeCollectionsPreservingCurrent = (currentItems = [], recoveredItems = []) => {
+    const currentList = Array.isArray(currentItems) ? currentItems : [];
+    const recoveredList = Array.isArray(recoveredItems) ? recoveredItems : [];
+
+    const currentIds = new Set(
+      currentList
+        .map((item) => item?.id)
+        .filter((id) => id !== undefined && id !== null && id !== '')
+        .map((id) => String(id))
+    );
+
+    const recoveredMissing = recoveredList.filter((item) => {
+      const itemId = item?.id;
+
+      if (itemId === undefined || itemId === null || itemId === '') {
+        return true;
+      }
+
+      return !currentIds.has(String(itemId));
+    });
+
+    return [...currentList, ...recoveredMissing];
+  };
+
+  const parseStorageArray = (storageKey) => {
+    try {
+      const rawSnapshot = localStorage.getItem(storageKey);
+      if (!rawSnapshot) {
+        return [];
+      }
+
+      const parsedSnapshot = JSON.parse(rawSnapshot);
+      return Array.isArray(parsedSnapshot) ? parsedSnapshot : [];
+    } catch (_error) {
+      return [];
+    }
+  };
+
+  const buildReaderIdentityKey = (reader) => {
+    if (!reader || typeof reader !== 'object') {
+      return '';
+    }
+
+    const nome = normalizeInstitutionText(reader?.nome || reader?.nomeCompleto || '');
+    const matricula = normalizeInstitutionText(reader?.matricula || '');
+    const cpf = String(reader?.cpf || '').replace(/\D/g, '');
+    const nascimento = String(reader?.dataNascimento || reader?.nascimento || '').trim();
+
+    if (!nome && !matricula && !cpf) {
+      return '';
+    }
+
+    return `${nome}|${matricula}|${cpf}|${nascimento}`;
+  };
+
+  const buildTurmaIdentityKey = (turma) => {
+    if (!turma || typeof turma !== 'object') {
+      return '';
+    }
+
+    const nomeTurma = normalizeInstitutionText(turma?.nomeTurma || turma?.nome || turma?.turma || '');
+    const nomeSerie = normalizeInstitutionText(turma?.nomeSerie || turma?.serie || '');
+    const anoLetivo = String(turma?.anoLetivo || turma?.ano || '').trim();
+
+    if (!nomeTurma) {
+      return '';
+    }
+
+    return `${nomeSerie}|${nomeTurma}|${anoLetivo}`;
+  };
+
+  const mergeReadersPreservingCurrent = (currentReaders = [], recoveredReaders = []) => {
+    const currentList = Array.isArray(currentReaders) ? currentReaders : [];
+    const recoveredList = Array.isArray(recoveredReaders) ? recoveredReaders : [];
+
+    const merged = [...currentList];
+    const idSet = new Set(
+      currentList
+        .map((item) => item?.id)
+        .filter((id) => id !== undefined && id !== null && id !== '')
+        .map((id) => String(id))
+    );
+    const identitySet = new Set(
+      currentList
+        .map((item) => buildReaderIdentityKey(item))
+        .filter(Boolean)
+    );
+
+    recoveredList.forEach((item) => {
+      if (!item || typeof item !== 'object') {
+        return;
+      }
+
+      const itemId = item?.id;
+      const itemIdKey = itemId !== undefined && itemId !== null && itemId !== ''
+        ? String(itemId)
+        : '';
+      const identityKey = buildReaderIdentityKey(item);
+
+      if ((itemIdKey && idSet.has(itemIdKey)) || (identityKey && identitySet.has(identityKey))) {
+        return;
+      }
+
+      merged.push(item);
+
+      if (itemIdKey) {
+        idSet.add(itemIdKey);
+      }
+
+      if (identityKey) {
+        identitySet.add(identityKey);
+      }
+    });
+
+    return merged;
+  };
+
+  const mergeTurmasPreservingCurrent = (currentTurmas = [], recoveredTurmas = []) => {
+    const currentList = Array.isArray(currentTurmas) ? currentTurmas : [];
+    const recoveredList = Array.isArray(recoveredTurmas) ? recoveredTurmas : [];
+
+    const merged = [...currentList];
+    const idSet = new Set(
+      currentList
+        .map((item) => item?.id)
+        .filter((id) => id !== undefined && id !== null && id !== '')
+        .map((id) => String(id))
+    );
+    const identitySet = new Set(
+      currentList
+        .map((item) => buildTurmaIdentityKey(item))
+        .filter(Boolean)
+    );
+
+    recoveredList.forEach((item) => {
+      if (!item || typeof item !== 'object') {
+        return;
+      }
+
+      const itemId = item?.id;
+      const itemIdKey = itemId !== undefined && itemId !== null && itemId !== ''
+        ? String(itemId)
+        : '';
+      const identityKey = buildTurmaIdentityKey(item);
+
+      if ((itemIdKey && idSet.has(itemIdKey)) || (identityKey && identitySet.has(identityKey))) {
+        return;
+      }
+
+      merged.push(item);
+
+      if (itemIdKey) {
+        idSet.add(itemIdKey);
+      }
+
+      if (identityKey) {
+        identitySet.add(identityKey);
+      }
+    });
+
+    return merged;
+  };
+
+  const normalizeLegacyAcademicStorage = (fallbackInstitutionId = null) => {
+    const legacyTurmasRaw = parseStorageArray(LEGACY_TURMAS_KEY);
+    const legacyClientesRaw = parseStorageArray(LEGACY_CLIENTES_KEY);
+
+    if (legacyTurmasRaw.length === 0 && legacyClientesRaw.length === 0) {
+      return { turmas: [], clientes: [] };
+    }
+
+    const fallbackId = normalizeInstitutionId(fallbackInstitutionId);
+    const defaultSchoolYear = String(new Date().getFullYear());
+    const turmasBySourceId = new Map();
+
+    const turmas = legacyTurmasRaw
+      .map((turmaRaw, index) => {
+        if (!turmaRaw || typeof turmaRaw !== 'object') {
+          return null;
+        }
+
+        const nomeTurma = String(turmaRaw?.nomeTurma || turmaRaw?.nome || turmaRaw?.turma || '').trim();
+        if (!nomeTurma) {
+          return null;
+        }
+
+        const nomeSerie = String(
+          turmaRaw?.nomeSerie
+          || turmaRaw?.serie
+          || turmaRaw?.anoSerie
+          || turmaRaw?.serieNome
+          || ''
+        ).trim();
+
+        const resolvedInstitutionId = resolveInstitutionId(getItemInstitutionRaw(turmaRaw), fallbackId);
+        const originalId = turmaRaw?.id;
+        const turmaId = originalId !== undefined && originalId !== null && originalId !== ''
+          ? originalId
+          : `legacy-turma-${index + 1}`;
+
+        const normalizedTurma = {
+          ...turmaRaw,
+          id: turmaId,
+          nomeTurma,
+          nomeSerie,
+          anoLetivo: String(turmaRaw?.anoLetivo || turmaRaw?.ano || defaultSchoolYear).trim(),
+          instituicaoId: resolvedInstitutionId ?? fallbackId ?? 0,
+          ativo: turmaRaw?.ativo !== false && normalizeInstitutionText(turmaRaw?.status) !== 'inativo'
+        };
+
+        const sourceId = String(originalId || '').trim();
+        if (sourceId) {
+          turmasBySourceId.set(sourceId, normalizedTurma);
+        }
+
+        return normalizedTurma;
+      })
+      .filter(Boolean);
+
+    const clientes = legacyClientesRaw
+      .map((clienteRaw, index) => {
+        if (!clienteRaw || typeof clienteRaw !== 'object') {
+          return null;
+        }
+
+        const sourceTurmaId = String(clienteRaw?.turmaId || clienteRaw?.turma_id || '').trim();
+        const turmaAssociada = sourceTurmaId ? turmasBySourceId.get(sourceTurmaId) : null;
+
+        const turmaNome = String(
+          clienteRaw?.turma
+          || clienteRaw?.nomeTurma
+          || turmaAssociada?.nomeTurma
+          || turmaAssociada?.nome
+          || ''
+        ).trim();
+
+        const serieNome = String(
+          clienteRaw?.serie
+          || clienteRaw?.nomeSerie
+          || turmaAssociada?.nomeSerie
+          || turmaAssociada?.serie
+          || ''
+        ).trim();
+
+        const resolvedInstitutionId = resolveInstitutionId(
+          getItemInstitutionRaw(clienteRaw),
+          resolveInstitutionId(getItemInstitutionRaw(turmaAssociada), fallbackId)
+        );
+
+        const hasAcademicLink = Boolean(
+          sourceTurmaId
+          || String(clienteRaw?.serieId || '').trim()
+          || turmaNome
+          || serieNome
+        );
+
+        const tipoBase = String(clienteRaw?.tipo || '').trim().toLowerCase();
+        const tipoNormalizado = tipoBase === 'leitor' && hasAcademicLink
+          ? 'aluno'
+          : (String(clienteRaw?.tipo || '').trim() || (hasAcademicLink ? 'aluno' : 'leitor'));
+
+        const originalId = clienteRaw?.id;
+        const clienteId = originalId !== undefined && originalId !== null && originalId !== ''
+          ? originalId
+          : `legacy-cliente-${index + 1}`;
+
+        return {
+          ...clienteRaw,
+          id: clienteId,
+          tipo: tipoNormalizado,
+          categoria: clienteRaw?.categoria || (tipoNormalizado === 'aluno' ? 'estudante' : ''),
+          instituicaoId: resolvedInstitutionId ?? fallbackId ?? 0,
+          turmaId: turmaAssociada?.id ?? (sourceTurmaId || clienteRaw?.turmaId || ''),
+          turma: turmaNome,
+          nomeTurma: turmaNome,
+          serie: serieNome,
+          nomeSerie: serieNome,
+          ativo: clienteRaw?.ativo !== false && normalizeInstitutionText(clienteRaw?.status) !== 'inativo'
+        };
+      })
+      .filter(Boolean);
+
+    return { turmas, clientes };
+  };
+
+  const mergeLegacyStandaloneAcademicStorage = (currentData = {}, fallbackInstitutionId = null) => {
+    const currentReaders = getReadersCollection(currentData);
+    const currentTurmas = Array.isArray(currentData.turmasAcademicas) ? currentData.turmasAcademicas : [];
+    const { turmas: legacyTurmas, clientes: legacyClientes } = normalizeLegacyAcademicStorage(fallbackInstitutionId);
+
+    if (legacyTurmas.length === 0 && legacyClientes.length === 0) {
+      return { data: currentData, merged: false, stats: null };
+    }
+
+    const mergedReaders = mergeReadersPreservingCurrent(currentReaders, legacyClientes);
+    const mergedTurmas = mergeTurmasPreservingCurrent(currentTurmas, legacyTurmas);
+
+    const readersImproved = mergedReaders.length > currentReaders.length;
+    const turmasImproved = mergedTurmas.length > currentTurmas.length;
+
+    const stats = {
+      legacyReaders: legacyClientes.length,
+      legacyTurmas: legacyTurmas.length,
+      mergedReaders: mergedReaders.length,
+      mergedTurmas: mergedTurmas.length
+    };
+
+    if (!readersImproved && !turmasImproved) {
+      return { data: currentData, merged: false, stats };
+    }
+
+    const mergedData = {
+      ...currentData,
+      clientes: mergedReaders,
+      leitores: mergedReaders,
+      turmasAcademicas: mergedTurmas
+    };
+
+    const institutionHint = resolveInstitutionId(
+      localStorage.getItem('cei_instituicao_ativa'),
+      resolveInstitutionId(fallbackInstitutionId, inferFallbackInstitutionId(mergedData))
+    );
+
+    const currentSnapshot = normalizeAllInstitutionData(
+      {
+        ...currentData,
+        clientes: currentReaders,
+        turmasAcademicas: currentTurmas
+      },
+      fallbackInstitutionId
+    );
+
+    const mergedSnapshot = normalizeAllInstitutionData(mergedData, fallbackInstitutionId);
+
+    const currentStudents = countStudentsForInstitutionInData(currentSnapshot, institutionHint);
+    const mergedStudents = countStudentsForInstitutionInData(mergedSnapshot, institutionHint);
+
+    const shouldApplyMerge =
+      mergedStudents >= currentStudents
+      || currentReaders.length === 0
+      || currentTurmas.length === 0
+      || localStorage.getItem(LEGACY_STORAGE_MIGRATION_KEY) !== 'true';
+
+    if (!shouldApplyMerge) {
+      return { data: currentData, merged: false, stats };
+    }
+
+    localStorage.setItem(LEGACY_STORAGE_MIGRATION_KEY, 'true');
+
+    return {
+      data: mergedData,
+      merged: true,
+      stats: {
+        ...stats,
+        currentStudents,
+        mergedStudents
+      }
+    };
+  };
+
+  const mergeRecoveredReadersIntoCurrentData = (currentData = {}, recoveredData = {}) => {
+    const recoveredReaders = getReadersCollection(recoveredData);
+    const mergedSeries = mergeCollectionsPreservingCurrent(
+      currentData.seriesAcademicas,
+      recoveredData.seriesAcademicas
+    );
+    const mergedTurmas = mergeCollectionsPreservingCurrent(
+      currentData.turmasAcademicas,
+      recoveredData.turmasAcademicas
+    );
+
+    if (!Array.isArray(recoveredReaders) || recoveredReaders.length === 0) {
+      return {
+        ...currentData,
+        seriesAcademicas: mergedSeries,
+        turmasAcademicas: mergedTurmas
+      };
+    }
+
+    return {
+      ...currentData,
+      clientes: recoveredReaders,
+      leitores: recoveredReaders,
+      seriesAcademicas: mergedSeries,
+      turmasAcademicas: mergedTurmas
+    };
+  };
+
+  const mergeRecoveredAcademicIntoCurrentData = (currentData = {}, recoveredData = {}) => {
+    const mergedSeries = mergeCollectionsPreservingCurrent(
+      currentData.seriesAcademicas,
+      recoveredData.seriesAcademicas
+    );
+    const mergedTurmas = mergeCollectionsPreservingCurrent(
+      currentData.turmasAcademicas,
+      recoveredData.turmasAcademicas
+    );
+
+    return {
+      ...currentData,
+      seriesAcademicas: mergedSeries,
+      turmasAcademicas: mergedTurmas
+    };
+  };
+
+  const countAcademicStructuresForInstitutionInData = (data = {}, targetInstitutionId) => {
+    const series = Array.isArray(data.seriesAcademicas) ? data.seriesAcademicas : [];
+    const turmas = Array.isArray(data.turmasAcademicas) ? data.turmasAcademicas : [];
+
+    const targetId = normalizeInstitutionId(targetInstitutionId);
+    if (targetId === null) {
+      return {
+        seriesCount: series.length,
+        turmasCount: turmas.length,
+        score: (turmas.length * 1000) + series.length
+      };
+    }
+
+    const aliasIds = getInstitutionAliasIdsFromData(data, targetId);
+    const aliasSet = new Set(aliasIds);
+    const fallbackInstitutionId = aliasIds.length === 1 ? aliasIds[0] : null;
+
+    const belongsToTargetInstitution = (item) => {
+      const institutionId = resolveInstitutionId(getItemInstitutionRaw(item), fallbackInstitutionId);
+      return institutionId !== null && aliasSet.has(institutionId);
+    };
+
+    const seriesCount = series.filter(belongsToTargetInstitution).length;
+    const turmasCount = turmas.filter(belongsToTargetInstitution).length;
+
+    return {
+      seriesCount,
+      turmasCount,
+      score: (turmasCount * 1000) + seriesCount
+    };
+  };
+
+  const chooseBestAcademicStructureSnapshot = (currentData, targetInstitutionId) => {
+    const candidates = buildRecoverySnapshotCandidates(currentData);
+
+    const evaluate = (snapshotData) => {
+      const fallbackInstitutionId = inferFallbackInstitutionId(snapshotData);
+      const normalizedData = normalizeAllInstitutionData(snapshotData, fallbackInstitutionId);
+      const academicStats = countAcademicStructuresForInstitutionInData(normalizedData, targetInstitutionId);
+
+      return {
+        ...academicStats,
+        normalizedData
+      };
+    };
+
+    const currentStats = evaluate(currentData);
+    let bestCandidate = {
+      source: 'cei_data',
+      data: currentStats.normalizedData,
+      stats: currentStats
+    };
+
+    candidates.forEach((candidate) => {
+      if (!candidate?.data) {
+        return;
+      }
+
+      const stats = evaluate(candidate.data);
+      if (stats.score > bestCandidate.stats.score) {
+        bestCandidate = {
+          source: candidate.source,
+          data: stats.normalizedData,
+          stats
+        };
+      }
+    });
+
+    const improvedTurmas = bestCandidate.stats.turmasCount > currentStats.turmasCount;
+    const improvedSeries = bestCandidate.stats.seriesCount > currentStats.seriesCount;
+
+    if ((improvedTurmas || improvedSeries) && bestCandidate.source !== 'cei_data') {
+      return bestCandidate;
+    }
+
+    return null;
+  };
+
+  const rebuildAcademicStructuresFromReaders = (data = {}, fallbackInstitutionId = null) => {
+    const readers = getReadersCollection(data);
+    if (!Array.isArray(readers) || readers.length === 0) {
+      return data;
+    }
+
+    const seriesList = Array.isArray(data.seriesAcademicas) ? [...data.seriesAcademicas] : [];
+    const turmasList = Array.isArray(data.turmasAcademicas) ? [...data.turmasAcademicas] : [];
+
+    const usedIds = new Set();
+    [seriesList, turmasList, readers].forEach((list) => {
+      list.forEach((item) => {
+        const numericId = Number(item?.id);
+        if (Number.isFinite(numericId) && numericId > 0) {
+          usedIds.add(numericId);
+        }
+      });
+    });
+
+    let generatedCounter = 0;
+    const generateUniqueId = () => {
+      let candidateId;
+
+      do {
+        generatedCounter += 1;
+        const suffix = String(generatedCounter % 1000).padStart(3, '0');
+        candidateId = Number(`${Date.now()}${suffix}`);
+      } while (usedIds.has(candidateId));
+
+      usedIds.add(candidateId);
+      return candidateId;
+    };
+
+    const buildSeriesKey = (institutionId, seriesName, schoolYear) => {
+      const normalizedInstitutionId = normalizeInstitutionId(institutionId);
+      const normalizedName = normalizeInstitutionText(seriesName);
+      const normalizedSchoolYear = String(schoolYear || '').trim();
+      return `${normalizedInstitutionId ?? 'null'}|${normalizedName}|${normalizedSchoolYear}`;
+    };
+
+    const buildTurmaKey = (institutionId, seriesId, turmaName, schoolYear) => {
+      const normalizedInstitutionId = normalizeInstitutionId(institutionId);
+      const normalizedTurmaName = normalizeInstitutionText(turmaName);
+      const normalizedSchoolYear = String(schoolYear || '').trim();
+      return `${normalizedInstitutionId ?? 'null'}|${String(seriesId || '')}|${normalizedTurmaName}|${normalizedSchoolYear}`;
+    };
+
+    const seriesById = new Map();
+    const seriesByKey = new Map();
+
+    seriesList.forEach((seriesItem) => {
+      const seriesId = seriesItem?.id;
+      if (seriesId !== undefined && seriesId !== null && seriesId !== '') {
+        seriesById.set(String(seriesId), seriesItem);
+      }
+
+      const key = buildSeriesKey(
+        getItemInstitutionRaw(seriesItem),
+        seriesItem?.nomeSerie,
+        seriesItem?.anoLetivo
+      );
+
+      seriesByKey.set(key, seriesItem);
+    });
+
+    const turmasById = new Map();
+    const turmasByKey = new Map();
+
+    turmasList.forEach((turmaItem) => {
+      const turmaId = turmaItem?.id;
+      if (turmaId !== undefined && turmaId !== null && turmaId !== '') {
+        turmasById.set(String(turmaId), turmaItem);
+      }
+
+      const key = buildTurmaKey(
+        getItemInstitutionRaw(turmaItem),
+        turmaItem?.serieId,
+        turmaItem?.nomeTurma,
+        turmaItem?.anoLetivo
+      );
+
+      turmasByKey.set(key, turmaItem);
+    });
+
+    const nowIso = new Date().toISOString();
+    const defaultSchoolYear = String(new Date().getFullYear());
+    let hasReaderUpdates = false;
+
+    const updatedReaders = readers.map((reader) => {
+      const isStudent = String(reader?.tipo || '').trim().toLowerCase() === 'aluno';
+      if (!isStudent) {
+        return reader;
+      }
+
+      const institutionId = resolveInstitutionId(getItemInstitutionRaw(reader), fallbackInstitutionId);
+      const seriesName = String(reader?.serie || '').trim();
+      const turmaName = String(reader?.turma || '').trim();
+      const schoolYear = String(reader?.anoLetivo || defaultSchoolYear).trim();
+
+      let seriesRecord = null;
+      let turmaRecord = null;
+      let readerChanged = false;
+
+      const currentSeriesId =
+        reader?.serieId !== undefined && reader?.serieId !== null && reader?.serieId !== ''
+          ? String(reader.serieId)
+          : '';
+
+      if (currentSeriesId && seriesById.has(currentSeriesId)) {
+        seriesRecord = seriesById.get(currentSeriesId);
+      }
+
+      if (!seriesRecord && seriesName) {
+        const seriesKey = buildSeriesKey(institutionId, seriesName, schoolYear);
+        seriesRecord = seriesByKey.get(seriesKey) || null;
+      }
+
+      if (!seriesRecord && seriesName) {
+        const newSeries = {
+          id: generateUniqueId(),
+          instituicaoId: institutionId ?? 0,
+          nomeSerie: seriesName,
+          anoLetivo: schoolYear,
+          descricao: '',
+          ativo: true,
+          dataCadastro: nowIso
+        };
+
+        seriesList.push(newSeries);
+        seriesById.set(String(newSeries.id), newSeries);
+        seriesByKey.set(buildSeriesKey(institutionId, newSeries.nomeSerie, newSeries.anoLetivo), newSeries);
+        seriesRecord = newSeries;
+      }
+
+      const currentTurmaId =
+        reader?.turmaId !== undefined && reader?.turmaId !== null && reader?.turmaId !== ''
+          ? String(reader.turmaId)
+          : '';
+
+      if (currentTurmaId && turmasById.has(currentTurmaId)) {
+        turmaRecord = turmasById.get(currentTurmaId);
+      }
+
+      if (!turmaRecord && turmaName) {
+        const turmaKey = buildTurmaKey(
+          institutionId,
+          seriesRecord?.id || '',
+          turmaName,
+          schoolYear
+        );
+
+        turmaRecord = turmasByKey.get(turmaKey) || null;
+      }
+
+      if (!turmaRecord && turmaName) {
+        const newTurma = {
+          id: generateUniqueId(),
+          instituicaoId: institutionId ?? 0,
+          serieId: seriesRecord?.id || null,
+          nomeSerie: seriesRecord?.nomeSerie || seriesName || '',
+          nomeTurma: turmaName,
+          anoLetivo: schoolYear,
+          turno: '',
+          ativo: true,
+          dataCadastro: nowIso
+        };
+
+        turmasList.push(newTurma);
+        turmasById.set(String(newTurma.id), newTurma);
+        turmasByKey.set(
+          buildTurmaKey(institutionId, newTurma.serieId, newTurma.nomeTurma, newTurma.anoLetivo),
+          newTurma
+        );
+        turmaRecord = newTurma;
+      }
+
+      const nextSeriesId = seriesRecord ? String(seriesRecord.id) : '';
+      const nextTurmaId = turmaRecord ? String(turmaRecord.id) : '';
+
+      if (nextSeriesId && currentSeriesId !== nextSeriesId) {
+        readerChanged = true;
+      }
+
+      if (nextTurmaId && currentTurmaId !== nextTurmaId) {
+        readerChanged = true;
+      }
+
+      if (!readerChanged) {
+        return reader;
+      }
+
+      hasReaderUpdates = true;
+
+      return {
+        ...reader,
+        serie: seriesRecord?.nomeSerie || seriesName,
+        serieId: nextSeriesId,
+        turma: turmaRecord?.nomeTurma || turmaName,
+        turmaId: nextTurmaId
+      };
+    });
+
+    const seriesChanged = seriesList.length !== (Array.isArray(data.seriesAcademicas) ? data.seriesAcademicas.length : 0);
+    const turmasChanged = turmasList.length !== (Array.isArray(data.turmasAcademicas) ? data.turmasAcademicas.length : 0);
+
+    if (!hasReaderUpdates && !seriesChanged && !turmasChanged) {
+      return data;
+    }
+
+    return {
+      ...data,
+      clientes: updatedReaders,
+      leitores: updatedReaders,
+      seriesAcademicas: seriesList,
+      turmasAcademicas: turmasList
+    };
+  };
+
+  const buildRecoverySnapshotCandidates = (currentData) => {
+    const candidates = [{ source: 'cei_data', data: currentData }];
+
+    const pushCandidate = (source, rawSnapshot) => {
+      const parsed = parseDataSnapshot(rawSnapshot);
+      if (!parsed) {
+        return;
+      }
+
+      candidates.push({ source, data: parsed });
+    };
+
+    pushCandidate('cei_data_backup', localStorage.getItem('cei_data_backup'));
+    pushCandidate('cei_data_emergency', localStorage.getItem('cei_data_emergency'));
+
+    const versionBackupKeys = Object.keys(localStorage)
+      .filter((key) => key.startsWith('cei_backup_v'))
+      .sort()
+      .reverse()
+      .slice(0, 20);
+
+    const importBackupKeys = Object.keys(localStorage)
+      .filter((key) => key.startsWith('cei_data_backup_import_'))
+      .sort()
+      .reverse()
+      .slice(0, 20);
+
+    versionBackupKeys.forEach((key) => {
+      pushCandidate(key, localStorage.getItem(key));
+    });
+
+    importBackupKeys.forEach((key) => {
+      pushCandidate(key, localStorage.getItem(key));
+    });
+
+    return candidates;
+  };
+
+  const chooseBestRecoverySnapshot = (currentData, targetInstitutionId) => {
+    const candidates = buildRecoverySnapshotCandidates(currentData);
+
+    const evaluate = (snapshotData) => {
+      const fallbackInstitutionId = inferFallbackInstitutionId(snapshotData);
+      const normalizedData = normalizeAllInstitutionData(snapshotData, fallbackInstitutionId);
+      const readersCount = countReadersForInstitutionInData(normalizedData, targetInstitutionId);
+      const studentsCount = countStudentsForInstitutionInData(normalizedData, targetInstitutionId);
+
+      return {
+        readersCount,
+        studentsCount,
+        score: (studentsCount * 1000) + readersCount,
+        normalizedData
+      };
+    };
+
+    const currentStats = evaluate(currentData);
+    let bestCandidate = {
+      source: 'cei_data',
+      data: currentStats.normalizedData,
+      stats: currentStats
+    };
+
+    candidates.forEach((candidate) => {
+      if (!candidate?.data) {
+        return;
+      }
+
+      const stats = evaluate(candidate.data);
+      if (stats.score > bestCandidate.stats.score) {
+        bestCandidate = {
+          source: candidate.source,
+          data: stats.normalizedData,
+          stats
+        };
+      }
+    });
+
+    const improvedStudents = bestCandidate.stats.studentsCount > currentStats.studentsCount;
+    const improvedReaders = bestCandidate.stats.readersCount >= currentStats.readersCount + 5;
+
+    if ((improvedStudents || improvedReaders) && bestCandidate.source !== 'cei_data') {
+      return bestCandidate;
+    }
+
+    return null;
+  };
+
+  const gerarIdUnico = () => {
+    const sufixo = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+    const candidate = Number(`${Date.now()}${sufixo}`);
+    return Number.isSafeInteger(candidate) ? candidate : Date.now();
+  };
+
+  const gerarIdUnicoComSet = (usedIdsSet) => {
+    let novoId = gerarIdUnico();
+    while (usedIdsSet.has(novoId)) {
+      novoId = gerarIdUnico();
+    }
+    usedIdsSet.add(novoId);
+    return novoId;
+  };
+
+  const migrarIdsLegados = (dadosOriginais) => {
+    if (!dadosOriginais || localStorage.getItem(GLOBAL_IDS_MIGRATION_KEY) === 'true') {
+      return dadosOriginais;
+    }
+
+    const dados = {
+      ...dadosOriginais,
+      usuarios: [...(dadosOriginais.usuarios || [])],
+      livros: [...(dadosOriginais.livros || [])],
+      clientes: [...(dadosOriginais.clientes || dadosOriginais.leitores || [])],
+      patrimonio: [...(dadosOriginais.patrimonio || [])],
+      emprestimos: [...(dadosOriginais.emprestimos || [])]
+    };
+
+    const usedIds = new Set();
+    [dados.usuarios, dados.livros, dados.clientes, dados.patrimonio, dados.emprestimos].forEach((lista) => {
+      (lista || []).forEach((item) => {
+        if (item?.id !== undefined && item?.id !== null) {
+          usedIds.add(Number(item.id));
+        }
+      });
+    });
+
+    const livroIdMap = new Map();
+    const clienteIdMap = new Map();
+
+    const isLegacy = (id) => {
+      const numericId = Number(id);
+      return Number.isFinite(numericId) && numericId > 0 && numericId < 1000000000000;
+    };
+
+    dados.livros = dados.livros.map((livro) => {
+      if (!isLegacy(livro.id)) return livro;
+      const novoId = gerarIdUnicoComSet(usedIds);
+      livroIdMap.set(Number(livro.id), novoId);
+      return { ...livro, id: novoId };
+    });
+
+    dados.clientes = dados.clientes.map((cliente) => {
+      if (!isLegacy(cliente.id)) return cliente;
+      const novoId = gerarIdUnicoComSet(usedIds);
+      clienteIdMap.set(Number(cliente.id), novoId);
+      return { ...cliente, id: novoId };
+    });
+
+    dados.patrimonio = dados.patrimonio.map((bem) => {
+      if (!isLegacy(bem.id)) return bem;
+      const novoId = gerarIdUnicoComSet(usedIds);
+      return { ...bem, id: novoId };
+    });
+
+    dados.emprestimos = dados.emprestimos.map((emprestimo) => {
+      const novoEmprestimoId = isLegacy(emprestimo.id)
+        ? gerarIdUnicoComSet(usedIds)
+        : emprestimo.id;
+
+      const livroIdAtualizado = livroIdMap.get(Number(emprestimo.livroId)) || emprestimo.livroId;
+      const clienteIdAtualizado = clienteIdMap.get(Number(emprestimo.clienteId)) || emprestimo.clienteId;
+
+      return {
+        ...emprestimo,
+        id: novoEmprestimoId,
+        livroId: livroIdAtualizado,
+        clienteId: clienteIdAtualizado
+      };
+    });
+
+    dados.usuarios = dados.usuarios.map((usuario) => {
+      if (usuario?.perfil === 'SuperAdmin') return usuario;
+      if (!isLegacy(usuario?.id)) return usuario;
+
+      const novoId = gerarIdUnicoComSet(usedIds);
+      return { ...usuario, id: novoId };
+    });
+
+    localStorage.setItem(GLOBAL_IDS_MIGRATION_KEY, 'true');
+    return dados;
+  };
+
+  const getItemTimestamp = (item) => {
+    const timestamp = new Date(
+      item?.dataAtualizacao ||
+      item?.updated_at ||
+      item?.dataCadastro ||
+      item?.created_at ||
+      0
+    ).getTime();
+
+    return Number.isFinite(timestamp) ? timestamp : 0;
+  };
+
+  const getMergeKeyById = (rawId) => {
+    if (rawId === undefined || rawId === null || rawId === '') {
+      return null;
+    }
+
+    const numericId = Number(rawId);
+    if (Number.isFinite(numericId)) {
+      return `n:${numericId}`;
+    }
+
+    return `s:${String(rawId).trim()}`;
+  };
+
+  const mergeByIdPreferLatest = (localItems = [], cloudItems = []) => {
+    const mergedMap = new Map();
+
+    localItems.forEach((item) => {
+      const mergeKey = getMergeKeyById(item?.id);
+      if (item && mergeKey) {
+        mergedMap.set(mergeKey, item);
+      }
+    });
+
+    cloudItems.forEach((cloudItem) => {
+      const mergeKey = getMergeKeyById(cloudItem?.id);
+      if (!cloudItem || !mergeKey) return;
+
+      const localItem = mergedMap.get(mergeKey);
+      if (!localItem) {
+        mergedMap.set(mergeKey, cloudItem);
+        return;
+      }
+
+      const localTs = getItemTimestamp(localItem);
+      const cloudTs = getItemTimestamp(cloudItem);
+      mergedMap.set(mergeKey, cloudTs > localTs ? cloudItem : localItem);
+    });
+
+    return Array.from(mergedMap.values());
+  };
+
+  const replaceInstitutionSlice = (allItems = [], institutionItems = [], targetInstitutionId) => {
+    const otherItems = allItems.filter((item) => !belongsToInstitution(item, targetInstitutionId));
+    return [...otherItems, ...institutionItems];
+  };
+
+  const getInstitutionSlices = (institutionId) => ({
+    instituicoes: instituicoesRef.current.filter((item) => normalizeInstitutionId(item?.id) === normalizeInstitutionId(institutionId)),
+    usuarios: usuariosRef.current.filter((item) => belongsToInstitution(item, institutionId, { includeLegacyWithoutInstitution: true }) && item.perfil !== 'SuperAdmin'),
+    livros: livrosRef.current.filter((item) => belongsToInstitution(item, institutionId, { includeLegacyWithoutInstitution: true })),
+    clientes: clientesRef.current.filter((item) => belongsToInstitution(item, institutionId, { includeLegacyWithoutInstitution: true })),
+    patrimonio: patrimonioRef.current.filter((item) => belongsToInstitution(item, institutionId, { includeLegacyWithoutInstitution: true })),
+    emprestimos: emprestimosRef.current.filter((item) => belongsToInstitution(item, institutionId, { includeLegacyWithoutInstitution: true }))
+  });
+
+  const aplicarDadosNuvemNaInstituicao = (institutionId, cloudDataByType) => {
+    const localSlices = getInstitutionSlices(institutionId);
+
+    // Guard: if localStorage has more items than the stale in-memory refs for a data type,
+    // use the localStorage items as local source. This protects against stale React state
+    // after a direct localStorage import (e.g. bulk import script) being overwritten by
+    // the 20-second periodic pull before React state is updated.
+    try {
+      const rawLocal = localStorage.getItem('cei_data');
+      if (rawLocal) {
+        const parsedLocal = JSON.parse(rawLocal);
+        if (parsedLocal && typeof parsedLocal === 'object') {
+          dataTypesSync.forEach((dataType) => {
+            const lsAll = parsedLocal[dataType];
+            if (!Array.isArray(lsAll)) return;
+            const lsForInstitution = lsAll.filter(
+              (item) => belongsToInstitution(item, institutionId, { includeLegacyWithoutInstitution: true })
+            );
+            if (lsForInstitution.length > (localSlices[dataType] || []).length) {
+              localSlices[dataType] = lsForInstitution;
+            }
+          });
+        }
+      }
+    } catch (_e) { /* ignore localStorage read errors */ }
+
+    const mergedData = {};
+    dataTypesSync.forEach((dataType) => {
+      const localList = localSlices[dataType] || [];
+      const cloudList = cloudDataByType[dataType] || [];
+      mergedData[dataType] = mergeByIdPreferLatest(localList, cloudList);
+    });
+
+    setInstituicoes((prev) => {
+      const normalizedTargetInstitutionId = normalizeInstitutionId(institutionId);
+      const outras = prev.filter(
+        (item) => normalizeInstitutionId(item?.id) !== normalizedTargetInstitutionId
+      );
+      return [...outras, ...(mergedData.instituicoes || [])];
+    });
+
+    setUsuarios((prev) => {
+      const preservados = prev.filter((item) => !belongsToInstitution(item, institutionId) || item.perfil === 'SuperAdmin');
+      return [...preservados, ...(mergedData.usuarios || [])];
+    });
+
+    setLivros((prev) => replaceInstitutionSlice(prev, mergedData.livros, institutionId));
+    setClientes((prev) => replaceInstitutionSlice(prev, mergedData.clientes, institutionId));
+    setPatrimonio((prev) => replaceInstitutionSlice(prev, mergedData.patrimonio, institutionId));
+    setEmprestimos((prev) => replaceInstitutionSlice(prev, mergedData.emprestimos, institutionId));
+
+    return mergedData;
+  };
+
+  const baixarDadosNuvemInstituicao = async (institutionId) => {
+    const cloudDataByType = {};
+
+    for (const dataType of dataTypesSync) {
+      const result = await syncFromCloud(dataType, institutionId);
+      cloudDataByType[dataType] = result.success ? (result.data || []) : [];
+    }
+
+    return cloudDataByType;
+  };
+
+  const enviarDadosInstituicaoParaNuvem = async (institutionId, slices = null) => {
+    if (!isCloudEnabled || !institutionId || institutionId === 0) return;
+    if (cloudPushingRef.current) return;
+
+    cloudPushingRef.current = true;
+    try {
+      const payload = slices || getInstitutionSlices(institutionId);
+
+      for (const dataType of dataTypesSync) {
+        await syncToCloud(dataType, payload[dataType] || [], institutionId);
+      }
+
+      localStorage.setItem('cei_last_sync', new Date().toISOString());
+    } catch (error) {
+      console.error('❌ Erro ao enviar dados da instituição para nuvem:', error);
+    } finally {
+      cloudPushingRef.current = false;
+    }
+  };
+
+  const sincronizarInstituicaoComNuvem = async (institutionId, pushAfterMerge = false) => {
+    if (!isCloudEnabled || !institutionId || institutionId === 0) return;
+    if (cloudPullingRef.current) return;
+
+    // Se uma importação em lote ocorreu nos últimos 15 segundos, bloquear o PULL
+    // para evitar que os dados do Supabase (desatualizados) sobrescrevam o lote local.
+    // O push de 1.5s (enviarDadosInstituicaoParaNuvem) se encarrega de subir os dados.
+    const importFlagVal = localStorage.getItem('cei_lote_import_flag');
+    const isRecentBatchImport = importFlagVal && (Date.now() - Number(importFlagVal)) < 15000;
+    if (isRecentBatchImport && !pushAfterMerge) {
+      console.log('⏳ [SYNC] Pull da nuvem ignorado - importação em lote recente em andamento');
+      return;
+    }
+
+    cloudPullingRef.current = true;
+    try {
+      const cloudDataByType = await baixarDadosNuvemInstituicao(institutionId);
+      const merged = aplicarDadosNuvemNaInstituicao(institutionId, cloudDataByType);
+
+      if (pushAfterMerge) {
+        await enviarDadosInstituicaoParaNuvem(institutionId, merged);
+      } else {
+        localStorage.setItem('cei_last_sync', new Date().toISOString());
+      }
+    } catch (error) {
+      console.error('❌ Erro ao sincronizar instituição com nuvem:', error);
+    } finally {
+      cloudPullingRef.current = false;
+    }
+  };
+
+  const rehidratarEstadoDoLocalStorageSeNecessario = () => {
+    try {
+      const rawSnapshot = localStorage.getItem('cei_data');
+      if (!rawSnapshot) {
+        return false;
+      }
+
+      const parsedSnapshot = JSON.parse(rawSnapshot);
+      if (!parsedSnapshot || typeof parsedSnapshot !== 'object') {
+        return false;
+      }
+
+      const fallbackInstitutionId = resolveInstitutionId(
+        localStorage.getItem('cei_instituicao_ativa'),
+        inferFallbackInstitutionId(parsedSnapshot)
+      );
+
+      const snapshotData = normalizeAllInstitutionData(parsedSnapshot, fallbackInstitutionId);
+      const targetInstitutionId = resolveInstitutionId(instituicaoAtiva, fallbackInstitutionId);
+
+      const currentData = {
+        instituicoes,
+        usuarios,
+        livros,
+        patrimonio,
+        clientes,
+        seriesAcademicas,
+        turmasAcademicas,
+        emprestimos,
+        planos,
+        notasFiscais,
+        logAtividades
+      };
+
+      const snapshotReaders = countReadersForInstitutionInData(snapshotData, targetInstitutionId);
+      const currentReaders = countReadersForInstitutionInData(currentData, targetInstitutionId);
+      const snapshotStudents = countStudentsForInstitutionInData(snapshotData, targetInstitutionId);
+      const currentStudents = countStudentsForInstitutionInData(currentData, targetInstitutionId);
+
+      const shouldHydrateSnapshot =
+        snapshotStudents > currentStudents ||
+        snapshotReaders >= currentReaders + 5;
+
+      if (!shouldHydrateSnapshot) {
+        return false;
+      }
+
+      const snapshotUsers = snapshotData.usuarios || [];
+      const hasSuperAdmin = snapshotUsers.some((user) => user?.perfil === 'SuperAdmin');
+      const mergedUsers = hasSuperAdmin
+        ? snapshotUsers
+        : [...usuariosPadrao, ...snapshotUsers.filter((user) => user?.perfil !== 'SuperAdmin')];
+
+      setInstituicoes(snapshotData.instituicoes || []);
+      setUsuarios(mergedUsers);
+      setLivros(snapshotData.livros || []);
+      setPatrimonio(snapshotData.patrimonio || []);
+      setClientes(snapshotData.clientes || []);
+      setSeriesAcademicas(snapshotData.seriesAcademicas || []);
+      setTurmasAcademicas(snapshotData.turmasAcademicas || []);
+      setEmprestimos(snapshotData.emprestimos || []);
+      setPlanos(snapshotData.planos || planosPadrao);
+      setNotasFiscais(snapshotData.notasFiscais || []);
+      setLogAtividades(snapshotData.logAtividades || []);
+
+      console.log(
+        `🧰 [SYNC] Snapshot local reaplicado antes da sincronização (${currentStudents} → ${snapshotStudents} alunos).`
+      );
+
+      return true;
+    } catch (error) {
+      console.error('❌ [SYNC] Falha ao reidratar estado local antes da sincronização:', error);
+      return false;
+    }
+  };
 
   // Função para sincronizar dados com o servidor
   const sincronizarDados = async () => {
@@ -254,6 +1765,8 @@ export const DataProvider = ({ children }) => {
         livros,
         patrimonio,
         clientes,
+        seriesAcademicas,
+        turmasAcademicas,
         emprestimos,
         usuarios,
         planos,
@@ -264,21 +1777,34 @@ export const DataProvider = ({ children }) => {
 
       // Atualizar estados com dados sincronizados
       if (dadosSincronizados) {
-        setInstituicoes(dadosSincronizados.instituicoes || []);
-        setLivros(dadosSincronizados.livros || []);
-        setPatrimonio(dadosSincronizados.patrimonio || []);
-        setClientes(dadosSincronizados.clientes || []);
-        setEmprestimos(dadosSincronizados.emprestimos || []);
-        setPlanos(dadosSincronizados.planos || planosPadrao);
-        setNotasFiscais(dadosSincronizados.notasFiscais || []);
+        const dadosNormalizados = normalizeAllInstitutionData(
+          dadosSincronizados,
+          instituicaoAtiva
+        );
+        const hasSeriesPayload = Object.prototype.hasOwnProperty.call(dadosSincronizados, 'seriesAcademicas');
+        const hasTurmasPayload = Object.prototype.hasOwnProperty.call(dadosSincronizados, 'turmasAcademicas');
+
+        setInstituicoes(dadosNormalizados.instituicoes || []);
+        setLivros(dadosNormalizados.livros || []);
+        setPatrimonio(dadosNormalizados.patrimonio || []);
+        setClientes(dadosNormalizados.clientes || []);
+        if (hasSeriesPayload) {
+          setSeriesAcademicas(dadosNormalizados.seriesAcademicas || []);
+        }
+        if (hasTurmasPayload) {
+          setTurmasAcademicas(dadosNormalizados.turmasAcademicas || []);
+        }
+        setEmprestimos(dadosNormalizados.emprestimos || []);
+        setPlanos(dadosNormalizados.planos || planosPadrao);
+        setNotasFiscais(dadosNormalizados.notasFiscais || []);
         
         // Manter usuários com SuperAdmin
-        if (dadosSincronizados.usuarios) {
-          const temSuperAdmin = dadosSincronizados.usuarios.some(u => u.perfil === 'SuperAdmin');
+        if (dadosNormalizados.usuarios) {
+          const temSuperAdmin = dadosNormalizados.usuarios.some(u => u.perfil === 'SuperAdmin');
           if (temSuperAdmin) {
-            setUsuarios(dadosSincronizados.usuarios);
+            setUsuarios(dadosNormalizados.usuarios);
           } else {
-            setUsuarios([...usuariosPadrao, ...dadosSincronizados.usuarios.filter(u => u.perfil !== 'SuperAdmin')]);
+            setUsuarios([...usuariosPadrao, ...dadosNormalizados.usuarios.filter(u => u.perfil !== 'SuperAdmin')]);
           }
         }
       }
@@ -291,6 +1817,15 @@ export const DataProvider = ({ children }) => {
       window.dispatchEvent(new Event('sync-end'));
     }
   };
+
+  useEffect(() => {
+    instituicoesRef.current = instituicoes;
+    usuariosRef.current = usuarios;
+    livrosRef.current = livros;
+    clientesRef.current = clientes;
+    patrimonioRef.current = patrimonio;
+    emprestimosRef.current = emprestimos;
+  }, [instituicoes, usuarios, livros, clientes, patrimonio, emprestimos]);
 
   // Carregar dados do localStorage ao iniciar
   useEffect(() => {
@@ -366,6 +1901,28 @@ export const DataProvider = ({ children }) => {
       
       // PASSO 2: Carregar dados (agora já migrados se necessário)
       let dadosSalvos = localStorage.getItem('cei_data');
+
+      if (!dadosSalvos) {
+        const fallbackLegacyInstitutionId = resolveInstitutionId(
+          localStorage.getItem('cei_instituicao_ativa'),
+          null
+        );
+
+        const legadoBootstrap = mergeLegacyStandaloneAcademicStorage({}, fallbackLegacyInstitutionId);
+        const leitoresLegados = getReadersCollection(legadoBootstrap.data).length;
+        const turmasLegadas = Array.isArray(legadoBootstrap.data?.turmasAcademicas)
+          ? legadoBootstrap.data.turmasAcademicas.length
+          : 0;
+
+        if (legadoBootstrap.merged && (leitoresLegados > 0 || turmasLegadas > 0)) {
+          dadosSalvos = JSON.stringify(legadoBootstrap.data);
+          localStorage.setItem('cei_data', dadosSalvos);
+          console.log(
+            `🧩 [LEGACY] Snapshot criado a partir de chaves legadas: ${leitoresLegados} leitores e ${turmasLegadas} turmas.`
+          );
+        }
+      }
+
       console.log('🔄 Carregando dados...', dadosSalvos ? 'Dados encontrados' : 'Sem dados salvos');
       
       // 🔧 Sistema de recuperação: tentar restaurar backup se dados corrompidos
@@ -407,7 +1964,66 @@ export const DataProvider = ({ children }) => {
       }
       
       if (dadosSalvos) {
-        const dados = JSON.parse(dadosSalvos);
+        const dadosSemMigracao = JSON.parse(dadosSalvos);
+        const fallbackLegacyInstitutionId = resolveInstitutionId(
+          localStorage.getItem('cei_instituicao_ativa'),
+          inferFallbackInstitutionId(dadosSemMigracao)
+        );
+
+        const legadoMesclado = mergeLegacyStandaloneAcademicStorage(
+          dadosSemMigracao,
+          fallbackLegacyInstitutionId
+        );
+
+        const dadosComCompatibilidadeLegada = legadoMesclado.data;
+        const dadosMigrados = migrarIdsLegados(dadosComCompatibilidadeLegada);
+        const institutionIdHint = resolveInstitutionId(
+          localStorage.getItem('cei_instituicao_ativa'),
+          inferFallbackInstitutionId(dadosMigrados)
+        );
+
+        if (legadoMesclado.merged && legadoMesclado.stats) {
+          console.log(
+            `🧩 [LEGACY] Dados legados integrados ao snapshot principal: ` +
+            `${legadoMesclado.stats.legacyReaders} leitores e ${legadoMesclado.stats.legacyTurmas} turmas detectados.`
+          );
+        }
+
+        // Only run aggressive recovery from backups when corruption recovery was triggered.
+        // This avoids reintroducing intentionally deleted readers from old snapshots.
+        const podeRecuperarDeBackup = tentativaRecuperacao === true;
+        const melhorSnapshot = podeRecuperarDeBackup
+          ? chooseBestRecoverySnapshot(dadosMigrados, institutionIdHint)
+          : null;
+        const melhorSnapshotAcademico = podeRecuperarDeBackup
+          ? chooseBestAcademicStructureSnapshot(dadosMigrados, institutionIdHint)
+          : null;
+
+        const dadosComLeitores = melhorSnapshot
+          ? mergeRecoveredReadersIntoCurrentData(dadosMigrados, melhorSnapshot.data)
+          : dadosMigrados;
+        const dadosComEstrutura = melhorSnapshotAcademico
+          ? mergeRecoveredAcademicIntoCurrentData(dadosComLeitores, melhorSnapshotAcademico.data)
+          : dadosComLeitores;
+        const dadosBase = rebuildAcademicStructuresFromReaders(dadosComEstrutura, institutionIdHint);
+
+        if (melhorSnapshot) {
+          console.log(
+            `🧰 [RECOVERY] Leitores restaurados de ${melhorSnapshot.source}: ` +
+            `${melhorSnapshot.stats.studentsCount} alunos e ${melhorSnapshot.stats.readersCount} leitores. ` +
+            'Turmas e séries atuais foram preservadas.'
+          );
+        }
+
+        if (melhorSnapshotAcademico) {
+          console.log(
+            `🧰 [RECOVERY] Estrutura acadêmica restaurada de ${melhorSnapshotAcademico.source}: ` +
+            `${melhorSnapshotAcademico.stats.seriesCount} séries e ${melhorSnapshotAcademico.stats.turmasCount} turmas.`
+          );
+        }
+
+        const fallbackInstitutionId = inferFallbackInstitutionId(dadosBase);
+        const dados = normalizeAllInstitutionData(dadosBase, fallbackInstitutionId);
         console.log('📦 Dados parseados:', {
           instituicoes: dados.instituicoes?.length || 0,
           usuarios: dados.usuarios?.length || 0,
@@ -453,6 +2069,8 @@ export const DataProvider = ({ children }) => {
         setLivros(dados.livros || []);
         setPatrimonio(dados.patrimonio || []);
         setClientes(dados.clientes || []);
+        setSeriesAcademicas(dados.seriesAcademicas || []);
+        setTurmasAcademicas(dados.turmasAcademicas || []);
         setEmprestimos(dados.emprestimos || []);
         setPlanos(dados.planos || planosPadrao);
         setNotasFiscais(dados.notasFiscais || []);
@@ -502,12 +2120,24 @@ export const DataProvider = ({ children }) => {
     }, 300000); // 5 minutos
 
     return () => clearInterval(interval);
-  }, [instituicoes, livros, patrimonio, clientes, emprestimos, usuarios, planos, notasFiscais]);
+  }, [instituicoes, livros, patrimonio, clientes, seriesAcademicas, turmasAcademicas, emprestimos, usuarios, planos, notasFiscais]);
 
   // Sincronizar quando voltar online
   useEffect(() => {
-    const handleSyncRequired = () => {
+    const handleSyncRequired = async () => {
       console.log('Sincronização solicitada após reconexão');
+
+      const snapshotReaplicado = rehidratarEstadoDoLocalStorageSeNecessario();
+
+      if (isCloudEnabled && instituicaoAtiva && instituicaoAtiva !== 0 && usuarioLogado?.perfil !== 'SuperAdmin') {
+        if (snapshotReaplicado) {
+          await new Promise((resolve) => setTimeout(resolve, 0));
+        }
+
+        await sincronizarInstituicaoComNuvem(instituicaoAtiva, true);
+        return;
+      }
+
       sincronizarDados();
     };
 
@@ -518,7 +2148,42 @@ export const DataProvider = ({ children }) => {
       window.removeEventListener('sync-required', handleSyncRequired);
       window.removeEventListener('online', handleSyncRequired);
     };
-  }, [instituicoes, livros, patrimonio, clientes, emprestimos, usuarios, planos, notasFiscais]);
+  }, [instituicoes, livros, patrimonio, clientes, seriesAcademicas, turmasAcademicas, emprestimos, usuarios, planos, notasFiscais, logAtividades, instituicaoAtiva, usuarioLogado?.perfil]);
+
+  // Sincronização inicial da instituição com a nuvem (merge seguro sem perda)
+  useEffect(() => {
+    if (!dadosCarregados || !isCloudEnabled) return;
+    if (!instituicaoAtiva || instituicaoAtiva === 0) return;
+    if (usuarioLogado?.perfil === 'SuperAdmin') return;
+
+    sincronizarInstituicaoComNuvem(instituicaoAtiva, true);
+  }, [dadosCarregados, instituicaoAtiva, usuarioLogado?.perfil]);
+
+  // Pull periódico para refletir alterações feitas por outros computadores/usuários da mesma escola
+  useEffect(() => {
+    if (!dadosCarregados || !isCloudEnabled) return undefined;
+    if (!instituicaoAtiva || instituicaoAtiva === 0) return undefined;
+    if (usuarioLogado?.perfil === 'SuperAdmin') return undefined;
+
+    const interval = setInterval(() => {
+      sincronizarInstituicaoComNuvem(instituicaoAtiva, false);
+    }, 20000);
+
+    return () => clearInterval(interval);
+  }, [dadosCarregados, instituicaoAtiva, usuarioLogado?.perfil]);
+
+  // Push automático com debounce para nuvem
+  useEffect(() => {
+    if (!dadosCarregados || !isCloudEnabled) return undefined;
+    if (!instituicaoAtiva || instituicaoAtiva === 0) return undefined;
+    if (usuarioLogado?.perfil === 'SuperAdmin') return undefined;
+
+    const timeout = setTimeout(() => {
+      enviarDadosInstituicaoParaNuvem(instituicaoAtiva);
+    }, 1500);
+
+    return () => clearTimeout(timeout);
+  }, [instituicoes, usuarios, livros, clientes, patrimonio, emprestimos, instituicaoAtiva, dadosCarregados, usuarioLogado?.perfil]);
 
   // Verificar licenças periodicamente (a cada hora)
   useEffect(() => {
@@ -531,6 +2196,10 @@ export const DataProvider = ({ children }) => {
 
   // Salvar dados no localStorage sempre que houver mudança
   useEffect(() => {
+    if (!dadosCarregados) {
+      return;
+    }
+
     // 🛡️ Criar backup antes de salvar (a cada 10 salvamentos ou 1 hora)
     const lastBackup = localStorage.getItem('cei_last_backup');
     const shouldBackup = !lastBackup || 
@@ -546,6 +2215,8 @@ export const DataProvider = ({ children }) => {
       livros,
       patrimonio,
       clientes,
+      seriesAcademicas,
+      turmasAcademicas,
       emprestimos,
       usuarios,
       planos,
@@ -584,6 +2255,8 @@ export const DataProvider = ({ children }) => {
         usuarios: usuarios.length,
         livros: livros.length,
         clientes: clientes.length,
+        seriesAcademicas: seriesAcademicas.length,
+        turmasAcademicas: turmasAcademicas.length,
         emprestimos: emprestimos.length,
         logs: logAtividades.length,
         timestamp: new Date().toLocaleString('pt-BR')
@@ -601,7 +2274,7 @@ export const DataProvider = ({ children }) => {
         alert('❌ ERRO CRÍTICO: Não foi possível salvar seus dados. Exporte seus dados imediatamente!');
       }
     }
-  }, [instituicoes, livros, patrimonio, clientes, emprestimos, usuarios, planos, notasFiscais, logAtividades, dadosCarregados]);
+  }, [instituicoes, livros, patrimonio, clientes, seriesAcademicas, turmasAcademicas, emprestimos, usuarios, planos, notasFiscais, logAtividades, dadosCarregados]);
 
   // ==================== VERIFICAÇÃO DE LICENÇAS EXPIRADAS ====================
   
@@ -702,6 +2375,8 @@ export const DataProvider = ({ children }) => {
     setLivros(prev => prev.filter(l => l.instituicaoId !== instituicaoId));
     setPatrimonio(prev => prev.filter(p => p.instituicaoId !== instituicaoId));
     setClientes(prev => prev.filter(c => c.instituicaoId !== instituicaoId));
+    setSeriesAcademicas(prev => prev.filter(s => s.instituicaoId !== instituicaoId));
+    setTurmasAcademicas(prev => prev.filter(t => t.instituicaoId !== instituicaoId));
     setEmprestimos(prev => prev.filter(e => e.instituicaoId !== instituicaoId));
     setNotasFiscais(prev => prev.filter(n => n.instituicaoId !== instituicaoId));
     
@@ -766,7 +2441,7 @@ export const DataProvider = ({ children }) => {
     
     const novaInstituicao = {
       ...instituicaoData,
-      id: instituicoes.length > 0 ? Math.max(...instituicoes.map(i => i.id)) + 1 : 1,
+      id: gerarIdUnico(),
       dataCadastro: new Date().toISOString(),
       status: instituicaoData.status || 'pendente', // Usar status fornecido ou pendente
       dataExpiracao: instituicaoData.dataExpiracao || null,
@@ -788,7 +2463,7 @@ export const DataProvider = ({ children }) => {
     
     // Criar usuário admin para a instituição
     const adminInstituicao = {
-      id: usuarios.length > 0 ? Math.max(...usuarios.map(u => u.id)) + 1 : 2,
+      id: gerarIdUnico(),
       nome: instituicaoData.nomeResponsavel,
       login: instituicaoData.loginAdmin,
       senha: instituicaoData.senhaAdmin,
@@ -859,10 +2534,25 @@ export const DataProvider = ({ children }) => {
       setLivros(livros.filter(l => l.instituicaoId !== id));
       setPatrimonio(patrimonio.filter(p => p.instituicaoId !== id));
       setClientes(clientes.filter(c => c.instituicaoId !== id));
+      setSeriesAcademicas(seriesAcademicas.filter(s => s.instituicaoId !== id));
+      setTurmasAcademicas(turmasAcademicas.filter(t => t.instituicaoId !== id));
       setEmprestimos(emprestimos.filter(e => e.instituicaoId !== id));
       setUsuarios(usuarios.filter(u => u.instituicaoId !== id));
       setInstituicoes(instituicoes.filter(i => i.id !== id));
     }
+  };
+
+  // Remove todas as instituições dos ids fornecidos (sem confirm interno - a UI confirma antes)
+  const removerTodasInstituicoes = (ids) => {
+    const idsSet = new Set(ids.map(String));
+    setLivros((prev) => prev.filter(l => !idsSet.has(String(l.instituicaoId))));
+    setPatrimonio((prev) => prev.filter(p => !idsSet.has(String(p.instituicaoId))));
+    setClientes((prev) => prev.filter(c => !idsSet.has(String(c.instituicaoId))));
+    setSeriesAcademicas((prev) => prev.filter(s => !idsSet.has(String(s.instituicaoId))));
+    setTurmasAcademicas((prev) => prev.filter(t => !idsSet.has(String(t.instituicaoId))));
+    setEmprestimos((prev) => prev.filter(e => !idsSet.has(String(e.instituicaoId))));
+    setUsuarios((prev) => prev.filter(u => !idsSet.has(String(u.instituicaoId))));
+    setInstituicoes((prev) => prev.filter(i => !idsSet.has(String(i.id))));
   };
 
   const gerarCodigoLicenca = () => {
@@ -987,8 +2677,18 @@ export const DataProvider = ({ children }) => {
       return { permitido: true };
     }
     
-    const livrosInstituicao = livros.filter(l => l.instituicaoId === instituicaoAtiva);
-    const leitoresInstituicao = clientes.filter(c => c.instituicaoId === instituicaoAtiva);
+    const livrosInstituicao = livros.filter((l) =>
+      belongsToInstitution(l, instituicaoAtiva, {
+        includeLegacyWithoutInstitution: true,
+        includeInstitutionAliases: true
+      })
+    );
+    const leitoresInstituicao = clientes.filter((c) =>
+      belongsToInstitution(c, instituicaoAtiva, {
+        includeLegacyWithoutInstitution: true,
+        includeInstitutionAliases: true
+      })
+    );
     
     return {
       permitido: true,
@@ -1030,7 +2730,7 @@ export const DataProvider = ({ children }) => {
     
     const novoLivro = {
       ...livro,
-      id: livros.length > 0 ? Math.max(...livros.map(l => l.id)) + 1 : 1,
+      id: gerarIdUnico(),
       instituicaoId: usuarioLogado?.perfil === 'SuperAdmin' ? 0 : instituicaoAtiva,
       dataCadastro: new Date().toISOString()
     };
@@ -1049,6 +2749,12 @@ export const DataProvider = ({ children }) => {
   const removerLivro = (id) => {
     const livro = livros.find(l => l.id === id);
     setLivros(livros.filter(l => l.id !== id));
+
+    const instituicaoIdAlvo = livro?.instituicaoId || instituicaoAtiva;
+    if (isCloudEnabled && instituicaoIdAlvo && instituicaoIdAlvo !== 0) {
+      deleteFromCloud('livros', id, instituicaoIdAlvo);
+    }
+
     registrarLog('excluir', 'livros', `Livro "${livro?.titulo || id}" excluído`, { livroId: id });
   };
 
@@ -1078,7 +2784,12 @@ export const DataProvider = ({ children }) => {
     if (usuarioLogado?.perfil === 'SuperAdmin') {
       return livros; // Super admin vê tudo
     }
-    return livros.filter(l => l.instituicaoId === instituicaoAtiva);
+    return livros.filter((l) =>
+      belongsToInstitution(l, instituicaoAtiva, {
+        includeLegacyWithoutInstitution: true,
+        includeInstitutionAliases: true
+      })
+    );
   };
 
   // ==================== FUNÇÕES CRUD PARA PATRIMÔNIO ====================
@@ -1086,7 +2797,7 @@ export const DataProvider = ({ children }) => {
   const adicionarPatrimonio = (bem) => {
     const novoBem = {
       ...bem,
-      id: patrimonio.length > 0 ? Math.max(...patrimonio.map(p => p.id)) + 1 : 1,
+      id: gerarIdUnico(),
       instituicaoId: usuarioLogado?.perfil === 'SuperAdmin' ? 0 : instituicaoAtiva,
       dataCadastro: new Date().toISOString()
     };
@@ -1105,6 +2816,12 @@ export const DataProvider = ({ children }) => {
   const removerPatrimonio = (id) => {
     const bem = patrimonio.find(p => p.id === id);
     setPatrimonio(patrimonio.filter(p => p.id !== id));
+
+    const instituicaoIdAlvo = bem?.instituicaoId || instituicaoAtiva;
+    if (isCloudEnabled && instituicaoIdAlvo && instituicaoIdAlvo !== 0) {
+      deleteFromCloud('patrimonio', id, instituicaoIdAlvo);
+    }
+
     registrarLog('excluir', 'patrimonio', `Patrimônio "${bem?.descricao || id}" excluído`, { patrimonioId: id });
   };
 
@@ -1112,10 +2829,32 @@ export const DataProvider = ({ children }) => {
     if (usuarioLogado?.perfil === 'SuperAdmin') {
       return patrimonio;
     }
-    return patrimonio.filter(p => p.instituicaoId === instituicaoAtiva);
+    return patrimonio.filter((p) =>
+      belongsToInstitution(p, instituicaoAtiva, {
+        includeLegacyWithoutInstitution: true,
+        includeInstitutionAliases: true
+      })
+    );
   };
 
   // ==================== FUNÇÕES CRUD PARA CLIENTES ====================
+
+  const exibirMensagemLimiteLeitores = (verificacao) => {
+    const linkCadastro = window.location.origin + '/cadastro-escola';
+    const mensagem = `⚠️ LIMITE ATINGIDO - VERSÃO DEMONSTRAÇÃO\n\n` +
+      `Você cadastrou ${verificacao.leitoresAtual} de ${verificacao.limites.maxLeitores} leitores permitidos na versão de teste.\n\n` +
+      `Para cadastrar mais leitores e ter acesso completo, faça o cadastro completo da sua escola:\n\n` +
+      `🔗 ${linkCadastro}\n\n` +
+      `Com a versão completa você terá:\n` +
+      `✅ Livros ilimitados\n` +
+      `✅ Leitores ilimitados\n` +
+      `✅ Suporte técnico completo\n` +
+      `✅ Backup automático\n` +
+      `✅ Sem limitações\n\n` +
+      `Valor: R$ 970,00/ano`;
+
+    alert(mensagem);
+  };
   
   const adicionarCliente = (cliente) => {
     if (!instituicaoAtiva && usuarioLogado?.perfil !== 'SuperAdmin') {
@@ -1126,58 +2865,537 @@ export const DataProvider = ({ children }) => {
     // Verificar limites da conta teste
     const verificacao = verificarLimitesConta();
     if (verificacao.leitoresLimiteAtingido) {
-      const linkCadastro = window.location.origin + '/cadastro-escola';
-      const mensagem = `⚠️ LIMITE ATINGIDO - VERSÃO DEMONSTRAÇÃO\n\n` +
-        `Você cadastrou ${verificacao.leitoresAtual} de ${verificacao.limites.maxLeitores} leitores permitidos na versão de teste.\n\n` +
-        `Para cadastrar mais leitores e ter acesso completo, faça o cadastro completo da sua escola:\n\n` +
-        `🔗 ${linkCadastro}\n\n` +
-        `Com a versão completa você terá:\n` +
-        `✅ Livros ilimitados\n` +
-        `✅ Leitores ilimitados\n` +
-        `✅ Suporte técnico completo\n` +
-        `✅ Backup automático\n` +
-        `✅ Sem limitações\n\n` +
-        `Valor: R$ 970,00/ano`;
-      
-      alert(mensagem);
+      exibirMensagemLimiteLeitores(verificacao);
       return null;
     }
     
     const novoCliente = {
       ...cliente,
-      id: clientes.length > 0 ? Math.max(...clientes.map(c => c.id)) + 1 : 1,
+      id: gerarIdUnico(),
       instituicaoId: usuarioLogado?.perfil === 'SuperAdmin' ? 0 : instituicaoAtiva,
       dataCadastro: new Date().toISOString()
     };
-    setClientes([...clientes, novoCliente]);
+    setClientes((clientesAtuais) => [...clientesAtuais, novoCliente]);
     registrarLog('adicionar', 'clientes', `Leitor "${novoCliente.nome || novoCliente.id}" cadastrado`, {
       clienteId: novoCliente.id
     });
     return novoCliente;
   };
 
+  const adicionarClientesEmLote = (listaClientes = []) => {
+    if (!instituicaoAtiva && usuarioLogado?.perfil !== 'SuperAdmin') {
+      alert('Instituição não selecionada');
+      return {
+        inseridos: 0,
+        ignorados: Array.isArray(listaClientes) ? listaClientes.length : 0,
+        detalhesIgnorados: []
+      };
+    }
+
+    const candidatos = Array.isArray(listaClientes)
+      ? listaClientes.filter((item) => item && typeof item === 'object')
+      : [];
+
+    if (candidatos.length === 0) {
+      return {
+        inseridos: 0,
+        ignorados: 0,
+        detalhesIgnorados: []
+      };
+    }
+
+    const verificacao = verificarLimitesConta();
+    if (verificacao.leitoresLimiteAtingido) {
+      exibirMensagemLimiteLeitores(verificacao);
+      return {
+        inseridos: 0,
+        ignorados: candidatos.length,
+        detalhesIgnorados: candidatos.map((cliente) => ({
+          nome: cliente?.nome || '(sem nome)',
+          motivo: 'limite da conta atingido'
+        }))
+      };
+    }
+
+    const limiteMaximo = Number.isFinite(verificacao?.limites?.maxLeitores)
+      ? Number(verificacao.limites.maxLeitores)
+      : Number.POSITIVE_INFINITY;
+
+    const leitoresAtuais = Number(verificacao?.leitoresAtual || 0);
+    const vagasRestantes = Number.isFinite(limiteMaximo)
+      ? Math.max(limiteMaximo - leitoresAtuais, 0)
+      : Number.POSITIVE_INFINITY;
+
+    const instituicaoIdAlvo = usuarioLogado?.perfil === 'SuperAdmin' ? 0 : instituicaoAtiva;
+
+    const clientesDaInstituicao = usuarioLogado?.perfil === 'SuperAdmin'
+      ? clientes
+      : clientes.filter((clienteExistente) =>
+          belongsToInstitution(clienteExistente, instituicaoAtiva, {
+            includeLegacyWithoutInstitution: true,
+            includeInstitutionAliases: true
+          })
+        );
+
+    const cpfExistente = new Set(
+      clientesDaInstituicao
+        .map((clienteExistente) => String(clienteExistente?.cpf || '').replace(/\D/g, ''))
+        .filter(Boolean)
+    );
+
+    const cpfLote = new Set();
+    const novosClientes = [];
+    const detalhesIgnorados = [];
+
+    candidatos.forEach((cliente) => {
+      const nome = String(cliente?.nome || '').trim();
+      const cpf = String(cliente?.cpf || '').trim();
+      const cpfDigitos = cpf.replace(/\D/g, '');
+
+      if (!nome || cpfDigitos.length !== 11) {
+        detalhesIgnorados.push({ nome: nome || '(sem nome)', motivo: 'cpf inválido' });
+        return;
+      }
+
+      if (cpfExistente.has(cpfDigitos)) {
+        detalhesIgnorados.push({ nome, motivo: 'cpf já cadastrado' });
+        return;
+      }
+
+      if (cpfLote.has(cpfDigitos)) {
+        detalhesIgnorados.push({ nome, motivo: 'cpf repetido no lote' });
+        return;
+      }
+
+      if (novosClientes.length >= vagasRestantes) {
+        detalhesIgnorados.push({ nome, motivo: 'limite da conta atingido' });
+        return;
+      }
+
+      const numeroSequencial = String(clientesDaInstituicao.length + novosClientes.length + 1).padStart(6, '0');
+
+      const novoCliente = {
+        ...cliente,
+        id: gerarIdUnico(),
+        instituicaoId: instituicaoIdAlvo,
+        codigoIdentificacao: cliente.codigoIdentificacao || `LEIT${numeroSequencial}`,
+        dataCadastro: new Date().toISOString()
+      };
+
+      novosClientes.push(novoCliente);
+      cpfLote.add(cpfDigitos);
+    });
+
+    if (novosClientes.length > 0) {
+      // 1) Persistir SINCRONAMENTE no localStorage antes de atualizar o estado React.
+      //    O callback do setClientes no React 18 é chamado de forma assíncrona (batched),
+      //    então não podemos depender dele para escrever no localStorage a tempo.
+      try {
+        const dadosStorage = parseJson(localStorage.getItem(DATA_KEY), {});
+        if (dadosStorage && typeof dadosStorage === 'object') {
+          const clientesStorage = Array.isArray(dadosStorage.clientes) ? dadosStorage.clientes : [];
+          dadosStorage.clientes = [...clientesStorage, ...novosClientes];
+          localStorage.setItem(DATA_KEY, JSON.stringify(dadosStorage));
+        }
+      } catch (_e) { /* se localStorage estiver cheio, continua mesmo assim */ }
+
+      // 2) Marcar que uma importação em lote está em andamento.
+      //    Isso bloqueia o pull periódico da nuvem pelos próximos 15 segundos,
+      //    impedindo que os 20 do Supabase sobrescrevam os recém-inseridos.
+      localStorage.setItem('cei_lote_import_flag', String(Date.now()));
+
+      setClientes((clientesAtuais) => [...clientesAtuais, ...novosClientes]);
+      registrarLog('adicionar', 'clientes', `${novosClientes.length} leitores cadastrados em lote`, {
+        quantidade: novosClientes.length
+      });
+    }
+
+    return {
+      inseridos: novosClientes.length,
+      ignorados: detalhesIgnorados.length,
+      detalhesIgnorados
+    };
+  };
+
   const atualizarCliente = (id, dadosAtualizados) => {
-    setClientes(clientes.map(c => c.id === id ? { ...c, ...dadosAtualizados } : c));
+    setClientes((clientesAtuais) =>
+      clientesAtuais.map(c => c.id === id ? { ...c, ...dadosAtualizados } : c)
+    );
     registrarLog('editar', 'clientes', `Leitor ID ${id} editado`, { clienteId: id });
   };
 
-  const removerCliente = (id) => {
-    const cliente = clientes.find(c => c.id === id);
-    setClientes(clientes.filter(c => c.id !== id));
-    registrarLog('excluir', 'clientes', `Leitor "${cliente?.nome || id}" excluído`, { clienteId: id });
+  const removerCliente = async (id) => {
+    const idNormalizado = String(id);
+    const cliente = clientes.find(c => String(c.id) === idNormalizado);
+
+    if (!cliente) {
+      return false;
+    }
+
+    const possuiHistoricoEmprestimos = emprestimos.some((emp) => {
+      const clienteIdEmprestimo = emp.clienteId ?? emp.leitorId;
+      return clienteIdEmprestimo !== undefined && clienteIdEmprestimo !== null && String(clienteIdEmprestimo) === idNormalizado;
+    });
+
+    if (possuiHistoricoEmprestimos) {
+      alert(
+        'Não é possível excluir este leitor porque há empréstimos vinculados ao cadastro.\n\n' +
+        'Para preservar o histórico da biblioteca, mantenha o leitor como inativo em vez de excluir.'
+      );
+      return false;
+    }
+
+    const clientesAntesDaExclusao = clientes;
+    setClientes((clientesAtuais) => clientesAtuais.filter(c => String(c.id) !== idNormalizado));
+
+    const instituicaoIdAlvo = cliente.instituicaoId || instituicaoAtiva;
+    if (isCloudEnabled && instituicaoIdAlvo && instituicaoIdAlvo !== 0) {
+      const cloudResult = await deleteFromCloud('clientes', cliente.id, instituicaoIdAlvo);
+
+      if (!cloudResult?.success) {
+        setClientes(clientesAntesDaExclusao);
+        alert(
+          'Não foi possível concluir a exclusão do leitor na nuvem.\n\n' +
+          'Nenhum dado foi perdido. Tente novamente em alguns instantes.'
+        );
+        return false;
+      }
+    }
+
+    registrarLog('excluir', 'clientes', `Leitor "${cliente.nome || id}" excluído`, { clienteId: cliente.id });
+    return true;
+  };
+
+  const removerTodosClientes = async () => {
+    if (!instituicaoAtiva && usuarioLogado?.perfil !== 'SuperAdmin') {
+      alert('Instituição não selecionada');
+      return { removidos: 0 };
+    }
+
+    const clientesDaInstituicao = usuarioLogado?.perfil === 'SuperAdmin'
+      ? clientes
+      : clientes.filter((c) =>
+          belongsToInstitution(c, instituicaoAtiva, {
+            includeLegacyWithoutInstitution: true,
+            includeInstitutionAliases: true
+          })
+        );
+
+    const semEmprestimo = clientesDaInstituicao.filter((c) => {
+      const idStr = String(c.id);
+      return !emprestimos.some((e) => {
+        const eid = e.clienteId ?? e.leitorId;
+        return eid !== undefined && eid !== null && String(eid) === idStr;
+      });
+    });
+
+    if (semEmprestimo.length === 0) {
+      return { removidos: 0 };
+    }
+
+    const clientesAntesDaExclusao = clientes;
+    const idsRemover = new Set(semEmprestimo.map((c) => String(c.id)));
+    setClientes((prev) => prev.filter((c) => !idsRemover.has(String(c.id))));
+
+    let falhasNuvem = [];
+
+    if (isCloudEnabled && instituicaoAtiva && instituicaoAtiva !== 0) {
+      for (const c of semEmprestimo) {
+        const cloudResult = await deleteFromCloud('clientes', c.id, c.instituicaoId || instituicaoAtiva);
+        if (!cloudResult?.success) {
+          falhasNuvem.push(c);
+        }
+      }
+    }
+
+    if (falhasNuvem.length > 0) {
+      const falhaIds = new Set(falhasNuvem.map((c) => String(c.id)));
+
+      setClientes((prev) => {
+        const idsAtuais = new Set(prev.map((c) => String(c.id)));
+        const restaurar = clientesAntesDaExclusao.filter(
+          (c) => falhaIds.has(String(c.id)) && !idsAtuais.has(String(c.id))
+        );
+        return [...prev, ...restaurar];
+      });
+
+      const removidosComSucesso = semEmprestimo.length - falhasNuvem.length;
+
+      alert(
+        `Exclusão em lote concluída com ressalvas.\n\n` +
+        `Excluídos com sucesso: ${removidosComSucesso}\n` +
+        `Não excluídos na nuvem: ${falhasNuvem.length}\n\n` +
+        `Os leitores com falha foram restaurados para evitar retorno inesperado.`
+      );
+
+      registrarLog('excluir', 'clientes', `${removidosComSucesso} leitores excluídos em massa (${falhasNuvem.length} falhas na nuvem)`, {
+        quantidade: removidosComSucesso,
+        falhasNuvem: falhasNuvem.length
+      });
+
+      return { removidos: removidosComSucesso, falhas: falhasNuvem.length };
+    }
+
+    registrarLog('excluir', 'clientes', `${semEmprestimo.length} leitores excluídos em massa`, { quantidade: semEmprestimo.length });
+    return { removidos: semEmprestimo.length, falhas: 0 };
   };
 
   const getClientesFiltrados = () => {
     if (usuarioLogado?.perfil === 'SuperAdmin') {
       return clientes;
     }
-    return clientes.filter(c => c.instituicaoId === instituicaoAtiva);
+    return clientes.filter((c) =>
+      belongsToInstitution(c, instituicaoAtiva, {
+        includeLegacyWithoutInstitution: true,
+        includeInstitutionAliases: true
+      })
+    );
+  };
+
+  // ==================== FUNÇÕES PARA SÉRIES E TURMAS ====================
+
+  const getSeriesAcademicasFiltradas = () => {
+    if (usuarioLogado?.perfil === 'SuperAdmin') {
+      return seriesAcademicas;
+    }
+    return seriesAcademicas.filter((serie) =>
+      belongsToInstitution(serie, instituicaoAtiva, {
+        includeLegacyWithoutInstitution: true,
+        includeInstitutionAliases: true
+      })
+    );
+  };
+
+  const getTurmasAcademicasFiltradas = () => {
+    if (usuarioLogado?.perfil === 'SuperAdmin') {
+      return turmasAcademicas;
+    }
+    return turmasAcademicas.filter((turma) =>
+      belongsToInstitution(turma, instituicaoAtiva, {
+        includeLegacyWithoutInstitution: true,
+        includeInstitutionAliases: true
+      })
+    );
+  };
+
+  const adicionarSerieAcademica = (serieData) => {
+    if (!serieData?.nomeSerie) {
+      alert('Informe o nome da série.');
+      return null;
+    }
+
+    const instituicaoIdAlvo = usuarioLogado?.perfil === 'SuperAdmin' ? 0 : instituicaoAtiva;
+    if (!instituicaoIdAlvo && usuarioLogado?.perfil !== 'SuperAdmin') {
+      alert('Instituição não selecionada.');
+      return null;
+    }
+
+    const nomeNormalizado = String(serieData.nomeSerie).trim().toLowerCase();
+    const anoLetivoNormalizado = String(serieData.anoLetivo || '').trim();
+
+    const duplicada = seriesAcademicas.some((serie) => {
+      return (
+        serie.instituicaoId === instituicaoIdAlvo &&
+        String(serie.nomeSerie || '').trim().toLowerCase() === nomeNormalizado &&
+        String(serie.anoLetivo || '').trim() === anoLetivoNormalizado
+      );
+    });
+
+    if (duplicada) {
+      alert('Já existe uma série com esse nome e ano letivo.');
+      return null;
+    }
+
+    const novaSerie = {
+      id: gerarIdUnico(),
+      instituicaoId: instituicaoIdAlvo,
+      nomeSerie: String(serieData.nomeSerie).trim(),
+      anoLetivo: String(serieData.anoLetivo || '').trim(),
+      descricao: serieData.descricao || '',
+      ativo: serieData.ativo !== false,
+      dataCadastro: new Date().toISOString()
+    };
+
+    setSeriesAcademicas((prev) => [...prev, novaSerie]);
+    registrarLog('adicionar', 'series-turmas', `Série "${novaSerie.nomeSerie}" cadastrada`, {
+      serieId: novaSerie.id
+    });
+    return novaSerie;
+  };
+
+  const atualizarSerieAcademica = (id, dadosAtualizados) => {
+    const serieAtual = seriesAcademicas.find((serie) => String(serie.id) === String(id));
+    if (!serieAtual) return;
+
+    const serieAtualizada = {
+      ...serieAtual,
+      ...dadosAtualizados,
+      nomeSerie: String(dadosAtualizados?.nomeSerie || serieAtual.nomeSerie || '').trim(),
+      anoLetivo: String(dadosAtualizados?.anoLetivo || serieAtual.anoLetivo || '').trim(),
+      dataAtualizacao: new Date().toISOString()
+    };
+
+    setSeriesAcademicas((prev) => prev.map((serie) => String(serie.id) === String(id) ? serieAtualizada : serie));
+
+    if (serieAtualizada.nomeSerie !== serieAtual.nomeSerie) {
+      setClientes((prev) => prev.map((cliente) => {
+        if (String(cliente.serieId || '') !== String(id)) return cliente;
+        return { ...cliente, serie: serieAtualizada.nomeSerie };
+      }));
+    }
+
+    registrarLog('editar', 'series-turmas', `Série "${serieAtualizada.nomeSerie}" atualizada`, {
+      serieId: serieAtualizada.id
+    });
+  };
+
+  const removerSerieAcademica = (id) => {
+    const serie = seriesAcademicas.find((item) => String(item.id) === String(id));
+    if (!serie) return false;
+
+    const possuiTurmasVinculadas = turmasAcademicas.some((turma) => String(turma.serieId || '') === String(id));
+    if (possuiTurmasVinculadas) {
+      alert('Não é possível excluir a série porque existem turmas vinculadas.');
+      return false;
+    }
+
+    setSeriesAcademicas((prev) => prev.filter((item) => String(item.id) !== String(id)));
+
+    setClientes((prev) => prev.map((cliente) => {
+      if (String(cliente.serieId || '') !== String(id)) return cliente;
+      return { ...cliente, serieId: null };
+    }));
+
+    registrarLog('excluir', 'series-turmas', `Série "${serie.nomeSerie}" removida`, {
+      serieId: serie.id
+    });
+    return true;
+  };
+
+  const adicionarTurmaAcademica = (turmaData) => {
+    if (!turmaData?.nomeTurma) {
+      alert('Informe o nome da turma.');
+      return null;
+    }
+
+    const instituicaoIdAlvo = usuarioLogado?.perfil === 'SuperAdmin' ? 0 : instituicaoAtiva;
+    if (!instituicaoIdAlvo && usuarioLogado?.perfil !== 'SuperAdmin') {
+      alert('Instituição não selecionada.');
+      return null;
+    }
+
+    const serieSelecionada = seriesAcademicas.find((serie) => String(serie.id) === String(turmaData.serieId));
+    const serieFallbackValida = turmaData?.serieFallback
+      && String(turmaData.serieFallback.id) === String(turmaData.serieId)
+      ? turmaData.serieFallback
+      : null;
+    const serieResolvida = serieSelecionada || serieFallbackValida;
+
+    if (!serieResolvida) {
+      alert('Selecione uma série válida para a turma.');
+      return null;
+    }
+
+    const nomeTurmaNormalizado = String(turmaData.nomeTurma).trim().toLowerCase();
+    const anoLetivoNormalizado = String(turmaData.anoLetivo || serieResolvida.anoLetivo || '').trim();
+
+    const duplicada = turmasAcademicas.some((turma) => {
+      return (
+        turma.instituicaoId === instituicaoIdAlvo &&
+        String(turma.nomeTurma || '').trim().toLowerCase() === nomeTurmaNormalizado &&
+        String(turma.serieId || '') === String(serieResolvida.id) &&
+        String(turma.anoLetivo || '').trim() === anoLetivoNormalizado
+      );
+    });
+
+    if (duplicada) {
+      alert('Já existe uma turma com esses dados.');
+      return null;
+    }
+
+    const novaTurma = {
+      id: gerarIdUnico(),
+      instituicaoId: instituicaoIdAlvo,
+      serieId: serieResolvida.id,
+      nomeSerie: serieResolvida.nomeSerie,
+      nomeTurma: String(turmaData.nomeTurma).trim(),
+      anoLetivo: anoLetivoNormalizado,
+      turno: turmaData.turno || '',
+      ativo: turmaData.ativo !== false,
+      dataCadastro: new Date().toISOString()
+    };
+
+    setTurmasAcademicas((prev) => [...prev, novaTurma]);
+    registrarLog('adicionar', 'series-turmas', `Turma "${novaTurma.nomeTurma}" cadastrada`, {
+      turmaId: novaTurma.id,
+      serieId: serieResolvida.id
+    });
+    return novaTurma;
+  };
+
+  const atualizarTurmaAcademica = (id, dadosAtualizados) => {
+    const turmaAtual = turmasAcademicas.find((turma) => String(turma.id) === String(id));
+    if (!turmaAtual) return;
+
+    const serieSelecionada = seriesAcademicas.find((serie) => String(serie.id) === String(dadosAtualizados?.serieId || turmaAtual.serieId));
+    if (!serieSelecionada) {
+      alert('Série vinculada não encontrada.');
+      return;
+    }
+
+    const turmaAtualizada = {
+      ...turmaAtual,
+      ...dadosAtualizados,
+      nomeTurma: String(dadosAtualizados?.nomeTurma || turmaAtual.nomeTurma || '').trim(),
+      serieId: serieSelecionada.id,
+      nomeSerie: serieSelecionada.nomeSerie,
+      anoLetivo: String(dadosAtualizados?.anoLetivo || turmaAtual.anoLetivo || serieSelecionada.anoLetivo || '').trim(),
+      dataAtualizacao: new Date().toISOString()
+    };
+
+    setTurmasAcademicas((prev) => prev.map((turma) => String(turma.id) === String(id) ? turmaAtualizada : turma));
+
+    setClientes((prev) => prev.map((cliente) => {
+      if (String(cliente.turmaId || '') !== String(id)) return cliente;
+      return {
+        ...cliente,
+        turma: turmaAtualizada.nomeTurma,
+        serie: turmaAtualizada.nomeSerie,
+        serieId: turmaAtualizada.serieId
+      };
+    }));
+
+    registrarLog('editar', 'series-turmas', `Turma "${turmaAtualizada.nomeTurma}" atualizada`, {
+      turmaId: turmaAtualizada.id
+    });
+  };
+
+  const removerTurmaAcademica = (id) => {
+    const turma = turmasAcademicas.find((item) => String(item.id) === String(id));
+    if (!turma) return false;
+
+    const possuiAlunosVinculados = clientes.some((cliente) => {
+      const vinculoPorId = String(cliente.turmaId || '') === String(id);
+      const vinculoPorNome = String(cliente.turma || '').trim() === String(turma.nomeTurma || '').trim();
+      return vinculoPorId || vinculoPorNome;
+    });
+
+    if (possuiAlunosVinculados) {
+      alert('Não é possível excluir a turma porque há alunos vinculados a ela.');
+      return false;
+    }
+
+    setTurmasAcademicas((prev) => prev.filter((item) => String(item.id) !== String(id)));
+    registrarLog('excluir', 'series-turmas', `Turma "${turma.nomeTurma}" removida`, {
+      turmaId: turma.id
+    });
+    return true;
   };
 
   // ==================== FUNÇÕES PARA EMPRÉSTIMOS ====================
   
   const adicionarEmprestimo = (emprestimoData) => {
-    const emprestimoId = emprestimos.length > 0 ? Math.max(...emprestimos.map(e => e.id)) + 1 : 1;
+    const emprestimoId = gerarIdUnico();
     const numeroSequencial = emprestimoId.toString().padStart(6, '0');
     const codigoEmprestimo = `EMP${numeroSequencial}`;
     
@@ -1186,6 +3404,30 @@ export const DataProvider = ({ children }) => {
     
     // Buscar dados do leitor
     const leitor = clientes.find(c => c.id === emprestimoData.clienteId);
+
+    // Resolver vínculo acadêmico (turma/série) para rastreabilidade de lotes e relatórios
+    const turmaIdBruto = emprestimoData?.turmaId ?? leitor?.turmaId ?? null;
+    const turmaVinculada = turmasAcademicas.find((turma) => {
+      if (turmaIdBruto === null || turmaIdBruto === undefined) return false;
+      return String(turma.id) === String(turmaIdBruto);
+    });
+
+    const turmaIdResolvida = turmaVinculada?.id
+      ?? (String(turmaIdBruto || '').trim().length > 0 ? turmaIdBruto : null);
+    const turmaNomeResolvida = String(
+      emprestimoData?.turmaNome
+      || turmaVinculada?.nomeTurma
+      || leitor?.turma
+      || leitor?.nomeTurma
+      || ''
+    ).trim();
+    const serieNomeResolvida = String(
+      emprestimoData?.serieNome
+      || turmaVinculada?.nomeSerie
+      || leitor?.serie
+      || leitor?.nomeSerie
+      || ''
+    ).trim();
     
     // Buscar dados da instituição
     const instituicaoIdAtual = usuarioLogado?.perfil === 'SuperAdmin' ? 0 : instituicaoAtiva;
@@ -1213,6 +3455,8 @@ export const DataProvider = ({ children }) => {
       leitorEmail: leitor?.email || 'N/A',
       leitorEndereco: leitor?.endereco || 'N/A',
       leitorMatricula: leitor?.matricula || '',
+      leitorTurma: turmaNomeResolvida || 'N/A',
+      leitorSerie: serieNomeResolvida || 'N/A',
       
       // Dados da Instituição
       instituicaoNome: instituicao?.nomeInstituicao || 'N/A',
@@ -1229,10 +3473,13 @@ export const DataProvider = ({ children }) => {
       id: emprestimoId,
       codigoEmprestimo: codigoEmprestimo,
       instituicaoId: instituicaoIdAtual,
+      turmaId: turmaIdResolvida,
+      turmaNome: turmaNomeResolvida,
+      serieNome: serieNomeResolvida,
       dataEmprestimo: emprestimoData.dataEmprestimo || new Date().toISOString(),
       dadosTermoEmprestimo: dadosTermoEmprestimo
     };
-    setEmprestimos([...emprestimos, novoEmprestimo]);
+    setEmprestimos((prev) => [...prev, novoEmprestimo]);
     registrarLog('emprestimo', 'emprestimos', `Empréstimo "${codigoEmprestimo}" criado`, {
       emprestimoId: novoEmprestimo.id,
       livroId: emprestimoData.livroId,
@@ -1242,7 +3489,7 @@ export const DataProvider = ({ children }) => {
   };
 
   const atualizarEmprestimo = (id, dadosAtualizados) => {
-    setEmprestimos(emprestimos.map(e => e.id === id ? { ...e, ...dadosAtualizados } : e));
+    setEmprestimos((prev) => prev.map(e => e.id === id ? { ...e, ...dadosAtualizados } : e));
     registrarLog('editar', 'emprestimos', `Empréstimo ID ${id} editado`, { emprestimoId: id });
   };
 
@@ -1281,7 +3528,12 @@ export const DataProvider = ({ children }) => {
     if (usuarioLogado?.perfil === 'SuperAdmin') {
       return emprestimos;
     }
-    return emprestimos.filter(e => e.instituicaoId === instituicaoAtiva);
+    return emprestimos.filter((e) =>
+      belongsToInstitution(e, instituicaoAtiva, {
+        includeLegacyWithoutInstitution: true,
+        includeInstitutionAliases: true
+      })
+    );
   };
 
   // ==================== FUNÇÕES DE NOTAS FISCAIS ====================
@@ -1459,7 +3711,7 @@ export const DataProvider = ({ children }) => {
   const adicionarUsuario = (usuarioData) => {
     const novoUsuario = {
       ...usuarioData,
-      id: usuarios.length > 0 ? Math.max(...usuarios.map(u => u.id)) + 1 : 1,
+      id: gerarIdUnico(),
       dataCriacao: new Date().toISOString()
     };
     
@@ -1492,6 +3744,12 @@ export const DataProvider = ({ children }) => {
   const excluirUsuario = (id) => {
     const usuario = usuarios.find(u => u.id === id);
     setUsuarios(usuarios.filter(u => u.id !== id));
+
+    const instituicaoIdAlvo = usuario?.instituicaoId || instituicaoAtiva;
+    if (isCloudEnabled && instituicaoIdAlvo && instituicaoIdAlvo !== 0 && usuario?.perfil !== 'SuperAdmin') {
+      deleteFromCloud('usuarios', id, instituicaoIdAlvo);
+    }
+
     registrarLog('excluir', 'usuarios', `Usuário "${usuario?.nome}" excluído`, { usuarioId: id });
   };
 
@@ -1533,11 +3791,28 @@ export const DataProvider = ({ children }) => {
     const agora = Date.now();
     const trintaDiasMs = 30 * 24 * 60 * 60 * 1000;
 
+    let contatoDemo = null;
+    try {
+      const contatoSalvo = localStorage.getItem(DEMO_CONTACT_KEY);
+      contatoDemo = contatoSalvo ? JSON.parse(contatoSalvo) : null;
+    } catch (error) {
+      console.warn('⚠️ Não foi possível ler os dados de contato da demo:', error);
+    }
+
+    const nomeResponsavelContato = String(contatoDemo?.nomeResponsavel || '').trim();
+    const telefoneContato = String(contatoDemo?.telefoneCelular || contatoDemo?.telefone || '').trim();
+    const emailContato = String(contatoDemo?.email || '').trim().toLowerCase();
+    const cidadeContato = String(contatoDemo?.cidade || '').trim();
+    const estadoContato = String(contatoDemo?.estado || '').trim().toUpperCase().slice(0, 2);
+    const contatoDemoValido = Boolean(
+      nomeResponsavelContato && telefoneContato && emailContato && cidadeContato && estadoContato
+    );
+
     const instituicaoExistente = instituicoes.find(
       i => i.id === instituicaoIdDemo || i.loginAdmin === loginDemo || i.demoDeviceId === deviceId
     );
 
-    const instituicaoDemo = instituicaoExistente || {
+    const instituicaoDemoBase = instituicaoExistente || {
       ...baseInstituicaoDemo,
       id: instituicaoIdDemo,
       nomeInstituicao: `Escola Demo ${sufixo.toUpperCase()}`,
@@ -1559,8 +3834,29 @@ export const DataProvider = ({ children }) => {
       }
     };
 
+    const instituicaoDemo = contatoDemoValido
+      ? {
+          ...instituicaoDemoBase,
+          nomeResponsavel: nomeResponsavelContato,
+          telefone: telefoneContato,
+          email: emailContato,
+          telefoneResponsavel: telefoneContato,
+          emailResponsavel: emailContato,
+          cidade: cidadeContato,
+          estado: estadoContato,
+          origemCadastro: 'demo_login',
+          contatoDemoCapturado: true,
+          contatoDemoCapturadoEm: contatoDemo?.capturadoEm || instituicaoDemoBase.contatoDemoCapturadoEm || new Date().toISOString()
+        }
+      : instituicaoDemoBase;
+
     if (!instituicaoExistente) {
       setInstituicoes(prev => [...prev, instituicaoDemo]);
+    } else if (contatoDemoValido) {
+      setInstituicoes(prev => prev.map((inst) => {
+        if (String(inst.id) !== String(instituicaoExistente.id)) return inst;
+        return { ...inst, ...instituicaoDemo };
+      }));
     }
 
     const usuarioExistente = usuarios.find(
@@ -1570,10 +3866,10 @@ export const DataProvider = ({ children }) => {
     const usuarioDemo = usuarioExistente || {
       ...baseUsuarioDemo,
       id: usuarioIdDemo,
-      nome: `Usuário Demo ${sufixo.toUpperCase()}`,
+      nome: contatoDemoValido ? nomeResponsavelContato : `Usuário Demo ${sufixo.toUpperCase()}`,
       login: loginDemo,
       senha: 'demo2026',
-      email: `${loginDemo}@cei-demo.com.br`,
+      email: contatoDemoValido ? emailContato : `${loginDemo}@cei-demo.com.br`,
       instituicaoId: instituicaoDemo.id,
       contaTeste: true,
       demoDeviceId: deviceId,
@@ -1583,6 +3879,16 @@ export const DataProvider = ({ children }) => {
 
     if (!usuarioExistente) {
       setUsuarios(prev => [...prev, usuarioDemo]);
+    } else if (contatoDemoValido) {
+      setUsuarios(prev => prev.map((u) => {
+        if (String(u.id) !== String(usuarioExistente.id)) return u;
+        return {
+          ...u,
+          nome: nomeResponsavelContato,
+          email: emailContato,
+          dataAtualizacao: new Date().toISOString()
+        };
+      }));
     }
 
     return {
@@ -1833,6 +4139,8 @@ export const DataProvider = ({ children }) => {
           livros,
           patrimonio,
           clientes,
+          seriesAcademicas,
+          turmasAcademicas,
           emprestimos,
           planos,
           notasFiscais,
@@ -1859,6 +4167,8 @@ export const DataProvider = ({ children }) => {
           usuarios: usuarios.length,
           livros: livros.length,
           clientes: clientes.length,
+          seriesAcademicas: seriesAcademicas.length,
+          turmasAcademicas: turmasAcademicas.length,
           emprestimos: emprestimos.length
         }
       });
@@ -1888,13 +4198,16 @@ export const DataProvider = ({ children }) => {
           createBackup();
           
           // Importar dados
-          const { data } = dadosImportados;
+          const fallbackInstitutionId = inferFallbackInstitutionId(dadosImportados.data || {});
+          const data = normalizeAllInstitutionData(dadosImportados.data || {}, fallbackInstitutionId);
           
           if (data.instituicoes) setInstituicoes(data.instituicoes);
           if (data.usuarios) setUsuarios(data.usuarios);
           if (data.livros) setLivros(data.livros);
           if (data.patrimonio) setPatrimonio(data.patrimonio);
           if (data.clientes) setClientes(data.clientes);
+          if (data.seriesAcademicas) setSeriesAcademicas(data.seriesAcademicas);
+          if (data.turmasAcademicas) setTurmasAcademicas(data.turmasAcademicas);
           if (data.emprestimos) setEmprestimos(data.emprestimos);
           if (data.planos) setPlanos(data.planos);
           if (data.notasFiscais) setNotasFiscais(data.notasFiscais);
@@ -1909,6 +4222,8 @@ export const DataProvider = ({ children }) => {
               usuarios: data.usuarios?.length || 0,
               livros: data.livros?.length || 0,
               clientes: data.clientes?.length || 0,
+              seriesAcademicas: data.seriesAcademicas?.length || 0,
+              turmasAcademicas: data.turmasAcademicas?.length || 0,
               emprestimos: data.emprestimos?.length || 0
             }
           });
@@ -2008,6 +4323,8 @@ export const DataProvider = ({ children }) => {
     livros: getLivrosFiltrados(),
     patrimonio: getPatrimonioFiltrado(),
     clientes: getClientesFiltrados(),
+    seriesAcademicas: getSeriesAcademicasFiltradas(),
+    turmasAcademicas: getTurmasAcademicasFiltradas(),
     emprestimos: getEmprestimosFiltrados(),
     usuarios,
     usuarioLogado,
@@ -2023,6 +4340,7 @@ export const DataProvider = ({ children }) => {
     ativarInstituicao,
     bloquearInstituicao,
     removerInstituicao,
+    removerTodasInstituicoes,
     
     // Funções Licenças
     calcularDiasRestantesLicenca,
@@ -2042,8 +4360,19 @@ export const DataProvider = ({ children }) => {
     
     // Funções Clientes
     adicionarCliente,
+    adicionarClientesEmLote,
     atualizarCliente,
     removerCliente,
+    removerTodosClientes,
+    removerTodosClientes,
+
+    // Funções Séries e Turmas
+    adicionarSerieAcademica,
+    atualizarSerieAcademica,
+    removerSerieAcademica,
+    adicionarTurmaAcademica,
+    atualizarTurmaAcademica,
+    removerTurmaAcademica,
     
     // Funções Empréstimos
     adicionarEmprestimo,
