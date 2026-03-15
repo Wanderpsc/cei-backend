@@ -294,6 +294,43 @@ export default function SeriesTurmasPage() {
   };
 
   const salvarSerieTurma = () => {
+    if (turmaEmEdicao) {
+      if (!turmaForm.nomeTurma.trim()) {
+        alert('Informe o nome da turma.');
+        return;
+      }
+
+      if (!turmaForm.serieId) {
+        alert('Selecione a série da turma.');
+        return;
+      }
+
+      const serieSelecionada = seriesAcademicas.find((serie) => String(serie.id) === String(turmaForm.serieId));
+      if (!serieSelecionada) {
+        alert('Série vinculada não encontrada.');
+        return;
+      }
+
+      atualizarTurmaAcademica(turmaEmEdicao, {
+        ...turmaForm,
+        serieId: String(turmaForm.serieId),
+        anoLetivo: String(turmaForm.anoLetivo || '').trim() || String(serieSelecionada.anoLetivo || '').trim()
+      });
+      limparTurmaForm();
+      return;
+    }
+
+    if (serieEmEdicao) {
+      if (!serieForm.nomeSerie.trim()) {
+        alert('Informe o nome da série.');
+        return;
+      }
+
+      atualizarSerieAcademica(serieEmEdicao, serieForm);
+      limparSerieForm();
+      return;
+    }
+
     const deveSalvarSerie = Boolean(serieEmEdicao || serieForm.nomeSerie.trim());
     const deveSalvarTurma = Boolean(
       turmaEmEdicao || turmaForm.nomeTurma.trim() || turmaForm.serieId || turmaForm.turno.trim()
@@ -395,6 +432,7 @@ export default function SeriesTurmasPage() {
   };
 
   const editarTurma = (turma) => {
+    limparSerieForm();
     setTurmaEmEdicao(turma.id);
     setTurmaForm({
       nomeTurma: turma.nomeTurma || '',
@@ -539,7 +577,7 @@ export default function SeriesTurmasPage() {
                   </Button>
                 )}
                 <Button variant="contained" startIcon={<Add />} onClick={salvarSerieTurma}>
-                  {serieEmEdicao || turmaEmEdicao ? 'Salvar Série / Turma' : 'Adicionar Série / Turma'}
+                  {turmaEmEdicao ? 'Salvar Edição da Turma' : (serieEmEdicao ? 'Salvar Edição da Série' : 'Adicionar Série / Turma')}
                 </Button>
               </Box>
             </Grid>
@@ -590,7 +628,7 @@ export default function SeriesTurmasPage() {
                               size="small"
                               color="error"
                               onClick={() => {
-                                if (window.confirm('Deseja remover esta turma?')) {
+                                if (window.confirm('Deseja remover esta turma? Os alunos vinculados manterão cadastro, apenas sem vínculo ativo com a turma.')) {
                                   removerTurmaAcademica(turma.id);
                                 }
                               }}

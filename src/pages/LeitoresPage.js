@@ -185,12 +185,15 @@ function LeitoresPage() {
     atualizarCliente,
     removerCliente,
     removerTodosClientes,
+    removerClientesPorTurma,
     emprestimos,
     seriesAcademicas,
     turmasAcademicas
   } = useData();
   const [open, setOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [excluirTurmaOpen, setExcluirTurmaOpen] = useState(false);
+  const [turmaParaExclusao, setTurmaParaExclusao] = useState('');
   const [textoImportacao, setTextoImportacao] = useState('');
   const [editando, setEditando] = useState(null);
   const [busca, setBusca] = useState('');
@@ -464,6 +467,62 @@ function LeitoresPage() {
     });
   };
 
+  const possuiHistoricoEmprestimos = (clienteId) => {
+    const idNormalizado = String(clienteId);
+    return emprestimos.some((e) => {
+      const clienteIdEmprestimo = e.clienteId ?? e.leitorId;
+      return clienteIdEmprestimo !== undefined && clienteIdEmprestimo !== null && String(clienteIdEmprestimo) === idNormalizado;
+    });
+  };
+
+  const clientePertenceTurma = (cliente, turma) => {
+    const turmaId = String(turma?.id || '').trim();
+    const clienteTurmaId = String(cliente?.turmaId || '').trim();
+
+    if (turmaId && clienteTurmaId && turmaId === clienteTurmaId) {
+      return true;
+    }
+
+    const nomeTurmaAlvo = normalizarTexto(turma?.nomeTurma);
+    const nomeTurmaCliente = normalizarTexto(cliente?.turma || cliente?.nomeTurma);
+
+    if (!nomeTurmaAlvo || !nomeTurmaCliente || nomeTurmaAlvo !== nomeTurmaCliente) {
+      return false;
+    }
+
+    const nomeSerieAlvo = normalizarTexto(turma?.nomeSerie);
+    const nomeSerieCliente = normalizarTexto(cliente?.serie || cliente?.nomeSerie);
+
+    return !nomeSerieAlvo || !nomeSerieCliente || nomeSerieAlvo === nomeSerieCliente;
+  };
+
+  const turmasParaExclusao = useMemo(() => {
+    return [...turmasAcademicas]
+      .map((turma) => {
+        const leitoresDaTurma = clientes.filter((cliente) => clientePertenceTurma(cliente, turma));
+        const totalLeitores = leitoresDaTurma.length;
+        const elegiveisExclusao = leitoresDaTurma.filter((cliente) => !possuiHistoricoEmprestimos(cliente.id)).length;
+
+        return {
+          ...turma,
+          totalLeitores,
+          elegiveisExclusao,
+          preservadosHistorico: Math.max(totalLeitores - elegiveisExclusao, 0)
+        };
+      })
+      .filter((turma) => turma.totalLeitores > 0)
+      .sort((a, b) => {
+        const serieA = String(a.nomeSerie || '');
+        const serieB = String(b.nomeSerie || '');
+        if (serieA !== serieB) return serieA.localeCompare(serieB, 'pt-BR');
+        return String(a.nomeTurma || '').localeCompare(String(b.nomeTurma || ''), 'pt-BR');
+      });
+  }, [clientes, turmasAcademicas, emprestimos]);
+
+  const turmaSelecionadaExclusao = useMemo(() => {
+    return turmasParaExclusao.find((turma) => String(turma.id) === String(turmaParaExclusao)) || null;
+  }, [turmasParaExclusao, turmaParaExclusao]);
+
   const handleToggleStatus = (cliente) => {
     const novoStatus = !cliente.ativo;
     const acao = novoStatus ? 'ativar' : 'inativar';
@@ -500,12 +559,7 @@ function LeitoresPage() {
       return;
     }
 
-    const possuiHistoricoEmprestimos = emprestimos.some((e) => {
-      const clienteIdEmprestimo = e.clienteId ?? e.leitorId;
-      return clienteIdEmprestimo !== undefined && clienteIdEmprestimo !== null && String(clienteIdEmprestimo) === idNormalizado;
-    });
-
-    if (possuiHistoricoEmprestimos) {
+    if (possuiHistoricoEmprestimos(id)) {
       const desejaInativar = window.confirm(
         'Não é possível excluir este leitor porque há histórico de empréstimos vinculado ao cadastro.\n\n' +
         'Para preservar os dados já cadastrados, mantenha o leitor como inativo.\n\n' +
@@ -524,13 +578,54 @@ function LeitoresPage() {
     }
   };
 
+  const handleDeleteByTurma = async () => {
+    if (!turmaSelecionadaExclusao) {
+      alert('Selecione uma turma para continuar.');
+      return;
+    }
+
+    const mensagem =
+      `Tem certeza que deseja EXCLUIR leitores da turma ${turmaSelecionadaExclusao.nomeSerie || '-'} - ${turmaSelecionadaExclusao.nomeTurma}?\n\n` +
+      `Total na turma: ${turmaSelecionadaExclusao.totalLeitores}\n` +
+      `Sem histórico (serão excluídos): ${turmaSelecionadaExclusao.elegiveisExclusao}\n` +
+      `Com histórico (serão preservados): ${turmaSelecionadaExclusao.preservadosHistorico}\n\n` +
+      `Esta ação não pode ser desfeita.`;
+
+    if (!window.confirm(mensagem)) return;
+    if (!window.confirm('Confirme novamente: excluir os leitores sem histórico da turma selecionada?')) return;
+
+    const resultado = await removerClientesPorTurma({
+      id: turmaSelecionadaExclusao.id,
+      nomeTurma: turmaSelecionadaExclusao.nomeTurma,
+      nomeSerie: turmaSelecionadaExclusao.nomeSerie
+    });
+
+    const removidos = Number(resultado?.removidos || 0);
+    const preservadosHistorico = Number(resultado?.preservadosHistorico || 0);
+    const falhas = Number(resultado?.falhas || 0);
+
+    if (falhas > 0) {
+      alert(
+        `Concluído com ressalvas.\n\n` +
+        `Excluídos: ${removidos}\n` +
+        `Preservados por histórico: ${preservadosHistorico}\n` +
+        `Falhas na nuvem: ${falhas}`
+      );
+    } else {
+      alert(
+        `Concluído.\n\n` +
+        `Excluídos: ${removidos}\n` +
+        `Preservados por histórico: ${preservadosHistorico}`
+      );
+    }
+
+    setExcluirTurmaOpen(false);
+    setTurmaParaExclusao('');
+  };
+
   const handleDeleteAll = async () => {
     const totalSemHistorico = clientes.filter((c) => {
-      const idStr = String(c.id);
-      return !emprestimos.some((e) => {
-        const eid = e.clienteId ?? e.leitorId;
-        return eid !== undefined && eid !== null && String(eid) === idStr;
-      });
+      return !possuiHistoricoEmprestimos(c.id);
     }).length;
 
     const totalComHistorico = clientes.length - totalSemHistorico;
@@ -746,6 +841,18 @@ function LeitoresPage() {
           onClick={() => setImportOpen(true)}
         >
           Importar Alunos
+        </Button>
+        <Button
+          variant="outlined"
+          color="warning"
+          startIcon={<Delete />}
+          onClick={() => {
+            setTurmaParaExclusao('');
+            setExcluirTurmaOpen(true);
+          }}
+          disabled={turmasParaExclusao.length === 0}
+        >
+          Excluir por Turma
         </Button>
         <Button
           variant="outlined"
@@ -992,6 +1099,60 @@ function LeitoresPage() {
           <Button onClick={handleClose}>Cancelar</Button>
           <Button onClick={handleSubmit} variant="contained">
             {editando ? 'Salvar' : 'Adicionar'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={excluirTurmaOpen} onClose={() => setExcluirTurmaOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Excluir Leitores por Turma</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 1, mb: 2 }}>
+            Selecione a turma. O sistema exclui somente leitores sem histórico de empréstimos e preserva os demais.
+          </Typography>
+
+          <TextField
+            select
+            fullWidth
+            label="Turma"
+            value={turmaParaExclusao}
+            onChange={(e) => setTurmaParaExclusao(e.target.value)}
+          >
+            {turmasParaExclusao.length === 0 ? (
+              <MenuItem value="" disabled>
+                Nenhuma turma com leitores cadastrados
+              </MenuItem>
+            ) : (
+              turmasParaExclusao.map((turma) => (
+                <MenuItem key={turma.id} value={String(turma.id)}>
+                  {turma.nomeSerie || '-'} - {turma.nomeTurma} ({turma.totalLeitores} leitor(es))
+                </MenuItem>
+              ))
+            )}
+          </TextField>
+
+          {turmaSelecionadaExclusao && (
+            <Box sx={{ mt: 2 }}>
+              <Typography variant="body2">
+                Total na turma: <strong>{turmaSelecionadaExclusao.totalLeitores}</strong>
+              </Typography>
+              <Typography variant="body2">
+                Serão excluídos: <strong>{turmaSelecionadaExclusao.elegiveisExclusao}</strong>
+              </Typography>
+              <Typography variant="body2">
+                Serão preservados por histórico: <strong>{turmaSelecionadaExclusao.preservadosHistorico}</strong>
+              </Typography>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setExcluirTurmaOpen(false)}>Cancelar</Button>
+          <Button
+            variant="contained"
+            color="error"
+            onClick={handleDeleteByTurma}
+            disabled={!turmaSelecionadaExclusao}
+          >
+            Excluir da Turma
           </Button>
         </DialogActions>
       </Dialog>

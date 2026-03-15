@@ -3258,6 +3258,36 @@ export const DataProvider = ({ children }) => {
     return true;
   };
 
+  const normalizarCampoAcademico = (valor) => String(valor || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase();
+
+  const clientePertenceTurma = (cliente, turmaAlvo = {}) => {
+    const turmaIdAlvo = String(turmaAlvo?.id || turmaAlvo?.turmaId || '').trim();
+    const clienteTurmaId = String(cliente?.turmaId || '').trim();
+
+    if (turmaIdAlvo && clienteTurmaId && clienteTurmaId === turmaIdAlvo) {
+      return true;
+    }
+
+    const nomeTurmaAlvo = normalizarCampoAcademico(turmaAlvo?.nomeTurma || turmaAlvo?.turma);
+    if (!nomeTurmaAlvo) {
+      return false;
+    }
+
+    const nomeTurmaCliente = normalizarCampoAcademico(cliente?.turma || cliente?.nomeTurma);
+    if (!nomeTurmaCliente || nomeTurmaCliente !== nomeTurmaAlvo) {
+      return false;
+    }
+
+    const nomeSerieAlvo = normalizarCampoAcademico(turmaAlvo?.nomeSerie || turmaAlvo?.serie);
+    const nomeSerieCliente = normalizarCampoAcademico(cliente?.serie || cliente?.nomeSerie);
+
+    return !nomeSerieAlvo || !nomeSerieCliente || nomeSerieCliente === nomeSerieAlvo;
+  };
+
   const removerTodosClientes = async () => {
     if (!instituicaoAtiva && usuarioLogado?.perfil !== 'SuperAdmin') {
       alert('Instituição não selecionada');
@@ -3330,6 +3360,116 @@ export const DataProvider = ({ children }) => {
 
     registrarLog('excluir', 'clientes', `${semEmprestimo.length} leitores excluídos em massa`, { quantidade: semEmprestimo.length });
     return { removidos: semEmprestimo.length, falhas: 0 };
+  };
+
+  const removerClientesPorTurma = async (turmaAlvo = {}) => {
+    if (!instituicaoAtiva && usuarioLogado?.perfil !== 'SuperAdmin') {
+      alert('Instituição não selecionada');
+      return { totalTurma: 0, removidos: 0, preservadosHistorico: 0, falhas: 0 };
+    }
+
+    const turmaIdAlvo = String(turmaAlvo?.id || turmaAlvo?.turmaId || '').trim();
+    const nomeTurmaAlvo = String(turmaAlvo?.nomeTurma || turmaAlvo?.turma || '').trim();
+
+    if (!turmaIdAlvo && !nomeTurmaAlvo) {
+      alert('Selecione uma turma válida para excluir os leitores.');
+      return { totalTurma: 0, removidos: 0, preservadosHistorico: 0, falhas: 0 };
+    }
+
+    const clientesDaInstituicao = usuarioLogado?.perfil === 'SuperAdmin'
+      ? clientes
+      : clientes.filter((c) =>
+          belongsToInstitution(c, instituicaoAtiva, {
+            includeLegacyWithoutInstitution: true,
+            includeInstitutionAliases: true
+          })
+        );
+
+    const clientesDaTurma = clientesDaInstituicao.filter((cliente) => clientePertenceTurma(cliente, turmaAlvo));
+
+    if (clientesDaTurma.length === 0) {
+      return { totalTurma: 0, removidos: 0, preservadosHistorico: 0, falhas: 0 };
+    }
+
+    const semEmprestimo = clientesDaTurma.filter((c) => {
+      const idStr = String(c.id);
+      return !emprestimos.some((e) => {
+        const eid = e.clienteId ?? e.leitorId;
+        return eid !== undefined && eid !== null && String(eid) === idStr;
+      });
+    });
+
+    const preservadosHistorico = Math.max(clientesDaTurma.length - semEmprestimo.length, 0);
+
+    if (semEmprestimo.length === 0) {
+      return {
+        totalTurma: clientesDaTurma.length,
+        removidos: 0,
+        preservadosHistorico,
+        falhas: 0
+      };
+    }
+
+    const clientesAntesDaExclusao = clientes;
+    const idsRemover = new Set(semEmprestimo.map((c) => String(c.id)));
+    setClientes((prev) => prev.filter((c) => !idsRemover.has(String(c.id))));
+
+    const falhasNuvem = [];
+
+    if (isCloudEnabled) {
+      for (const c of semEmprestimo) {
+        const instituicaoIdCliente = c.instituicaoId || instituicaoAtiva;
+        if (!instituicaoIdCliente || instituicaoIdCliente === 0) {
+          continue;
+        }
+
+        const cloudResult = await deleteFromCloud('clientes', c.id, instituicaoIdCliente);
+        if (!cloudResult?.success) {
+          falhasNuvem.push(c);
+        }
+      }
+    }
+
+    const nomeTurmaLog = nomeTurmaAlvo || 'turma selecionada';
+
+    if (falhasNuvem.length > 0) {
+      const falhaIds = new Set(falhasNuvem.map((c) => String(c.id)));
+
+      setClientes((prev) => {
+        const idsAtuais = new Set(prev.map((c) => String(c.id)));
+        const restaurar = clientesAntesDaExclusao.filter(
+          (c) => falhaIds.has(String(c.id)) && !idsAtuais.has(String(c.id))
+        );
+        return [...prev, ...restaurar];
+      });
+
+      const removidosComSucesso = semEmprestimo.length - falhasNuvem.length;
+
+      registrarLog('excluir', 'clientes', `${removidosComSucesso} leitores excluídos da turma "${nomeTurmaLog}" (${falhasNuvem.length} falhas na nuvem)`, {
+        quantidade: removidosComSucesso,
+        falhasNuvem: falhasNuvem.length,
+        turma: nomeTurmaLog
+      });
+
+      return {
+        totalTurma: clientesDaTurma.length,
+        removidos: removidosComSucesso,
+        preservadosHistorico,
+        falhas: falhasNuvem.length
+      };
+    }
+
+    registrarLog('excluir', 'clientes', `${semEmprestimo.length} leitores excluídos da turma "${nomeTurmaLog}"`, {
+      quantidade: semEmprestimo.length,
+      turma: nomeTurmaLog
+    });
+
+    return {
+      totalTurma: clientesDaTurma.length,
+      removidos: semEmprestimo.length,
+      preservadosHistorico,
+      falhas: 0
+    };
   };
 
   const getClientesFiltrados = () => {
@@ -3566,18 +3706,42 @@ export const DataProvider = ({ children }) => {
     const turma = turmasAcademicas.find((item) => String(item.id) === String(id));
     if (!turma) return false;
 
-    const possuiAlunosVinculados = clientes.some((cliente) => {
-      const vinculoPorId = String(cliente.turmaId || '') === String(id);
-      const vinculoPorNome = String(cliente.turma || '').trim() === String(turma.nomeTurma || '').trim();
-      return vinculoPorId || vinculoPorNome;
-    });
-
-    if (possuiAlunosVinculados) {
-      alert('Não é possível excluir a turma porque há alunos vinculados a ela.');
-      return false;
-    }
+    const turmaId = String(id);
+    const nomeTurmaNormalizado = normalizarCampoAcademico(turma.nomeTurma);
+    const nomeSerieNormalizado = normalizarCampoAcademico(turma.nomeSerie);
 
     setTurmasAcademicas((prev) => prev.filter((item) => String(item.id) !== String(id)));
+
+    setClientes((prev) => prev.map((cliente) => {
+      const clienteTurmaId = String(cliente.turmaId || '').trim();
+      const vinculoPorId = clienteTurmaId === turmaId;
+
+      const nomeTurmaCliente = normalizarCampoAcademico(cliente.turma || cliente.nomeTurma);
+      const nomeSerieCliente = normalizarCampoAcademico(cliente.serie || cliente.nomeSerie);
+      const vinculoPorNome = (
+        !clienteTurmaId
+        && nomeTurmaNormalizado.length > 0
+        && nomeTurmaCliente === nomeTurmaNormalizado
+        && (!nomeSerieNormalizado || !nomeSerieCliente || nomeSerieCliente === nomeSerieNormalizado)
+      );
+
+      if (!vinculoPorId && !vinculoPorNome) {
+        return cliente;
+      }
+
+      const turmaTexto = String(cliente.turma || cliente.nomeTurma || turma.nomeTurma || '').trim();
+      const serieTexto = String(cliente.serie || cliente.nomeSerie || turma.nomeSerie || '').trim();
+
+      return {
+        ...cliente,
+        turmaId: '',
+        turma: '',
+        nomeTurma: '',
+        serie: serieTexto,
+        nomeSerie: serieTexto
+      };
+    }));
+
     registrarLog('excluir', 'series-turmas', `Turma "${turma.nomeTurma}" removida`, {
       turmaId: turma.id
     });
@@ -4556,7 +4720,7 @@ export const DataProvider = ({ children }) => {
     atualizarCliente,
     removerCliente,
     removerTodosClientes,
-    removerTodosClientes,
+    removerClientesPorTurma,
 
     // Funções Séries e Turmas
     adicionarSerieAcademica,

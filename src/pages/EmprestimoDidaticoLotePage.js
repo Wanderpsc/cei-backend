@@ -512,21 +512,19 @@ export default function EmprestimoDidaticoLotePage() {
   const [modoSelecaoAlunos, setModoSelecaoAlunos] = useState('turma');
   const [tipoAcervoSelecionado, setTipoAcervoSelecionado] = useState('todos');
   const [livrosSelecionados, setLivrosSelecionados] = useState([]);
-  const [buscaAluno, setBuscaAluno] = useState('');
   const [alunosSelecionadosMapa, setAlunosSelecionadosMapa] = useState({});
   const [dataDevolucaoPrevista, setDataDevolucaoPrevista] = useState(() => {
     const data = new Date();
     data.setDate(data.getDate() + 30);
     return formatDateForInput(data);
   });
-  const [observacaoPadrao, setObservacaoPadrao] = useState('Empréstimo em lote por turma');
   const [selecoes, setSelecoes] = useState({});
   const [processando, setProcessando] = useState(false);
   const [resultadoAplicacao, setResultadoAplicacao] = useState(null);
   const [confirmacaoAberta, setConfirmacaoAberta] = useState(false);
   const [resumoConfirmacao, setResumoConfirmacao] = useState(null);
 
-  const observacaoPadraoAplicada = String(observacaoPadrao || '').trim() || 'Empréstimo em lote por turma';
+  const observacaoPadraoAplicada = 'Empréstimo em lote por turma';
 
   const isEmprestimoAtivo = (status) => {
     const statusNormalizado = String(status || '').toLowerCase();
@@ -682,17 +680,7 @@ export default function EmprestimoDidaticoLotePage() {
     ));
   }, [clientes, modoSelecaoAlunos, turmaSelecionadaInfo, turmasAcademicasMap]);
 
-  const alunosFiltrados = useMemo(() => {
-    const filtro = normalizarTexto(buscaAluno);
-    if (!filtro) return alunosDisponiveisParaSelecao;
-
-    return alunosDisponiveisParaSelecao.filter((aluno) => {
-      const nome = normalizarTexto(aluno.nome);
-      const matricula = normalizarTexto(aluno.matricula);
-      const turmaSerie = normalizarTexto(obterRotuloTurmaAluno(aluno, turmasAcademicasMap));
-      return nome.includes(filtro) || matricula.includes(filtro) || turmaSerie.includes(filtro);
-    });
-  }, [alunosDisponiveisParaSelecao, buscaAluno, turmasAcademicasMap]);
+  const alunosFiltrados = alunosDisponiveisParaSelecao;
 
   const alunosSelecionados = useMemo(() => {
     return alunosDisponiveisParaSelecao.filter((aluno) => Boolean(alunosSelecionadosMapa[String(aluno.id)]));
@@ -954,8 +942,7 @@ export default function EmprestimoDidaticoLotePage() {
       criar: criarSolicitacoes.length,
       devolver: devolverSolicitacoes.length,
       dataDevolucaoPrevista,
-      turma: turmaSelecionadaInfo?.rotulo || (modoSelecaoAlunos === 'individual' ? 'Múltiplas turmas' : 'Sem turma'),
-      observacao: observacaoPadraoAplicada
+      turma: turmaSelecionadaInfo?.rotulo || (modoSelecaoAlunos === 'individual' ? 'Múltiplas turmas' : 'Sem turma')
     });
     setConfirmacaoAberta(true);
   };
@@ -1087,8 +1074,7 @@ export default function EmprestimoDidaticoLotePage() {
         criados: criacoesPermitidas.length,
         bloqueados: criacoesBloqueadas.length,
         detalhesBloqueio,
-        excessoBloqueio: Math.max(criacoesBloqueadas.length - detalhesBloqueio.length, 0),
-        observacaoAplicada: observacaoPadraoAplicada
+        excessoBloqueio: Math.max(criacoesBloqueadas.length - detalhesBloqueio.length, 0)
       });
     } finally {
       setProcessando(false);
@@ -1183,7 +1169,7 @@ export default function EmprestimoDidaticoLotePage() {
               />
             </Grid>
 
-            <Grid item xs={12} md={4}>
+            <Grid item xs={12} md={12}>
               <FormControl fullWidth sx={campoPadraoSx}>
                 <InputLabel>Livros do Lote</InputLabel>
                 <Select
@@ -1209,45 +1195,7 @@ export default function EmprestimoDidaticoLotePage() {
                 </Select>
               </FormControl>
             </Grid>
-
-            <Grid item xs={12} md={4}>
-              <TextField
-                fullWidth
-                label="Buscar aluno (leitores)"
-                placeholder="Nome, matrícula, série ou turma"
-                value={buscaAluno}
-                onChange={(e) => setBuscaAluno(e.target.value)}
-                helperText={
-                  modoSelecaoAlunos === 'turma'
-                    ? (
-                      turmaSelecionada
-                        ? `${resumoSelecaoFiltro.totalFiltrados} aluno(s) da turma/filtro | ${resumoSelecaoFiltro.selecionadosFiltrados} marcado(s)`
-                        : 'Selecione a série/turma para carregar os alunos leitores.'
-                    )
-                    : `${resumoSelecaoFiltro.totalFiltrados} aluno(s) no filtro | ${resumoSelecaoFiltro.selecionadosFiltrados} marcado(s)`
-                }
-                sx={campoPadraoSx}
-              />
-            </Grid>
-
-            <Grid item xs={12} md={4}>
-              <TextField
-                fullWidth
-                label="Observação padrão"
-                value={observacaoPadrao}
-                onChange={(e) => {
-                  setObservacaoPadrao(e.target.value);
-                  setResultadoAplicacao(null);
-                }}
-                placeholder="Ex: Empréstimo didático por turma"
-                sx={campoPadraoSx}
-              />
-            </Grid>
           </Grid>
-
-          <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1.5 }}>
-            Observação aplicada aos novos empréstimos: {observacaoPadraoAplicada}
-          </Typography>
 
           <Box sx={{ mt: 2 }}>
             <Typography variant="subtitle2" sx={{ mb: 0.5 }}>
@@ -1266,7 +1214,7 @@ export default function EmprestimoDidaticoLotePage() {
                 onClick={() => selecionarTodosAlunosVisiveis(true)}
                 disabled={alunosFiltrados.length === 0 || processando}
               >
-                Selecionar todos (filtro)
+                Selecionar todos
               </Button>
               <Button
                 variant="outlined"
@@ -1275,7 +1223,7 @@ export default function EmprestimoDidaticoLotePage() {
                 onClick={() => selecionarTodosAlunosVisiveis(false)}
                 disabled={alunosFiltrados.length === 0 || processando}
               >
-                Desmarcar todos (filtro)
+                Desmarcar todos
               </Button>
               {modoSelecaoAlunos === 'turma' && (
                 <Button
@@ -1308,7 +1256,7 @@ export default function EmprestimoDidaticoLotePage() {
                         indeterminate={resumoSelecaoFiltro.parcialmenteSelecionados}
                         onChange={(e) => selecionarTodosAlunosVisiveis(e.target.checked)}
                         disabled={alunosFiltrados.length === 0 || processando}
-                        inputProps={{ 'aria-label': 'Selecionar todos os alunos do filtro' }}
+                        inputProps={{ 'aria-label': 'Selecionar todos os alunos visíveis' }}
                       />
                     </TableCell>
                     <TableCell>Aluno</TableCell>
@@ -1454,7 +1402,6 @@ export default function EmprestimoDidaticoLotePage() {
           <Box sx={{ mt: 2 }}>
             <Typography variant="body2"><strong>Turma/filtro:</strong> {resumoConfirmacao?.turma || '-'}</Typography>
             <Typography variant="body2"><strong>Devolução prevista:</strong> {resumoConfirmacao?.dataDevolucaoPrevista || '-'}</Typography>
-            <Typography variant="body2"><strong>Observação:</strong> {resumoConfirmacao?.observacao || '-'}</Typography>
           </Box>
 
           <Alert severity="info" sx={{ mt: 2 }}>
@@ -1484,9 +1431,6 @@ export default function EmprestimoDidaticoLotePage() {
           <Typography variant="body2" sx={{ mb: resultadoAplicacao.bloqueados > 0 ? 1 : 0 }}>
             Resultado: {resultadoAplicacao.criados} empréstimo(s) criado(s), {resultadoAplicacao.devolvidos} devolução(ões) processada(s)
             {resultadoAplicacao.bloqueados > 0 ? `, ${resultadoAplicacao.bloqueados} bloqueado(s) por falta de estoque.` : '.'}
-          </Typography>
-          <Typography variant="caption" display="block" sx={{ mb: resultadoAplicacao.bloqueados > 0 ? 1 : 0 }}>
-            Observação aplicada: {resultadoAplicacao.observacaoAplicada}
           </Typography>
           {resultadoAplicacao.bloqueados > 0 && (
             <Box>
