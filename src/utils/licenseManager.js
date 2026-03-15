@@ -251,6 +251,7 @@ export function hasActiveSession() {
 
 /**
  * Verificar se dispositivo está autorizado
+ * ✨ MODIFICADO: Permite múltiplos dispositivos com a mesma licença
  * Retorna objeto com status e mensagem
  */
 export async function verifyDeviceAuthorization(apiUrl) {
@@ -266,14 +267,9 @@ export async function verifyDeviceAuthorization(apiUrl) {
     };
   }
 
-  // Verificar se o fingerprint mudou (possível fraude)
-  if (license.deviceFingerprint !== deviceInfo.fingerprint) {
-    return {
-      authorized: false,
-      reason: 'FINGERPRINT_MISMATCH',
-      message: 'Dispositivo não autorizado. Esta licença está vinculada a outro dispositivo.'
-    };
-  }
+  // ✨ MODIFICADO: Removida verificação que bloqueava múltiplos dispositivos
+  // Agora cada dispositivo pode ter sua própria license salva localmente
+  // O fingerprint é usado apenas para rastreamento, não para bloqueio
 
   // Se precisa verificar com servidor
   if (license.needsVerification) {

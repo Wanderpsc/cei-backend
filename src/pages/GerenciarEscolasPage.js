@@ -22,19 +22,23 @@ import {
   TextField,
   MenuItem,
   Grid,
-  Alert
+  Alert,
+  Checkbox,
+  FormControlLabel
 } from '@mui/material';
 import {
   CheckCircle,
   Block,
   Delete,
+  DeleteForever,
   Info,
   VpnKey,
   CalendarToday,
   Add,
   School,
   Edit,
-  Print
+  Print,
+  Analytics
 } from '@mui/icons-material';
 import { useData } from '../context/DataContext';
 import { imprimirEscopo } from '../utils/printUtils';
@@ -45,6 +49,7 @@ export default function GerenciarEscolasPage() {
     ativarInstituicao, 
     bloquearInstituicao, 
     removerInstituicao,
+    removerTodasInstituicoes,
     adicionarInstituicao,
     atualizarInstituicao,
     usuarioLogado 
@@ -58,6 +63,10 @@ export default function GerenciarEscolasPage() {
   const [acao, setAcao] = useState('');
   const [diasValidade, setDiasValidade] = useState(365);
   const [motivoBloqueio, setMotivoBloqueio] = useState('');
+  const [excluirTodasOpen, setExcluirTodasOpen] = useState(false);
+  const [analiseOpen, setAnaliseOpen] = useState(false);
+  const [filtroExclusao, setFiltroExclusao] = useState('pendentes');
+  const [usarExclusaoExataTeste, setUsarExclusaoExataTeste] = useState(false);
 
   // Estado para cadastro manual
   const [formCadastro, setFormCadastro] = useState({
@@ -291,6 +300,135 @@ export default function GerenciarEscolasPage() {
     }
   };
 
+  // ──────────────────── ANÁLISE: TESTE vs COMPRADOR ────────────────────
+  const classificarInstituicao = (inst) => {
+    const nome = String(inst.nomeInstituicao || '').toLowerCase();
+    const email = String(inst.email || inst.emailResponsavel || '').toLowerCase();
+    const cnpj = String(inst.cnpj || '').replace(/\D/g, '');
+    const login = String(inst.loginAdmin || '').toLowerCase();
+
+    const sinaisTeste = [];
+    const sinaisComprador = [];
+
+    // Palavras-chave de teste
+    const palavrasTeste = ['teste', 'test', 'demo', 'exemplo', 'sample', 'prova', 'experimento', 'fake', 'lixo', 'aaa', 'bbb', 'xxx', 'zzz', 'abc'];
+    if (palavrasTeste.some(p => nome.includes(p))) sinaisTeste.push('Nome sugere teste');
+    if (palavrasTeste.some(p => email.includes(p))) sinaisTeste.push('Email sugere teste');
+    if (palavrasTeste.some(p => login.includes(p))) sinaisTeste.push('Login sugere teste');
+
+    // CNPJ inválido/fictício
+    if (cnpj.length === 14) {
+      const todosIguais = cnpj.split('').every(c => c === cnpj[0]);
+      if (todosIguais || cnpj === '00000000000000') sinaisTeste.push('CNPJ fictício');
+    } else if (!cnpj) {
+      sinaisTeste.push('Sem CNPJ');
+    }
+
+    // Nunca pagou e nunca ativou com data de cadastro antiga
+    const diasSinceCadastro = inst.dataCadastro
+      ? Math.floor((Date.now() - new Date(inst.dataCadastro)) / 86400000)
+      : 0;
+    if (inst.status === 'pendente' && diasSinceCadastro > 30) sinaisTeste.push('Pendente há +30 dias');
+    if (inst.status === 'pendente' && diasSinceCadastro <= 7) sinaisComprador.push('Cadastro recente (≤7 dias)');
+
+    // Sinais de comprador real
+    if (inst.telefone && inst.telefone.replace(/\D/g, '').length >= 10) sinaisComprador.push('Telefone válido');
+    if (inst.cidade && inst.estado) sinaisComprador.push('Localização informada');
+    if (inst.nomeResponsavel && inst.nomeResponsavel.split(' ').length >= 2) sinaisComprador.push('Nome completo do responsável');
+    if (inst.status === 'ativo') sinaisComprador.push('Escola ativa (pagou)');
+    if (inst.pagamentoConfirmado) sinaisComprador.push('Pagamento confirmado');
+    if (inst.cadastroManual) sinaisComprador.push('Cadastro manual pelo admin');
+
+    const pontosTeste = sinaisTeste.length;
+    const pontosComprador = sinaisComprador.length;
+
+    let classificacao = 'indefinido';
+    if (pontosTeste >= 2 && pontosTeste > pontosComprador) classificacao = 'teste';
+    else if (pontosComprador >= 2 && pontosComprador > pontosTeste) classificacao = 'comprador';
+
+    return { classificacao, sinaisTeste, sinaisComprador };
+  };
+
+  const analise = instituicoes.map((inst) => ({
+    ...inst,
+    ...classificarInstituicao(inst)
+  }));
+
+  const isCadastroTesteExato = (inst) => {
+    const licenca = String(inst?.licenca || '').toUpperCase();
+    const loginAdmin = String(inst?.loginAdmin || '').toLowerCase();
+    const email = String(inst?.email || inst?.emailResponsavel || '').toLowerCase();
+    const statusFinanceiro = String(inst?.statusFinanceiro || '').toLowerCase();
+    const origemCadastro = String(inst?.origemCadastro || '').toLowerCase();
+
+    return (
+      Boolean(inst?.contaTeste) ||
+      statusFinanceiro === 'teste' ||
+      origemCadastro === 'demo_login' ||
+      licenca.includes('DEMO') ||
+      loginAdmin === 'demo' ||
+      loginAdmin.startsWith('demo_') ||
+      email.endsWith('@cei-demo.com.br')
+    );
+  };
+
+  const totalTeste = analise.filter(a => a.classificacao === 'teste').length;
+  const totalTesteExato = instituicoes.filter(isCadastroTesteExato).length;
+  const totalTesteOuPendente = instituicoes.filter((inst) => {
+    const ehTeste = usarExclusaoExataTeste
+      ? isCadastroTesteExato(inst)
+      : analise.some((a) => a.id === inst.id && a.classificacao === 'teste');
+    return ehTeste || inst.status === 'pendente';
+  }).length;
+  const totalComprador = analise.filter(a => a.classificacao === 'comprador').length;
+  const totalIndefinido = analise.filter(a => a.classificacao === 'indefinido').length;
+
+  // ──────────────────── EXCLUIR EM LOTE ────────────────────
+  const getIdsParaExcluir = () => {
+    const testesSelecionados = usarExclusaoExataTeste
+      ? instituicoes.filter(isCadastroTesteExato)
+      : analise.filter(a => a.classificacao === 'teste');
+
+    if (filtroExclusao === 'pendentes') {
+      return instituicoes.filter(i => i.status === 'pendente').map(i => i.id);
+    }
+    if (filtroExclusao === 'testes') {
+      return testesSelecionados.map(a => a.id);
+    }
+    if (filtroExclusao === 'testes_e_pendentes') {
+      return instituicoes
+        .filter((inst) => {
+          const ehTeste = usarExclusaoExataTeste
+            ? isCadastroTesteExato(inst)
+            : analise.some((a) => a.id === inst.id && a.classificacao === 'teste');
+          return ehTeste || inst.status === 'pendente';
+        })
+        .map((a) => a.id);
+    }
+    if (filtroExclusao === 'todas') {
+      return instituicoes.map(i => i.id);
+    }
+    return [];
+  };
+
+  const handleConfirmarExclusaoLote = () => {
+    const ids = getIdsParaExcluir();
+    if (ids.length === 0) {
+      alert('Nenhuma instituição encontrada com o critério selecionado.');
+      return;
+    }
+    const confirmacao = window.confirm(
+      `⚠️ CONFIRMAR EXCLUSÃO EM LOTE\n\n` +
+      `Serão excluídas ${ids.length} instituições e todos os seus dados.\n\n` +
+      `Esta ação é IRREVERSÍVEL.\n\nDeseja confirmar?`
+    );
+    if (confirmacao) {
+      removerTodasInstituicoes(ids);
+      setExcluirTodasOpen(false);
+      alert(`✅ ${ids.length} instituição(ões) excluída(s) com sucesso.`);
+    }
+  };
+
   const getStatusColor = (status) => {
     const cores = {
       'pendente': 'warning',
@@ -334,8 +472,8 @@ export default function GerenciarEscolasPage() {
 
   return (
     <Layout title="Gerenciar Instituições">
-      {/* Botão de Cadastro Manual */}
-      <Box sx={{ mb: 3 }}>
+      {/* Botões de Ação */}
+      <Box sx={{ mb: 3, display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
         <Button
           variant="contained"
           color="primary"
@@ -345,7 +483,25 @@ export default function GerenciarEscolasPage() {
         >
           Cadastrar Escola Manualmente
         </Button>
-        <Typography variant="caption" display="block" sx={{ mt: 1, color: 'text.secondary' }}>
+        <Button
+          variant="outlined"
+          color="info"
+          startIcon={<Analytics />}
+          onClick={() => setAnaliseOpen(true)}
+          size="large"
+        >
+          Analisar Registros
+        </Button>
+        <Button
+          variant="outlined"
+          color="error"
+          startIcon={<DeleteForever />}
+          onClick={() => setExcluirTodasOpen(true)}
+          size="large"
+        >
+          Excluir em Lote
+        </Button>
+        <Typography variant="caption" display="block" sx={{ width: '100%', color: 'text.secondary' }}>
           Cadastre uma nova instituição e forneça licença sem necessidade de pagamento
         </Typography>
       </Box>
@@ -451,6 +607,15 @@ export default function GerenciarEscolasPage() {
                       <Typography variant="caption" color="text.secondary">
                         {instituicao.cidade}, {instituicao.estado}
                       </Typography>
+                      {instituicao.origemCadastro === 'demo_login' && (
+                        <Chip
+                          label="Origem: Demo (Login)"
+                          size="small"
+                          color="secondary"
+                          variant="outlined"
+                          sx={{ mt: 0.5 }}
+                        />
+                      )}
                     </TableCell>
                     <TableCell>
                       <Typography variant="body2">
@@ -626,6 +791,155 @@ export default function GerenciarEscolasPage() {
           </TableBody>
         </Table>
       </TableContainer>
+
+      {/* ── Dialog: Análise de Registros ── */}
+      <Dialog open={analiseOpen} onClose={() => setAnaliseOpen(false)} maxWidth="md" fullWidth>
+        <DialogTitle>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Analytics color="info" />
+            Análise de Registros — {instituicoes.length} instituições
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          <Grid container spacing={2} sx={{ mb: 3 }}>
+            <Grid item xs={4}>
+              <Paper elevation={0} sx={{ p: 2, bgcolor: '#ffebee', textAlign: 'center' }}>
+                <Typography variant="h4" color="error.main" fontWeight="bold">{totalTeste}</Typography>
+                <Typography variant="body2">Prováveis Testes</Typography>
+              </Paper>
+            </Grid>
+            <Grid item xs={4}>
+              <Paper elevation={0} sx={{ p: 2, bgcolor: '#e8f5e9', textAlign: 'center' }}>
+                <Typography variant="h4" color="success.main" fontWeight="bold">{totalComprador}</Typography>
+                <Typography variant="body2">Prováveis Compradores</Typography>
+              </Paper>
+            </Grid>
+            <Grid item xs={4}>
+              <Paper elevation={0} sx={{ p: 2, bgcolor: '#fff3e0', textAlign: 'center' }}>
+                <Typography variant="h4" color="warning.main" fontWeight="bold">{totalIndefinido}</Typography>
+                <Typography variant="body2">Indefinidos</Typography>
+              </Paper>
+            </Grid>
+          </Grid>
+
+          <Alert severity="info" sx={{ mb: 2 }}>
+            A classificação é automática e baseada em: nome/email/login com palavras-chave de teste, CNPJ fictício, tempo sem ativação, telefone válido, localização e status de pagamento.
+          </Alert>
+
+          <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 400 }}>
+            <Table size="small" stickyHeader>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Instituição</TableCell>
+                  <TableCell>Status</TableCell>
+                  <TableCell>Classificação</TableCell>
+                  <TableCell>Evidências</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {analise.map((inst) => (
+                  <TableRow key={inst.id} sx={{
+                    bgcolor: inst.classificacao === 'teste' ? '#fff5f5' :
+                             inst.classificacao === 'comprador' ? '#f5fff5' : 'inherit'
+                  }}>
+                    <TableCell>
+                      <Typography variant="body2" fontWeight="bold">{inst.nomeInstituicao}</Typography>
+                      <Typography variant="caption" color="text.secondary">{inst.email || inst.emailResponsavel}</Typography>
+                    </TableCell>
+                    <TableCell>
+                      <Chip label={getStatusLabel(inst.status)} size="small" color={getStatusColor(inst.status)} />
+                    </TableCell>
+                    <TableCell>
+                      <Chip
+                        label={inst.classificacao === 'teste' ? '🧪 Teste' : inst.classificacao === 'comprador' ? '💰 Comprador' : '❓ Indefinido'}
+                        size="small"
+                        color={inst.classificacao === 'teste' ? 'error' : inst.classificacao === 'comprador' ? 'success' : 'warning'}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      {inst.sinaisTeste.length > 0 && (
+                        <Typography variant="caption" color="error.main" display="block">
+                          ⚠️ {inst.sinaisTeste.join('; ')}
+                        </Typography>
+                      )}
+                      {inst.sinaisComprador.length > 0 && (
+                        <Typography variant="caption" color="success.main" display="block">
+                          ✅ {inst.sinaisComprador.join('; ')}
+                        </Typography>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setAnaliseOpen(false)}>Fechar</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* ── Dialog: Excluir em Lote ── */}
+      <Dialog open={excluirTodasOpen} onClose={() => setExcluirTodasOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <DeleteForever color="error" />
+            Excluir Instituições em Lote
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          <Alert severity="error" sx={{ mb: 3 }}>
+            <strong>ATENÇÃO:</strong> A exclusão é permanente e irá remover todos os dados relacionados (livros, alunos, empréstimos, etc.).
+          </Alert>
+          <TextField
+            select
+            fullWidth
+            label="O que deseja excluir?"
+            value={filtroExclusao}
+            onChange={(e) => setFiltroExclusao(e.target.value)}
+          >
+            <MenuItem value="pendentes">
+              Apenas pendentes ({instituicoes.filter(i => i.status === 'pendente').length})
+            </MenuItem>
+            <MenuItem value="testes">
+              Apenas testes ({usarExclusaoExataTeste ? totalTesteExato : totalTeste})
+            </MenuItem>
+            <MenuItem value="testes_e_pendentes">
+              Testes + Pendentes ({totalTesteOuPendente})
+            </MenuItem>
+            <MenuItem value="todas">
+              TODAS as instituições ({instituicoes.length}) ⚠️
+            </MenuItem>
+          </TextField>
+          {(filtroExclusao === 'testes' || filtroExclusao === 'testes_e_pendentes') && (
+            <FormControlLabel
+              sx={{ mt: 1 }}
+              control={
+                <Checkbox
+                  checked={usarExclusaoExataTeste}
+                  onChange={(e) => setUsarExclusaoExataTeste(e.target.checked)}
+                />
+              }
+              label="Exclusão exata dos cadastros teste (somente registros marcados como teste/demo)"
+            />
+          )}
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+            Serão excluídas: <strong>{getIdsParaExcluir().length} instituição(ões)</strong>
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setExcluirTodasOpen(false)}>Cancelar</Button>
+          <Button
+            variant="contained"
+            color="error"
+            startIcon={<DeleteForever />}
+            onClick={handleConfirmarExclusaoLote}
+            disabled={getIdsParaExcluir().length === 0}
+          >
+            Excluir {getIdsParaExcluir().length} Instituição(ões)
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Dialog de Ações */}
       <Dialog open={dialogOpen} onClose={handleFecharDialog} maxWidth="sm" fullWidth>

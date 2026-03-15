@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Configurar Supabase - CEI</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #f5f7fb; margin: 0; }
+    .wrap { max-width: 720px; margin: 40px auto; background: #fff; border-radius: 12px; padding: 24px; box-shadow: 0 8px 24px rgba(0,0,0,.08); }
+    h1 { margin-top: 0; color: #4f46e5; }
+    label { display: block; margin-top: 14px; font-weight: 600; }
+    input { width: 100%; padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 8px; margin-top: 6px; }
+    .row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 18px; }
+    button { border: 0; border-radius: 8px; padding: 10px 14px; cursor: pointer; font-weight: 600; }
+    .primary { background: #4f46e5; color: #fff; }
+    .ghost { background: #eef2ff; color: #3730a3; }
+    .danger { background: #fee2e2; color: #991b1b; }
+    .ok { color: #166534; margin-top: 12px; }
+    .err { color: #b91c1c; margin-top: 12px; }
+    .small { color: #64748b; font-size: 14px; }
+    code { background: #f1f5f9; padding: 2px 6px; border-radius: 6px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Configurar Supabase (sem código)</h1>
+    <p class="small">Use esta tela para configurar a nuvem sem editar arquivos. A configuração fica salva neste navegador.</p>
+
+    <label for="url">Project URL</label>
+    <input id="url" placeholder="https://SEU-PROJETO.supabase.co" />
+
+    <label for="key">Anon / Publishable Key</label>
+    <input id="key" placeholder="sb_publishable_..." />
+
+    <div class="row">
+      <button class="primary" id="saveBtn">Salvar configuração</button>
+      <button class="ghost" id="testBtn">Testar conexão</button>
+      <button class="danger" id="clearBtn">Limpar configuração</button>
+    </div>
+
+    <div id="msg"></div>
+
+    <hr style="margin:20px 0; border:none; border-top:1px solid #e5e7eb;" />
+    <p class="small">Depois de salvar, abra o sistema em <code>/cei-backend</code> e recarregue a página.</p>
+  </div>
+
+  <script>
+    const urlEl = document.getElementById('url');
+    const keyEl = document.getElementById('key');
+    const msgEl = document.getElementById('msg');
+
+    const setMsg = (text, ok = true) => {
+      msgEl.className = ok ? 'ok' : 'err';
+      msgEl.textContent = text;
+    };
+
+    const load = () => {
+      urlEl.value = localStorage.getItem('cei_supabase_url') || '';
+      keyEl.value = localStorage.getItem('cei_supabase_anon_key') || '';
+    };
+
+    document.getElementById('saveBtn').addEventListener('click', () => {
+      const url = urlEl.value.trim();
+      const key = keyEl.value.trim();
+      if (!url || !key) {
+        setMsg('Preencha URL e chave.', false);
+        return;
+      }
+      localStorage.setItem('cei_supabase_url', url);
+      localStorage.setItem('cei_supabase_anon_key', key);
+      setMsg('Configuração salva com sucesso. Recarregue o sistema.');
+    });
+
+    document.getElementById('clearBtn').addEventListener('click', () => {
+      localStorage.removeItem('cei_supabase_url');
+      localStorage.removeItem('cei_supabase_anon_key');
+      load();
+      setMsg('Configuração removida.');
+    });
+
+    document.getElementById('testBtn').addEventListener('click', async () => {
+      const url = urlEl.value.trim();
+      const key = keyEl.value.trim();
+      if (!url || !key) {
+        setMsg('Preencha URL e chave para testar.', false);
+        return;
+      }
+
+      try {
+        const endpoint = `${url}/rest/v1/instituicoes?select=id&limit=1`;
+        const resp = await fetch(endpoint, {
+          headers: {
+            apikey: key,
+            Authorization: `Bearer ${key}`
+          }
+        });
+
+        if (resp.ok) {
+          setMsg('Conexão OK com Supabase. Pode salvar e usar.');
+        } else {
+          const text = await resp.text();
+          setMsg(`Falha (${resp.status}). Verifique URL/chave. ${text.slice(0, 120)}`, false);
+        }
+      } catch (e) {
+        setMsg(`Erro de rede: ${e.message}`, false);
+      }
+    });
+
+    load();
+  </script>
+</body>
+</html>

@@ -2,7 +2,7 @@
  * 🛡️ SISTEMA DE PROTEÇÃO E MIGRAÇÃO DE DADOS
  * 
  * Garante que os dados do cliente sejam preservados durante atualizações
- * Versão: 3.5.0
+ * Versão: 3.5.2
  * 
  * Funcionalidades:
  * - Versionamento de dados
@@ -13,11 +13,26 @@
  */
 
 // Versão atual do sistema de dados
-const CURRENT_DATA_VERSION = '3.5.0';
+const CURRENT_DATA_VERSION = '3.5.2';
 const DATA_KEY = 'cei_data';
 const BACKUP_KEY = 'cei_data_backup';
 const VERSION_KEY = 'cei_data_version';
 const LAST_BACKUP_KEY = 'cei_last_backup';
+
+const compareVersions = (versionA, versionB) => {
+  const a = String(versionA || '0.0.0').split('.').map((part) => Number(part) || 0);
+  const b = String(versionB || '0.0.0').split('.').map((part) => Number(part) || 0);
+  const maxLen = Math.max(a.length, b.length);
+
+  for (let i = 0; i < maxLen; i += 1) {
+    const av = a[i] || 0;
+    const bv = b[i] || 0;
+    if (av > bv) return 1;
+    if (av < bv) return -1;
+  }
+
+  return 0;
+};
 
 /**
  * 🔐 Criar backup dos dados antes de qualquer operação crítica
@@ -104,8 +119,17 @@ export const needsMigration = () => {
     localStorage.setItem(VERSION_KEY, CURRENT_DATA_VERSION);
     return false;
   }
-  
-  if (currentVersion !== CURRENT_DATA_VERSION) {
+
+  const versionComparison = compareVersions(currentVersion, CURRENT_DATA_VERSION);
+
+  // Nunca rebaixar metadado de versão local para uma versão menor.
+  if (versionComparison > 0) {
+    console.log(`ℹ️ [MIGRATION] Versão local (${currentVersion}) é mais nova que o migrador (${CURRENT_DATA_VERSION}). Mantendo versão local.`);
+    localStorage.setItem(VERSION_KEY, currentVersion);
+    return false;
+  }
+
+  if (versionComparison < 0) {
     console.log(`🔄 [MIGRATION] Migração necessária: ${currentVersion} → ${CURRENT_DATA_VERSION}`);
     return true;
   }

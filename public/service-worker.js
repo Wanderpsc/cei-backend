@@ -1,14 +1,15 @@
 // Service Worker para CEI - Controle Escolar Inteligente
 // 🛡️ Sistema de Atualização Automática com Proteção de Dados
-const CACHE_NAME = 'cei-v3.5.0'; // NOVA VERSÃO - Sistema de proteção de dados
+const CACHE_NAME = 'cei-v3.5.4-sw-path-fix'; // Corrige paths de cache para GitHub Pages em /cei-backend
+const APP_BASE = self.location.pathname.replace(/\/service-worker\.js$/, '');
+const withBase = (path) => `${APP_BASE}${path}`;
+
 const urlsToCache = [
-  '/',
-  '/index.html',
-  '/static/css/main.css',
-  '/static/js/main.js',
-  '/manifest.json',
-  '/logo192.png',
-  '/logo512.png'
+  withBase('/'),
+  withBase('/index.html'),
+  withBase('/manifest.json'),
+  withBase('/logo192.png'),
+  withBase('/logo512.png')
 ];
 
 // Instalação do Service Worker
@@ -93,7 +94,7 @@ self.addEventListener('fetch', (event) => {
           }
         ).catch(() => {
           // Se falhar, tenta retornar a página principal do cache
-          return caches.match('/index.html');
+          return caches.match(withBase('/index.html'));
         });
       })
   );

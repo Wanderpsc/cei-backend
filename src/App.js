@@ -34,6 +34,8 @@ import ClubeDeLeituraPage from './pages/ClubeDeLeituraPage';
 import RelatoriosLivrosPage from './pages/RelatoriosLivrosPage';
 import NotaFiscalPage from './pages/NotaFiscalPage';
 import DevolucaoPage from './pages/DevolucaoPage';
+import EmprestimoDidaticoLotePage from './pages/EmprestimoDidaticoLotePage';
+import SeriesTurmasPage from './pages/SeriesTurmasPage';
 import GerenciarUsuariosPage from './pages/GerenciarUsuariosPage';
 import RelatorioUsuariosPage from './pages/RelatorioUsuariosPage';
 import ConfiguracoesPage from './pages/ConfiguracoesPage';
@@ -61,7 +63,9 @@ const ROUTE_TITLES = {
   '/livros': 'Livros',
   '/patrimonio': 'Patrimônio',
   '/clientes': 'Leitores',
-  '/emprestimos': 'Empréstimos',
+  '/series-turmas': 'Séries e Turmas',
+  '/emprestimos': 'Empréstimos Individuais',
+  '/emprestimos-didaticos-lote': 'Empréstimos Didáticos em Lote',
   '/devolucoes': 'Devoluções',
   '/relatorios': 'Relatórios',
   '/busca': 'Busca',
@@ -98,6 +102,22 @@ function PrivateRoute({ children }) {
 
     if (!permissoesUsuario || permissoesUsuario.length === 0) {
       return true; // usuários legados sem permissões explícitas
+    }
+
+    // Compatibilidade: quem já tinha acesso a empréstimos pode acessar o lote didático.
+    if (
+      location.pathname === '/emprestimos-didaticos-lote' &&
+      permissoesUsuario.includes('/emprestimos')
+    ) {
+      return true;
+    }
+
+    // Compatibilidade: quem já tinha acesso a leitores pode acessar séries/turmas.
+    if (
+      location.pathname === '/series-turmas' &&
+      permissoesUsuario.includes('/clientes')
+    ) {
+      return true;
     }
 
     return location.pathname === '/' || permissoesUsuario.includes(location.pathname);
@@ -171,7 +191,9 @@ function AppRoutes() {
       <Route path="/livros" element={<PrivateRoute><LivrosPage /></PrivateRoute>} />
       <Route path="/patrimonio" element={<PrivateRoute><PatrimonioPage /></PrivateRoute>} />
       <Route path="/clientes" element={<PrivateRoute><LeitoresPage /></PrivateRoute>} />
+      <Route path="/series-turmas" element={<PrivateRoute><SeriesTurmasPage /></PrivateRoute>} />
       <Route path="/emprestimos" element={<PrivateRoute><EmprestimosPage /></PrivateRoute>} />
+      <Route path="/emprestimos-didaticos-lote" element={<PrivateRoute><EmprestimoDidaticoLotePage /></PrivateRoute>} />
       <Route path="/devolucoes" element={<PrivateRoute><DevolucaoPage /></PrivateRoute>} />
       <Route path="/relatorios" element={<PrivateRoute><RelatoriosPage /></PrivateRoute>} />
       <Route path="/busca" element={<PrivateRoute><BuscaPage /></PrivateRoute>} />

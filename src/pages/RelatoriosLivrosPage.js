@@ -38,10 +38,28 @@ function TabPanel({ children, value, index }) {
 }
 
 export default function RelatoriosLivrosPage() {
-  const { livros } = useData();
+  const { livros, emprestimos } = useData();
   const [tabAtiva, setTabAtiva] = useState(0);
 
   const anoAtual = new Date().getFullYear();
+
+  const isEmprestimoAtivo = (status) => {
+    const statusNormalizado = String(status || '').toLowerCase();
+    return statusNormalizado === 'ativo' || statusNormalizado === 'emprestado';
+  };
+
+  const calcularLivrosDisponiveis = (livro) => {
+    if (livro.baixa) return 0;
+
+    const quantidadeTotal = Number(livro.quantidade) || 0;
+    const livroIdNormalizado = String(livro.id);
+
+    const emprestimosAtivos = emprestimos.filter((emp) =>
+      String(emp.livroId) === livroIdNormalizado && isEmprestimoAtivo(emp.status)
+    ).length;
+
+    return Math.max(quantidadeTotal - emprestimosAtivos, 0);
+  };
 
   // Filtrar livros por tipo
   const livrosDidaticos = livros.filter(l => l.tipo === 'Didático' && !l.baixa);
@@ -184,13 +202,14 @@ export default function RelatoriosLivrosPage() {
                   <TableCell>Ano Publicação</TableCell>
                   <TableCell>Ano Vigência</TableCell>
                   <TableCell>Quantidade</TableCell>
+                  <TableCell>Livros Disponíveis</TableCell>
                   <TableCell>Status</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {livrosDidaticos.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} align="center">
+                    <TableCell colSpan={9} align="center">
                       <Typography color="text.secondary">
                         Nenhum livro didático cadastrado
                       </Typography>
@@ -212,6 +231,7 @@ export default function RelatoriosLivrosPage() {
                           {livro.anoVigencia || 'Não definido'}
                         </TableCell>
                         <TableCell>{livro.quantidade}</TableCell>
+                        <TableCell>{calcularLivrosDisponiveis(livro)}</TableCell>
                         <TableCell>
                           {vencido ? (
                             <Chip label="Vencido" size="small" color="error" icon={<Warning />} />
@@ -242,13 +262,14 @@ export default function RelatoriosLivrosPage() {
                   <TableCell>Editora</TableCell>
                   <TableCell>Categoria</TableCell>
                   <TableCell>Quantidade</TableCell>
+                  <TableCell>Livros Disponíveis</TableCell>
                   <TableCell>Localização</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {livrosParadidaticos.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} align="center">
+                    <TableCell colSpan={8} align="center">
                       <Typography color="text.secondary">
                         Nenhum livro paradidático cadastrado
                       </Typography>
@@ -265,6 +286,7 @@ export default function RelatoriosLivrosPage() {
                         <Chip label={livro.categoria} size="small" />
                       </TableCell>
                       <TableCell>{livro.quantidade}</TableCell>
+                      <TableCell>{calcularLivrosDisponiveis(livro)}</TableCell>
                       <TableCell>{livro.localizacao}</TableCell>
                     </TableRow>
                   ))
@@ -289,6 +311,7 @@ export default function RelatoriosLivrosPage() {
                       <TableCell>Autor</TableCell>
                       <TableCell>Ano Vigência</TableCell>
                       <TableCell>Quantidade</TableCell>
+                      <TableCell>Livros Disponíveis</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
@@ -298,6 +321,7 @@ export default function RelatoriosLivrosPage() {
                         <TableCell>{livro.autor}</TableCell>
                         <TableCell>{livro.anoVigencia}</TableCell>
                         <TableCell>{livro.quantidade}</TableCell>
+                        <TableCell>{calcularLivrosDisponiveis(livro)}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -319,6 +343,7 @@ export default function RelatoriosLivrosPage() {
                       <TableCell>Autor</TableCell>
                       <TableCell>Ano Vigência</TableCell>
                       <TableCell>Quantidade</TableCell>
+                      <TableCell>Livros Disponíveis</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
@@ -328,6 +353,7 @@ export default function RelatoriosLivrosPage() {
                         <TableCell>{livro.autor}</TableCell>
                         <TableCell>{livro.anoVigencia}</TableCell>
                         <TableCell>{livro.quantidade}</TableCell>
+                        <TableCell>{calcularLivrosDisponiveis(livro)}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>

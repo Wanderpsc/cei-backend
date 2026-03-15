@@ -41,7 +41,7 @@ import { useData } from '../context/DataContext';
 import TermoEmprestimo from '../components/TermoEmprestimo';
 
 function LivrosPage() {
-  const { livros, adicionarLivro, atualizarLivro, removerLivro, darBaixaLivro, usuarioLogado } = useData();
+  const { livros, emprestimos, adicionarLivro, atualizarLivro, removerLivro, darBaixaLivro, usuarioLogado } = useData();
   const [open, setOpen] = useState(false);
   const [editando, setEditando] = useState(null);
   const [busca, setBusca] = useState('');
@@ -305,6 +305,24 @@ function LivrosPage() {
     livro.isbn.includes(busca)
   );
 
+  const isEmprestimoAtivo = (status) => {
+    const statusNormalizado = String(status || '').toLowerCase();
+    return statusNormalizado === 'ativo' || statusNormalizado === 'emprestado';
+  };
+
+  const calcularLivrosDisponiveis = (livro) => {
+    if (livro.baixa) return 0;
+
+    const quantidadeTotal = Number(livro.quantidade) || 0;
+    const livroIdNormalizado = String(livro.id);
+
+    const emprestimosAtivos = emprestimos.filter((emp) =>
+      String(emp.livroId) === livroIdNormalizado && isEmprestimoAtivo(emp.status)
+    ).length;
+
+    return Math.max(quantidadeTotal - emprestimosAtivos, 0);
+  };
+
   return (
     <Layout title="Livros">
       <Box sx={{ mb: 2, display: 'flex', gap: 2, flexWrap: 'wrap' }}>
@@ -380,6 +398,7 @@ function LivrosPage() {
               <TableCell>Tipo</TableCell>
               <TableCell>Categoria</TableCell>
               <TableCell>Quantidade</TableCell>
+              <TableCell>Livros Disponíveis</TableCell>
               <TableCell>Status</TableCell>
               <TableCell>Ações</TableCell>
             </TableRow>
@@ -387,7 +406,7 @@ function LivrosPage() {
           <TableBody>
             {livrosFiltrados.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={10} align="center">
+                <TableCell colSpan={11} align="center">
                   <Typography color="text.secondary">
                     Nenhum livro cadastrado
                   </Typography>
@@ -428,6 +447,7 @@ function LivrosPage() {
                     <Chip label={livro.categoria} size="small" />
                   </TableCell>
                   <TableCell>{livro.quantidade}</TableCell>
+                  <TableCell>{calcularLivrosDisponiveis(livro)}</TableCell>
                   <TableCell>
                     {livro.baixa ? (
                       <Chip 

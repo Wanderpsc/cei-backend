@@ -298,43 +298,56 @@ async function enviarNotificacaoWhatsAppAcesso(payload) {
 // BANCO DE DADOS DE LICENÇAS (em memória - use banco real em produção)
 // ==========================================
 const licensesDB = new Map(); // chave: licenseKey, valor: { instituicaoId, deviceFingerprint, activatedAt, etc }
-const sessionsDB = new Map(); // chave: instituicaoId, valor: { deviceFingerprint, lastActivity, etc }
+const sessionsDB = new Map(); // chave: instituicaoId, valor: Map de { deviceFingerprint -> sessionData }
+// ✨ NOVA ESTRUTURA: Permite múltiplas sessões simultâneas do mesmo usuário em diferentes dispositivos
 
 /**
- * Verificar se uma licença está ativa em outro dispositivo
- */
-function isLicenseActiveOnAnotherDevice(instituicaoId, deviceFingerprint) {
-  const session = sessionsDB.get(instituicaoId);
-  if (!session) return false;
-  
-  // Verificar se está ativo em outro dispositivo
-  if (session.deviceFingerprint !== deviceFingerprint) {
-    // Verificar se a sessão ainda está válida (ativa nos últimos 5 minutos)
-    const minutesSinceActivity = (Date.now() - session.lastActivity) / (1000 * 60);
-    if (minutesSinceActivity < 5) {
-      return true; // Ativo em outro dispositivo
-    }
-  }
-  
-  return false;
-}
-
-/**
- * Atualizar sessão ativa
+ * Atualizar sessão ativa - PERMITE MÚLTIPLOS DISPOSITIVOS
+ * Agora cada instituição pode ter múltiplas sessões de diferentes dispositivos simultaneamente
  */
 function updateActiveSession(instituicaoId, deviceFingerprint) {
-  sessionsDB.set(instituicaoId, {
+  // Inicializar Map de sessões da instituição se não existir
+  if (!sessionsDB.has(instituicaoId)) {
+    sessionsDB.set(instituicaoId, new Map());
+  }
+  
+  const institutionSessions = sessionsDB.get(instituicaoId);
+  
+  // Atualizar ou criar sessão do dispositivo
+  institutionSessions.set(deviceFingerprint, {
     deviceFingerprint: deviceFingerprint,
     lastActivity: Date.now(),
-    activatedAt: sessionsDB.get(instituicaoId)?.activatedAt || Date.now()
+    activatedAt: institutionSessions.get(deviceFingerprint)?.activatedAt || Date.now()
   });
+  
+  console.log(`✅ Sessão ativa para instituição ${instituicaoId} em dispositivo ${deviceFingerprint.substring(0, 8)}...`);
 }
 
 /**
- * Remover sessão ativa
+ * Remover sessão ativa - remove apenas uma sessão específica
  */
-function removeActiveSession(instituicaoId) {
-  sessionsDB.delete(instituicaoId);
+function removeActiveSession(instituicaoId, deviceFingerprint) {
+  if (!sessionsDB.has(instituicaoId)) return;
+  
+  const institutionSessions = sessionsDB.get(instituicaoId);
+  institutionSessions.delete(deviceFingerprint);
+  
+  // Se nenhuma sessão restante, remove a entrada da instituição
+  if (institutionSessions.size === 0) {
+    sessionsDB.delete(instituicaoId);
+  }
+  
+  console.log(`✅ Sessão removida para instituição ${instituicaoId} no dispositivo ${deviceFingerprint.substring(0, 8)}...`);
+}
+
+/**
+ * Listar todas as sessões ativas de uma instituição
+ */
+function getActiveSessions(instituicaoId) {
+  const institutionSessions = sessionsDB.get(instituicaoId);
+  if (!institutionSessions) return [];
+  
+  return Array.from(institutionSessions.values());
 }
 
 // ==========================================
@@ -371,15 +384,9 @@ app.post('/api/activate-license', async (req, res) => {
     // Simular busca de instituição (substitua por consulta real ao banco)
     const instituicaoId = `INST-${licenseKey.substring(0, 4)}`;
 
-    // Verificar se já está ativo em outro dispositivo
-    if (isLicenseActiveOnAnotherDevice(instituicaoId, deviceFingerprint)) {
-      return res.json({
-        success: false,
-        reason: 'ALREADY_ACTIVE',
-        message: 'Esta licença já está ativa em outro dispositivo. Desative primeiro.'
-      });
-    }
-
+    // ✨ MODIFICADO: Removida restrição que bloqueava login em múltiplos dispositivos
+    // Agora permite o mesmo usuário em vários dispositivos simultaneamente
+    
     // Salvar licença no banco
     licensesDB.set(licenseKey, {
       instituicaoId: instituicaoId,
@@ -447,15 +454,9 @@ app.post('/api/verify-license', async (req, res) => {
       });
     }
 
-    // Verificar se está ativo em outro dispositivo
-    if (isLicenseActiveOnAnotherDevice(instituicaoId, deviceFingerprint)) {
-      return res.json({
-        valid: false,
-        reason: 'ACTIVE_ON_ANOTHER_DEVICE',
-        message: 'Dispositivo diferente está usando esta licença.'
-      });
-    }
-
+    // ✨ MODIFICADO: Removida restrição que bloqueava múltiplas sessões
+    // Agora permite a mesma licença em vários dispositivos simultaneamente
+    
     // Atualizar última verificação
     license.lastVerified = Date.now();
     licensesDB.set(licenseKey, license);
@@ -493,8 +494,8 @@ app.post('/api/deactivate-license', async (req, res) => {
     const license = licensesDB.get(licenseKey);
 
     if (license && license.deviceFingerprint === deviceFingerprint) {
-      // Remover sessão ativa
-      removeActiveSession(license.instituicaoId);
+      // ✨ MODIFICADO: Passa deviceFingerprint para remover apenas essa sessão específica
+      removeActiveSession(license.instituicaoId, deviceFingerprint);
       console.log('✅ Sessão removida');
     }
 

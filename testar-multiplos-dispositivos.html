@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test - Múltiplos Dispositivos Simultâneos</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            max-width: 1000px;
+            width: 100%;
+            padding: 40px;
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+        
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+        
+        .test-section {
+            background: #f8f9fa;
+            border-left: 4px solid #667eea;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+        }
+        
+        .test-section h2 {
+            color: #667eea;
+            font-size: 18px;
+            margin-bottom: 15px;
+        }
+        
+        .steps {
+            list-style: none;
+            counter-reset: step-counter;
+        }
+        
+        .steps li {
+            counter-increment: step-counter;
+            margin-bottom: 12px;
+            padding-left: 30px;
+            position: relative;
+            line-height: 1.6;
+        }
+        
+        .steps li:before {
+            content: counter(step-counter);
+            position: absolute;
+            left: 0;
+            top: 0;
+            background: #667eea;
+            color: white;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 12px;
+        }
+        
+        .success {
+            background: #d4edda;
+            color: #155724;
+            padding: 10px 15px;
+            border-radius: 4px;
+            border-left: 4px solid #28a745;
+            margin: 10px 0;
+            font-size: 13px;
+        }
+        
+        .warning {
+            background: #fff3cd;
+            color: #856404;
+            padding: 10px 15px;
+            border-radius: 4px;
+            border-left: 4px solid #ffc107;
+            margin: 10px 0;
+            font-size: 13px;
+        }
+        
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 10px 15px;
+            border-radius: 4px;
+            border-left: 4px solid #dc3545;
+            margin: 10px 0;
+            font-size: 13px;
+        }
+        
+        .code {
+            background: #eee;
+            padding: 3px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+        }
+        
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+        
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: background 0.3s;
+        }
+        
+        button:hover {
+            background: #764ba2;
+        }
+        
+        button.secondary {
+            background: #6c757d;
+        }
+        
+        button.secondary:hover {
+            background: #5a6268;
+        }
+        
+        .result {
+            background: #e7f3ff;
+            border: 1px solid #b3d9ff;
+            padding: 15px;
+            border-radius: 6px;
+            margin-top: 15px;
+            font-size: 13px;
+            color: #004085;
+        }
+        
+        .two-columns {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        
+        @media (max-width: 768px) {
+            .two-columns {
+                grid-template-columns: 1fr;
+            }
+            
+            .container {
+                padding: 20px;
+            }
+        }
+        
+        .status {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 3px;
+            font-size: 12px;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+        
+        .status.ok {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .status.pending {
+            background: #fff3cd;
+            color: #856404;
+        }
+        
+        .status.fail {
+            background: #f8d7da;
+            color: #721c24;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 Testes - Múltiplos Dispositivos Simultâneos</h1>
+        <p class="subtitle">CEI v3.6.0 - Controle Escolar Inteligente</p>
+        
+        <!-- Teste 1 -->
+        <div class="test-section">
+            <h2>🔐 Teste 1: Login Duplicado em Navegadores Diferentes</h2>
+            <ul class="steps">
+                <li>Abra <strong>dois navegadores diferentes</strong> (Chrome e Firefox, ou Chrome e Edge)</li>
+                <li>No <strong>Navegador 1</strong>, acesse: <span class="code">http://localhost:3000</span></li>
+                <li>Faça login com: <span class="code">demo</span> / <span class="code">demo2026</span></li>
+                <li>Você deve estar logado e ver a dashboard</li>
+                <li>No <strong>Navegador 2</strong>, acesse também: <span class="code">http://localhost:3000</span></li>
+                <li>Faça login com as <strong>MESMAS credenciais</strong>: <span class="code">demo</span> / <span class="code">demo2026</span></li>
+            </ul>
+            
+            <div class="success">
+                ✅ Esperado: Ambos os navegadores devem estar logados simultaneamente
+            </div>
+            <div class="warning">
+                ⚠️ Antes (v3.5.x): O segundo navegador teria erro "Licença já ativa"<br>
+                ✅ Agora (v3.6.0): Ambos funcionam perfeito!
+            </div>
+            
+            <div class="button-group">
+                <button onclick="testDuplicateLogin()">Executar Teste</button>
+                <button class="secondary" onclick="showInstructions('test1')">Ver Instruções Detalhadas</button>
+            </div>
+            <div id="test1-result"></div>
+        </div>
+        
+        <!-- Teste 2 -->
+        <div class="test-section">
+            <h2>📱 Teste 2: Login em Modo Privado/Incógnito</h2>
+            <ul class="steps">
+                <li>Abra uma aba <strong>normal</strong> e acesse: <span class="code">http://localhost:3000</span></li>
+                <li>Faça login com: <span class="code">demo</span> / <span class="code">demo2026</span></li>
+                <li>Abra uma aba em <strong>modo incógnito/privado</strong> (Ctrl+Shift+N ou Cmd+Shift+N)</li>
+                <li>Na aba incógnito, acesse: <span class="code">http://localhost:3000</span></li>
+                <li>Faça login com as <strong>MESMAS credenciais</strong></li>
+            </ul>
+            
+            <div class="success">
+                ✅ Esperado: Modo incógnito também deve funcionar com a mesma conta
+            </div>
+            <div class="warning">
+                💡 Dica: Modo incógnito não compartilha localStorage, então pensa em cada aba como um "dispositivo" diferente
+            </div>
+            
+            <div class="button-group">
+                <button onclick="testIncognitoLogin()">Executar Teste</button>
+            </div>
+            <div id="test2-result"></div>
+        </div>
+        
+        <!-- Teste 3 -->
+        <div class="test-section">
+            <h2>🔄 Teste 3: Logout Independente</h2>
+            <ul class="steps">
+                <li>Tenha 2 navegadores abertos (ambos logados com demo)</li>
+                <li>No <strong>Navegador 1</strong>, clique em Logout</li>
+                <li>Você será deslogado no Navegador 1</li>
+                <li>No <strong>Navegador 2</strong>, recarregue a página (F5)</li>
+            </ul>
+            
+            <div class="success">
+                ✅ Esperado: Navegador 2 deve continuar logado mesmo após logout no Navegador 1
+            </div>
+            <div class="warning">
+                ⚠️ Antes (v3.5.x): Logout em um dispositivo deslogava todos<br>
+                ✅ Agora (v3.6.0): Cada sessão é independente
+            </div>
+            
+            <div class="button-group">
+                <button onclick="testIndependentLogout()">Executar Teste</button>
+            </div>
+            <div id="test3-result"></div>
+        </div>
+        
+        <!-- Teste 4 -->
+        <div class="test-section">
+            <h2>💾 Teste 4: Verificar localStorage</h2>
+            <ul class="steps">
+                <li>Abra o navegador e faça login: <span class="code">demo</span> / <span class="code">demo2026</span></li>
+                <li>Abra o Developer Tools (F12)</li>
+                <li>Vá para a aba <span class="code">Application → Local Storage</span></li>
+                <li>Procure pelas chaves que começam com <span class="code">cei_</span></li>
+            </ul>
+            
+            <div class="warning">
+                📍 Chaves importantes a procurar:
+                <div style="margin-top: 8px; padding: 10px; background: white; border-radius: 4px;">
+                    <strong>cei_usuario_logado:</strong> Dados do usuário ativo<br>
+                    <strong>cei_instituicao_ativa:</strong> ID da instituição<br>
+                    <strong>cei_license:</strong> Informações da licença ativada
+                </div>
+            </div>
+            
+            <div class="button-group">
+                <button onclick="testLocalStorage()">Executar Teste / Ver Dados</button>
+            </div>
+            <div id="test4-result"></div>
+        </div>
+        
+        <!-- Resumo -->
+        <div class="test-section" style="background: #d4edda; border-left-color: #28a745;">
+            <h2 style="color: #155724;">✅ Resumo dos Testes</h2>
+            <p>Quando todos os 4 testes passarem:</p>
+            <ul style="margin-left: 20px; margin-top: 10px;">
+                <li>Login múltiplo está funcionando</li>
+                <li>Cada dispositivo tem sua sessão independente</li>
+                <li>Dados estão sendo armazenados corretamente</li>
+                <li>System está pronto para produção</li>
+            </ul>
+        </div>
+        
+        <!-- Stack Info -->
+        <div class="test-section" style="background: #e7f3ff; border-left-color: #b3d9ff;">
+            <h2 style="color: #004085;">📚 Stack Tecnológico</h2>
+            <p><strong>Frontend:</strong> React 18 + Material-UI</p>
+            <p><strong>Backend:</strong> Node.js + Express</p>
+            <p><strong>Armazenamento:</strong> localStorage (frontend) + Supabase (backend)</p>
+            <p><strong>Session Management:</strong> Map de Maps (múltiplos dispositivos)</p>
+        </div>
+    </div>
+    
+    <script>
+        function testDuplicateLogin() {
+            const result = document.getElementById('test1-result');
+            result.innerHTML = `
+                <div class="result">
+                    <strong>Instruções de Teste:</strong><br><br>
+                    1. Abra <strong>Navegador A</strong> (Chrome): http://localhost:3000<br>
+                    2. Login: <span class="code">demo</span> / <span class="code">demo2026</span><br>
+                    3. Abra <strong>Navegador B</strong> (Firefox): http://localhost:3000<br>
+                    4. Login com <strong>mesmas credenciais</strong><br><br>
+                    <strong>Resultado Esperado:</strong><br>
+                    ✅ Ambos os navegadores estão logados<br>
+                    ✅ Ambos acessam dashboard<br>
+                    ✅ Nenhuma mensagem de erro "Licença já ativa"
+                </div>
+            `;
+        }
+        
+        function testIncognitoLogin() {
+            const result = document.getElementById('test2-result');
+            result.innerHTML = `
+                <div class="result">
+                    <strong>Instruções de Teste:</strong><br><br>
+                    1. Aba Normal: Login com <span class="code">demo</span> / <span class="code">demo2026</span><br>
+                    2. Aba Incógnito: Login com <strong>mesmas credenciais</strong><br><br>
+                    <strong>Resultado Esperado:</strong><br>
+                    ✅ Modo incógnito aceita o login<br>
+                    ✅ localStorage da aba incógnito é separado<br>
+                    ✅ Ambas as abas funcionam simultaneamente
+                </div>
+            `;
+        }
+        
+        function testIndependentLogout() {
+            const result = document.getElementById('test3-result');
+            result.innerHTML = `
+                <div class="result">
+                    <strong>Instruções de Teste:</strong><br><br>
+                    1. Navegador A: Login com <span class="code">demo</span> / <span class="code">demo2026</span><br>
+                    2. Navegador B: Login com <strong>mesmas credenciais</strong><br>
+                    3. Navegador A: Clique em LOGOUT<br>
+                    4. Navegador B: Recarregue (F5)<br><br>
+                    <strong>Resultado Esperado:</strong><br>
+                    ✅ Navegador A está deslogado<br>
+                    ✅ Navegador B continua logado<br>
+                    ✅ Sessões são independentes
+                </div>
+            `;
+        }
+        
+        function testLocalStorage() {
+            const result = document.getElementById('test4-result');
+            const usuarioLogado = localStorage.getItem('cei_usuario_logado');
+            const instituicaoAtiva = localStorage.getItem('cei_instituicao_ativa');
+            
+            let html = '<div class="result">';
+            
+            if (usuarioLogado) {
+                try {
+                    const parsed = JSON.parse(usuarioLogado);
+                    html += `<strong>✅ Usuario Logado:</strong><br>
+                             Nome: ${parsed.nome}<br>
+                             Login: ${parsed.login}<br>
+                             Perfil: ${parsed.perfil}<br><br>`;
+                } catch (e) {
+                    html += `<strong>❌ Erro ao parsear dados</strong><br><br>`;
+                }
+            } else {
+                html += `<strong>⚠️ Nenhum usuário logado no localStorage</strong><br><br>`;
+            }
+            
+            if (instituicaoAtiva) {
+                html += `<strong>✅ Instituição Ativa:</strong> ${instituicaoAtiva}<br><br>`;
+            }
+            
+            html += `<strong>Dados completos do localStorage:</strong><br>
+                     <pre style="background: #f5f5f5; padding: 10px; border-radius: 4px; overflow-x: auto; font-size: 11px;">`;
+            
+            for (let key in localStorage) {
+                if (key.startsWith('cei_')) {
+                    const value = localStorage.getItem(key);
+                    html += `${key}: ${value.substring(0, 100)}${value.length > 100 ? '...' : ''}\n`;
+                }
+            }
+            
+            html += `</pre></div>`;
+            result.innerHTML = html;
+        }
+        
+        function showInstructions(testId) {
+            alert('Veja as instruções acima no campo "Executar Teste" ou abra o Developer Tools (F12) para mais detalhes.');
+        }
+    </script>
+</body>
+</html>

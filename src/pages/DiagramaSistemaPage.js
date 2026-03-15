@@ -223,19 +223,14 @@ export default function DiagramaSistemaPage() {
               CEI - Controle Escolar Inteligente
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              Versão 3.6.0 | Atualizado em: 14 de Fevereiro de 2026
+              Versão 3.7.0 | Atualizado em: 13 de Março de 2026
             </Typography>
-            <Stack direction="row" spacing={1} justifyContent="center" sx={{ mt: 1, flexWrap: 'wrap' }}>
-              <Chip 
-                label="☁️ Supabase Integrado" 
-                color="success" 
-                sx={{ fontWeight: 'bold' }}
-              />
-              <Chip 
-                label="🔫 Scanner Laser USB" 
-                color="primary" 
-                sx={{ fontWeight: 'bold' }}
-              />
+            <Stack direction="row" spacing={1} justifyContent="center" sx={{ mt: 1, flexWrap: 'wrap', gap: 1 }}>
+              <Chip label="☁️ Supabase Integrado" color="success" sx={{ fontWeight: 'bold' }} />
+              <Chip label="🔫 Scanner Laser USB" color="primary" sx={{ fontWeight: 'bold' }} />
+              <Chip label="🏷️ Categoria de Leitores" color="secondary" sx={{ fontWeight: 'bold' }} />
+              <Chip label="📊 Relatório de Leitores" color="info" sx={{ fontWeight: 'bold' }} />
+              <Chip label="🔍 Análise de Registros" color="warning" sx={{ fontWeight: 'bold' }} />
             </Stack>
             
             {/* Aviso de Autenticidade */}
@@ -273,7 +268,7 @@ export default function DiagramaSistemaPage() {
                 <Typography variant="body2" component="div" sx={{ lineHeight: 2 }}>
                   <strong>6.</strong> Módulos e Funcionalidades<br />
                   <strong>7.</strong> Informações Técnicas e Métricas<br />
-                  <strong>8.</strong> Inovações Tecnológicas v3.6.0<br />
+                  <strong>8.</strong> Inovações Tecnológicas v3.7.0<br />
                   <strong>9.</strong> Integração Supabase (Nuvem)<br />
                   <strong>10.</strong> Diagramas Visuais da Arquitetura<br />
                   <strong>11.</strong> Certificado de Autenticidade
@@ -326,11 +321,12 @@ export default function DiagramaSistemaPage() {
                       <li>Scanner Híbrido (Mobile + Laser USB)</li>
                       <li>Clube de Leitura e Gamificação</li>
                       <li>Controle de Empréstimos e Devoluções</li>
-                      <li>Cadastro de Alunos e Usuários</li>
+                      <li>Cadastro de Leitores com Categoria</li>
                       <li>Controle de Patrimônio</li>
-                      <li>Relatórios e Dashboard Interativos</li>
+                      <li>Relatórios Avançados (incl. Leitores por Categoria/Turma)</li>
                       <li>Sistema Financeiro Multi-tenant</li>
                       <li>Emissão de Notas Fiscais (ISS) - Super Admin</li>
+                      <li>Análise de Registros (Teste vs Comprador)</li>
                     </Typography>
                   </CardContent>
                 </Card>
@@ -793,7 +789,7 @@ export default function DiagramaSistemaPage() {
               <Grid item xs={12} md={4}>
                 <Card variant="outlined" sx={{ textAlign: 'center', p: 2 }}>
                   <Typography variant="h3" color="primary" fontWeight="bold">
-                    10,000+
+                    15,000+
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
                     Linhas de Código
@@ -803,7 +799,7 @@ export default function DiagramaSistemaPage() {
               <Grid item xs={12} md={4}>
                 <Card variant="outlined" sx={{ textAlign: 'center', p: 2 }}>
                   <Typography variant="h3" color="primary" fontWeight="bold">
-                    30+
+                    40+
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
                     Arquivos de Código
@@ -813,7 +809,7 @@ export default function DiagramaSistemaPage() {
               <Grid item xs={12} md={4}>
                 <Card variant="outlined" sx={{ textAlign: 'center', p: 2 }}>
                   <Typography variant="h3" color="primary" fontWeight="bold">
-                    18+
+                    22+
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
                     Páginas Funcionais
@@ -855,18 +851,18 @@ export default function DiagramaSistemaPage() {
 
           <Divider sx={{ my: 4 }} />
 
-          {/* 8. INOVAÇÕES TECNOLÓGICAS - VERSÃO 3.5.2 */}
+          {/* 8. INOVAÇÕES TECNOLÓGICAS - VERSÃO 3.7.0 */}
           <Box className="page-break avoid-break" sx={{ mb: 4 }}>
             <Typography variant="h4" fontWeight="bold" gutterBottom sx={{ color: 'success.main' }}>
-              ⭐ 8. INOVAÇÕES TECNOLÓGICAS (Versão 3.6.0)
+              ⭐ 8. INOVAÇÕES TECNOLÓGICAS (Versão 3.7.0)
             </Typography>
 
             <Alert severity="success" sx={{ mb: 3 }}>
               <Typography variant="subtitle1" fontWeight="bold">
-                🚀 Atualizações Recentes - Janeiro 2026
+                🚀 Atualizações Recentes — Março 2026
               </Typography>
               <Typography variant="body2">
-                O sistema foi expandido com banco de dados na nuvem (Supabase), sincronização automática, scanner híbrido (mobile + laser USB), gamificação e gestão fiscal avançada com acesso restrito por perfil.
+                Novas funcionalidades: campo Categoria nos leitores (Estudante/Professor/Funcionário/Comunidade), relatório de Leitores Cadastrados com agrupamento por categoria e turma, exclusão em lote de leitores, acesso rápido em 2 linhas centralizadas, correção dos empréstimos didáticos em lote, análise automática de registros (Teste vs Comprador) e exclusão em lote de instituições na gestão SuperAdmin.
               </Typography>
             </Alert>
 
@@ -985,6 +981,60 @@ export default function DiagramaSistemaPage() {
                   </CardContent>
                 </Card>
               </Grid>
+
+              {/* Novidades v3.7.0 - Março 2026 */}
+              <Grid item xs={12} md={6}>
+                <Card variant="outlined" sx={{ height: '100%', borderColor: 'secondary.main', borderWidth: 2 }}>
+                  <CardContent>
+                    <Typography variant="h6" fontWeight="bold" gutterBottom color="secondary.dark">
+                      🏷️ Categoria de Leitores + Relatório
+                    </Typography>
+                    <Typography variant="body2" paragraph>
+                      <strong>Novidade:</strong> Campo Categoria no cadastro de leitores (v3.7.0)
+                    </Typography>
+                    <Typography variant="body2" component="div">
+                      <strong>Funcionalidades:</strong>
+                      <ul style={{ marginTop: 8, paddingLeft: 20 }}>
+                        <li>Campo "Categoria" no formulário de leitor</li>
+                        <li>Opções: Estudante, Professor, Funcionário, Comunidade</li>
+                        <li>Novo relatório "Leitores Cadastrados"</li>
+                        <li>Relatório agrupado por Categoria</li>
+                        <li>Sub-agrupamento de Estudantes por Turma/Série</li>
+                        <li>Resumo com contagem por cada categoria</li>
+                        <li>Suporte a impressão, PDF e exportação CSV</li>
+                      </ul>
+                    </Typography>
+                    <Chip label="NOVO v3.7.0" color="secondary" size="small" sx={{ mt: 1 }} />
+                  </CardContent>
+                </Card>
+              </Grid>
+
+              {/* Gestão SuperAdmin Aprimorada */}
+              <Grid item xs={12} md={6}>
+                <Card variant="outlined" sx={{ height: '100%', borderColor: 'warning.main', borderWidth: 2 }}>
+                  <CardContent>
+                    <Typography variant="h6" fontWeight="bold" gutterBottom color="warning.dark">
+                      🔍 Análise de Registros (SuperAdmin)
+                    </Typography>
+                    <Typography variant="body2" paragraph>
+                      <strong>Objetivo:</strong> Distinguir testes do sistema de potenciais compradores
+                    </Typography>
+                    <Typography variant="body2" component="div">
+                      <strong>Lógica de classificação:</strong>
+                      <ul style={{ marginTop: 8, paddingLeft: 20 }}>
+                        <li>Palavras-chave de teste no nome/email/login</li>
+                        <li>CNPJ fictício (zeros, dígitos iguais)</li>
+                        <li>Status pendente há mais de 30 dias</li>
+                        <li>Telefone e localização válidos → comprador</li>
+                        <li>Pagamento confirmado → comprador</li>
+                        <li>Cadastro recente ≤7 dias → provável comprador</li>
+                        <li>Exclusão em lote por critério (pendentes/testes/todos)</li>
+                      </ul>
+                    </Typography>
+                    <Chip label="NOVO v3.7.0" color="warning" size="small" sx={{ mt: 1 }} />
+                  </CardContent>
+                </Card>
+              </Grid>
             </Grid>
 
             {/* Resumo Técnico das Inovações */}
@@ -995,22 +1045,22 @@ export default function DiagramaSistemaPage() {
               <Grid container spacing={2}>
                 <Grid item xs={12} sm={6} md={3}>
                   <Typography variant="body2" align="center">
-                    <strong>4</strong><br />Módulos Novos
+                    <strong>7</strong><br />Módulos Novos
                   </Typography>
                 </Grid>
                 <Grid item xs={12} sm={6} md={3}>
                   <Typography variant="body2" align="center">
-                    <strong>2</strong><br />APIs Integradas
+                    <strong>3</strong><br />APIs Integradas
                   </Typography>
                 </Grid>
                 <Grid item xs={12} sm={6} md={3}>
                   <Typography variant="body2" align="center">
-                    <strong>3</strong><br />Componentes React
+                    <strong>5</strong><br />Componentes React
                   </Typography>
                 </Grid>
                 <Grid item xs={12} sm={6} md={3}>
                   <Typography variant="body2" align="center">
-                    <strong>+30</strong><br />Novas Funcionalidades
+                    <strong>+50</strong><br />Novas Funcionalidades
                   </Typography>
                 </Grid>
               </Grid>

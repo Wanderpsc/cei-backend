@@ -1,0 +1,903 @@
+{
+  "timestamp": "2026-03-12T21:47:48.293Z",
+  "versao": "3.6.0",
+  "instituicaoId": 1,
+  "turmas": [
+    {
+      "id": "turma-1",
+      "nome": "EFR-FUND II ANOS FINAIS INT – 9º ANO – I-A",
+      "serie": "9º",
+      "instituicaoId": 1,
+      "dataCriacao": "2026-03-12T21:47:48.533Z",
+      "status": "ativo"
+    },
+    {
+      "id": "turma-2",
+      "nome": "EFR-FUND II ANOS FINAIS INT – 9º ANO – I-B",
+      "serie": "9º",
+      "instituicaoId": 1,
+      "dataCriacao": "2026-03-12T21:47:48.534Z",
+      "status": "ativo"
+    },
+    {
+      "id": "turma-3",
+      "nome": "EMTPADM-ENF-EMP – 1ª SÉRIE – INTEGRAL – I-B",
+      "serie": "1ª",
+      "instituicaoId": 1,
+      "dataCriacao": "2026-03-12T21:47:48.534Z",
+      "status": "ativo"
+    }
+  ],
+  "alunos": [
+    {
+      "id": "aluno-turma-1-0",
+      "nome": "ALICIA BISPO ALVES",
+      "cpf": "08439365330",
+      "turmaId": "turma-1",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.533Z"
+    },
+    {
+      "id": "aluno-turma-1-1",
+      "nome": "ANA ROSA GOMES LOUSEIRO",
+      "cpf": "08917066313",
+      "turmaId": "turma-1",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.533Z"
+    },
+    {
+      "id": "aluno-turma-1-2",
+      "nome": "ANA VITORIA CORREIA SANTOS",
+      "cpf": "08382897380",
+      "turmaId": "turma-1",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.533Z"
+    },
+    {
+      "id": "aluno-turma-1-3",
+      "nome": "ANNA ALVES OLIVEIRA",
+      "cpf": "09443530376",
+      "turmaId": "turma-1",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.533Z"
+    },
+    {
+      "id": "aluno-turma-1-4",
+      "nome": "ANNA VITORIA MOREIRA DA SILVA",
+      "cpf": "58151061863",
+      "turmaId": "turma-1",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.533Z"
+    },
+    {
+      "id": "aluno-turma-1-5",
+      "nome": "ANNE CHRISTINE CARVALHO MARQUES CABRAL",
+      "cpf": "06619235336",
+      "turmaId": "turma-1",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.533Z"
+    },
+    {
+      "id": "aluno-turma-1-6",
+      "nome": "ARTHUR CALEB SOARES RODRIGUES",
+      "cpf": "09060419375",
+      "turmaId": "turma-1",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.533Z"
+    },
+    {
+      "id": "aluno-turma-1-7",
+      "nome": "BRUNO VITOR NUNES MORAIS",
+      "cpf": "10227142365",
+      "turmaId": "turma-1",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.533Z"
+    },
+    {
+      "id": "aluno-turma-1-8",
+      "nome": "CAMILA VITORIA RIBEIRO CAMELO",
+      "cpf": "08313755318",
+      "turmaId": "turma-1",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.533Z"
+    },
+    {
+      "id": "aluno-turma-1-9",
+      "nome": "DAVY OLIVEIRA GUIMARAES BISPO",
+      "cpf": "07886828305",
+      "turmaId": "turma-1",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.533Z"
+    },
+    {
+      "id": "aluno-turma-1-10",
+      "nome": "GABRIEL DUARTE MOREIRA",
+      "cpf": "12086522304",
+      "turmaId": "turma-1",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.533Z"
+    },
+    {
+      "id": "aluno-turma-1-11",
+      "nome": "HUGO RAFAEL FERNANDES CORREIA",
+      "cpf": "11181336333",
+      "turmaId": "turma-1",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.533Z"
+    },
+    {
+      "id": "aluno-turma-1-12",
+      "nome": "IZABELLA CARVALHO JACOBINA",
+      "cpf": "09070399369",
+      "turmaId": "turma-1",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.533Z"
+    },
+    {
+      "id": "aluno-turma-1-13",
+      "nome": "KEVILLYN FERNANDES DA SILVA",
+      "cpf": "11195691335",
+      "turmaId": "turma-1",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.534Z"
+    },
+    {
+      "id": "aluno-turma-1-14",
+      "nome": "LORENA BEZERRA E GAMA",
+      "cpf": "07391697346",
+      "turmaId": "turma-1",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.534Z"
+    },
+    {
+      "id": "aluno-turma-1-15",
+      "nome": "LORRANY RODRIGUES DA SILVA",
+      "cpf": "12266828398",
+      "turmaId": "turma-1",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.534Z"
+    },
+    {
+      "id": "aluno-turma-1-16",
+      "nome": "LUIZ OCTAVIO SOUZA AMORIM",
+      "cpf": "06733624346",
+      "turmaId": "turma-1",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.534Z"
+    },
+    {
+      "id": "aluno-turma-1-17",
+      "nome": "MARIA CLARA SOARES DE CARVALHO",
+      "cpf": "09722730347",
+      "turmaId": "turma-1",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.534Z"
+    },
+    {
+      "id": "aluno-turma-1-18",
+      "nome": "MARYANE LUSTOSA RODRIGUES",
+      "cpf": "06956290340",
+      "turmaId": "turma-1",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.534Z"
+    },
+    {
+      "id": "aluno-turma-1-19",
+      "nome": "MATHEUS FELIPE ARAUJO DE FREITAS",
+      "cpf": "11052838367",
+      "turmaId": "turma-1",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.534Z"
+    },
+    {
+      "id": "aluno-turma-1-20",
+      "nome": "MELODY GONCALVES DE SOUSA",
+      "cpf": "12496584385",
+      "turmaId": "turma-1",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.534Z"
+    },
+    {
+      "id": "aluno-turma-1-21",
+      "nome": "NAUANNY BARBOSA JACOBINA",
+      "cpf": "08316316358",
+      "turmaId": "turma-1",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.534Z"
+    },
+    {
+      "id": "aluno-turma-1-22",
+      "nome": "PAMELA FERREIRA DE SOUZA",
+      "cpf": "09407761380",
+      "turmaId": "turma-1",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.534Z"
+    },
+    {
+      "id": "aluno-turma-1-23",
+      "nome": "REBEKKA GUIMARAES SILVA",
+      "cpf": "12253179329",
+      "turmaId": "turma-1",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.534Z"
+    },
+    {
+      "id": "aluno-turma-1-24",
+      "nome": "ROMULO MOREIRA DUARTE",
+      "cpf": "09496822177",
+      "turmaId": "turma-1",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.534Z"
+    },
+    {
+      "id": "aluno-turma-1-25",
+      "nome": "SOPHIA SAYUME SILVA",
+      "cpf": "11204579393",
+      "turmaId": "turma-1",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.534Z"
+    },
+    {
+      "id": "aluno-turma-1-26",
+      "nome": "THAYLA KAWANY OLIVEIRA DOS SANTOS",
+      "cpf": "09066904399",
+      "turmaId": "turma-1",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.534Z"
+    },
+    {
+      "id": "aluno-turma-1-27",
+      "nome": "THAYLLA SILVIA QUINTINO GUERRA",
+      "cpf": "08109552374",
+      "turmaId": "turma-1",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.534Z"
+    },
+    {
+      "id": "aluno-turma-1-28",
+      "nome": "THELMA QUINTINO DE OLIVEIRA",
+      "cpf": "08450822300",
+      "turmaId": "turma-1",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.534Z"
+    },
+    {
+      "id": "aluno-turma-1-29",
+      "nome": "YASMIN SOUSA SANTANA",
+      "cpf": "08346749392",
+      "turmaId": "turma-1",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.534Z"
+    },
+    {
+      "id": "aluno-turma-2-0",
+      "nome": "ANA CAROLINA RODRIGUES BISPO",
+      "cpf": "11199895318",
+      "turmaId": "turma-2",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.534Z"
+    },
+    {
+      "id": "aluno-turma-2-1",
+      "nome": "ANA LAURA BATISTA RODRIGUES",
+      "cpf": "10010411356",
+      "turmaId": "turma-2",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.534Z"
+    },
+    {
+      "id": "aluno-turma-2-2",
+      "nome": "ANNAH MELL NOGUEIRA JACOBINA",
+      "cpf": "11453023356",
+      "turmaId": "turma-2",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.534Z"
+    },
+    {
+      "id": "aluno-turma-2-3",
+      "nome": "CECILIA OLIVEIRA DE SOUSA",
+      "cpf": "08467736356",
+      "turmaId": "turma-2",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.534Z"
+    },
+    {
+      "id": "aluno-turma-2-4",
+      "nome": "CECILIA SOUZA SANTANA",
+      "cpf": "10364662301",
+      "turmaId": "turma-2",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.534Z"
+    },
+    {
+      "id": "aluno-turma-2-5",
+      "nome": "DIANDRA GOMES DE SENA",
+      "cpf": "08351931365",
+      "turmaId": "turma-2",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.534Z"
+    },
+    {
+      "id": "aluno-turma-2-6",
+      "nome": "DOMINYK RIBEIRO DAMASCENO",
+      "cpf": "09396106399",
+      "turmaId": "turma-2",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.534Z"
+    },
+    {
+      "id": "aluno-turma-2-7",
+      "nome": "ELIANE GOMES JACOBINA",
+      "cpf": "08319152348",
+      "turmaId": "turma-2",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.534Z"
+    },
+    {
+      "id": "aluno-turma-2-8",
+      "nome": "ELLY MARYA LUSTOSA BRITO",
+      "cpf": "09086393330",
+      "turmaId": "turma-2",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.534Z"
+    },
+    {
+      "id": "aluno-turma-2-9",
+      "nome": "ESTHER SOUSA SILVA",
+      "cpf": "08809102320",
+      "turmaId": "turma-2",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.534Z"
+    },
+    {
+      "id": "aluno-turma-2-10",
+      "nome": "EVELLYN ALVES PEIXOTO",
+      "cpf": "10164767363",
+      "turmaId": "turma-2",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.534Z"
+    },
+    {
+      "id": "aluno-turma-2-11",
+      "nome": "EVILLY DAGUIA MIRANDA SILVA",
+      "cpf": "70792871111",
+      "turmaId": "turma-2",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.534Z"
+    },
+    {
+      "id": "aluno-turma-2-12",
+      "nome": "JAMILLY DIAS DOS SANTOS",
+      "cpf": "09454840380",
+      "turmaId": "turma-2",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.534Z"
+    },
+    {
+      "id": "aluno-turma-2-13",
+      "nome": "JORGE PEREIRA VOGADO",
+      "cpf": "09291590398",
+      "turmaId": "turma-2",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.534Z"
+    },
+    {
+      "id": "aluno-turma-2-14",
+      "nome": "JULYANA GOMES JACOBINA",
+      "cpf": "08330367347",
+      "turmaId": "turma-2",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.534Z"
+    },
+    {
+      "id": "aluno-turma-2-15",
+      "nome": "KAROLLAINE VOGADO RODRIGUES",
+      "cpf": "07822203398",
+      "turmaId": "turma-2",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.534Z"
+    },
+    {
+      "id": "aluno-turma-2-16",
+      "nome": "LUAN DA SILVA JACOBINA",
+      "cpf": "07772865309",
+      "turmaId": "turma-2",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.534Z"
+    },
+    {
+      "id": "aluno-turma-2-17",
+      "nome": "LUCAS ANDRE RODRIGUES GOMES",
+      "cpf": "08332804302",
+      "turmaId": "turma-2",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.534Z"
+    },
+    {
+      "id": "aluno-turma-2-18",
+      "nome": "LUIZ EDUARDO RIBEIRO DA SILVA",
+      "cpf": "08311557365",
+      "turmaId": "turma-2",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.534Z"
+    },
+    {
+      "id": "aluno-turma-2-19",
+      "nome": "LUIZ ISIDORIO BATISTA LUSTOSA",
+      "cpf": "09475153306",
+      "turmaId": "turma-2",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.534Z"
+    },
+    {
+      "id": "aluno-turma-2-20",
+      "nome": "LUIZA VIEIRA JACOBINA ANTUNES",
+      "cpf": "08318969308",
+      "turmaId": "turma-2",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.534Z"
+    },
+    {
+      "id": "aluno-turma-2-21",
+      "nome": "MARCOS HENRIQUE DE OLIVEIRA FIGUEREDO",
+      "cpf": "09468847306",
+      "turmaId": "turma-2",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.534Z"
+    },
+    {
+      "id": "aluno-turma-2-22",
+      "nome": "MARIANGELA BATISTA MIRANDA",
+      "cpf": "09893739322",
+      "turmaId": "turma-2",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.534Z"
+    },
+    {
+      "id": "aluno-turma-2-23",
+      "nome": "MICHELLY PORTAO DE SOUSA",
+      "cpf": "08014330374",
+      "turmaId": "turma-2",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.534Z"
+    },
+    {
+      "id": "aluno-turma-2-24",
+      "nome": "ROGERIO CARVALHO JACOBINA",
+      "cpf": "10611214377",
+      "turmaId": "turma-2",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.534Z"
+    },
+    {
+      "id": "aluno-turma-2-25",
+      "nome": "SARA YSYS PEREIRA SILVA",
+      "cpf": "07388927344",
+      "turmaId": "turma-2",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.534Z"
+    },
+    {
+      "id": "aluno-turma-2-26",
+      "nome": "SARAH JHENNE PEREIRA DA ROCHA",
+      "cpf": "12678811352",
+      "turmaId": "turma-2",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.534Z"
+    },
+    {
+      "id": "aluno-turma-2-27",
+      "nome": "VICTOR AUGUSTO RIBEIRO DA SILVA",
+      "cpf": "08344899370",
+      "turmaId": "turma-2",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.534Z"
+    },
+    {
+      "id": "aluno-turma-2-28",
+      "nome": "VICTOR GABRIEL DIAS DUARTE SOUSA",
+      "cpf": "10994692366",
+      "turmaId": "turma-2",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.534Z"
+    },
+    {
+      "id": "aluno-turma-2-29",
+      "nome": "YASMIN SOUSA GUALBERTO",
+      "cpf": "57237535846",
+      "turmaId": "turma-2",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.534Z"
+    },
+    {
+      "id": "aluno-turma-3-0",
+      "nome": "ALICE ANDRADE LOBATO",
+      "cpf": "09409437350",
+      "turmaId": "turma-3",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.534Z"
+    },
+    {
+      "id": "aluno-turma-3-1",
+      "nome": "ANA MEL GAMA CORREIA",
+      "cpf": "08664233381",
+      "turmaId": "turma-3",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.534Z"
+    },
+    {
+      "id": "aluno-turma-3-2",
+      "nome": "ANA SARA CARVALHO RODRIGUES",
+      "cpf": "08228518307",
+      "turmaId": "turma-3",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.534Z"
+    },
+    {
+      "id": "aluno-turma-3-3",
+      "nome": "ANHAYA LIANNA DANTAS GUERRA",
+      "cpf": "19568532781",
+      "turmaId": "turma-3",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.534Z"
+    },
+    {
+      "id": "aluno-turma-3-4",
+      "nome": "BEATRIZ BONFIM SILVA",
+      "cpf": "11755935323",
+      "turmaId": "turma-3",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.534Z"
+    },
+    {
+      "id": "aluno-turma-3-5",
+      "nome": "BRUNO LIMA RODRIGUES",
+      "cpf": "10423440357",
+      "turmaId": "turma-3",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.534Z"
+    },
+    {
+      "id": "aluno-turma-3-6",
+      "nome": "CARLOS DANIEL ALVES DOURADO",
+      "cpf": "08319198330",
+      "turmaId": "turma-3",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.534Z"
+    },
+    {
+      "id": "aluno-turma-3-7",
+      "nome": "CLARA NATALIE ALVES DO NASCIMENTO",
+      "cpf": "09473479336",
+      "turmaId": "turma-3",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.534Z"
+    },
+    {
+      "id": "aluno-turma-3-8",
+      "nome": "EMILLY FERNANDES DA SILVA",
+      "cpf": "11067885323",
+      "turmaId": "turma-3",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.534Z"
+    },
+    {
+      "id": "aluno-turma-3-9",
+      "nome": "ENZO GABRIEL ARRAIS RIBEIRO",
+      "cpf": "09617856328",
+      "turmaId": "turma-3",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.534Z"
+    },
+    {
+      "id": "aluno-turma-3-10",
+      "nome": "ERI FERNANDES BASTOS",
+      "cpf": "08359789312",
+      "turmaId": "turma-3",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.534Z"
+    },
+    {
+      "id": "aluno-turma-3-11",
+      "nome": "FELIPE ALENCAR JACOBINA BRITO",
+      "cpf": "09699986352",
+      "turmaId": "turma-3",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.534Z"
+    },
+    {
+      "id": "aluno-turma-3-12",
+      "nome": "GABRIEL RODRIGUES DOS SANTOS",
+      "cpf": "12261880367",
+      "turmaId": "turma-3",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.534Z"
+    },
+    {
+      "id": "aluno-turma-3-13",
+      "nome": "GENIVALDO RUAN JACOBINA DOS REIS",
+      "cpf": "62237077380",
+      "turmaId": "turma-3",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.534Z"
+    },
+    {
+      "id": "aluno-turma-3-14",
+      "nome": "GUILHERME RIBEIRO ARAUJO SILVA",
+      "cpf": "08434399393",
+      "turmaId": "turma-3",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.534Z"
+    },
+    {
+      "id": "aluno-turma-3-15",
+      "nome": "GUSTAVO VIANA DE CARVALHO",
+      "cpf": "11183665300",
+      "turmaId": "turma-3",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.534Z"
+    },
+    {
+      "id": "aluno-turma-3-16",
+      "nome": "JOAO GABRIEL DE SOUSA LEMOS",
+      "cpf": "11222723328",
+      "turmaId": "turma-3",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.534Z"
+    },
+    {
+      "id": "aluno-turma-3-17",
+      "nome": "LUIS FELIPE ALVES DOS SANTOS",
+      "cpf": "08329561399",
+      "turmaId": "turma-3",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.534Z"
+    },
+    {
+      "id": "aluno-turma-3-18",
+      "nome": "LUIS OTAVIO MORAIS DE SOUSA",
+      "cpf": "09600722331",
+      "turmaId": "turma-3",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.534Z"
+    },
+    {
+      "id": "aluno-turma-3-19",
+      "nome": "LUIZ EDUARDO ARAUJO PEREIRA DA GAMA",
+      "cpf": "11204309337",
+      "turmaId": "turma-3",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.534Z"
+    },
+    {
+      "id": "aluno-turma-3-20",
+      "nome": "LUIZ OTAVIO DE OLIVEIRA FIGUEREDO",
+      "cpf": "10378649302",
+      "turmaId": "turma-3",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.534Z"
+    },
+    {
+      "id": "aluno-turma-3-21",
+      "nome": "MARIA EDUARDA BAIAO TANAJURA",
+      "cpf": "11694745350",
+      "turmaId": "turma-3",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.534Z"
+    },
+    {
+      "id": "aluno-turma-3-22",
+      "nome": "MARIA EDUARDA FERREIRA SALES",
+      "cpf": "10294768378",
+      "turmaId": "turma-3",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.534Z"
+    },
+    {
+      "id": "aluno-turma-3-23",
+      "nome": "MICHELEY BARBOSA LOBO RODRIGUES",
+      "cpf": "11742129340",
+      "turmaId": "turma-3",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.534Z"
+    },
+    {
+      "id": "aluno-turma-3-24",
+      "nome": "PATRICIA BRITO DA SILVA",
+      "cpf": "07482970304",
+      "turmaId": "turma-3",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.534Z"
+    },
+    {
+      "id": "aluno-turma-3-25",
+      "nome": "SERGIO OTVIO VOGADO DE CARVALHO",
+      "cpf": "07726690313",
+      "turmaId": "turma-3",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.534Z"
+    },
+    {
+      "id": "aluno-turma-3-26",
+      "nome": "VICTOR LUCAS FREIRE RODRIGUES",
+      "cpf": "71766304109",
+      "turmaId": "turma-3",
+      "instituicaoId": 1,
+      "tipo": "leitor",
+      "status": "ativo",
+      "dataCadastro": "2026-03-12T21:47:48.534Z"
+    }
+  ]
+}

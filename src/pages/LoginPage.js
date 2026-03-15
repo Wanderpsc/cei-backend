@@ -105,6 +105,7 @@ const CREDENCIAIS_DEMO = {
 };
 
 const DEMO_DEVICE_ID_KEY = 'cei_demo_device_id';
+const DEMO_CONTACT_KEY = 'cei_demo_contact';
 
 const formatarIdentificadorDemo = (deviceId) => {
   if (!deviceId) return 'Será gerado ao clicar em Usar demo';
@@ -131,6 +132,15 @@ export default function LoginPage() {
   const [etapaRecuperacao, setEtapaRecuperacao] = useState(1); // 1: email, 2: nova senha
   const [dialogTourVideo, setDialogTourVideo] = useState(false);
   const [videoSelecionado, setVideoSelecionado] = useState(DEMO_VIDEOS[0]);
+  const [dialogCadastroDemo, setDialogCadastroDemo] = useState(false);
+  const [erroCadastroDemo, setErroCadastroDemo] = useState('');
+  const [cadastroDemo, setCadastroDemo] = useState({
+    nomeResponsavel: '',
+    telefoneCelular: '',
+    email: '',
+    cidade: '',
+    estado: ''
+  });
   const { login: fazerLogin, recuperarSenha, usuarioLogado } = useData();
   const navigate = useNavigate();
   const location = useLocation();
@@ -157,6 +167,66 @@ export default function LoginPage() {
 
     return () => clearInterval(intervalo);
   }, [dialogTourVideo]);
+
+  useEffect(() => {
+    try {
+      const contatoSalvo = localStorage.getItem(DEMO_CONTACT_KEY);
+      if (!contatoSalvo) return;
+
+      const dados = JSON.parse(contatoSalvo);
+      setCadastroDemo((prev) => ({
+        ...prev,
+        nomeResponsavel: String(dados?.nomeResponsavel || ''),
+        telefoneCelular: String(dados?.telefoneCelular || ''),
+        email: String(dados?.email || ''),
+        cidade: String(dados?.cidade || ''),
+        estado: String(dados?.estado || '').toUpperCase().slice(0, 2)
+      }));
+    } catch (error) {
+      console.warn('Não foi possível carregar cadastro demo salvo:', error);
+    }
+  }, []);
+
+  const aplicarMascaraTelefone = (valor) => {
+    const numeros = String(valor || '').replace(/\D/g, '').slice(0, 11);
+    if (numeros.length <= 10) {
+      return numeros
+        .replace(/^(\d{2})(\d)/, '($1) $2')
+        .replace(/(\d{4})(\d)/, '$1-$2');
+    }
+    return numeros
+      .replace(/^(\d{2})(\d)/, '($1) $2')
+      .replace(/(\d{5})(\d)/, '$1-$2');
+  };
+
+  const validarEmail = (email) => {
+    const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return re.test(String(email || '').trim());
+  };
+
+  const validarCadastroDemoObrigatorio = (dados) => {
+    const nomeResponsavel = String(dados?.nomeResponsavel || '').trim();
+    const telefoneCelular = String(dados?.telefoneCelular || '').trim();
+    const email = String(dados?.email || '').trim();
+    const cidade = String(dados?.cidade || '').trim();
+    const estado = String(dados?.estado || '').trim().toUpperCase();
+
+    if (!nomeResponsavel) return { ok: false, mensagem: 'Informe o nome do responsável pelo cadastro.' };
+    if (!telefoneCelular) return { ok: false, mensagem: 'Informe o telefone celular para contato.' };
+
+    const telefoneNumeros = telefoneCelular.replace(/\D/g, '');
+    if (telefoneNumeros.length < 10) {
+      return { ok: false, mensagem: 'Telefone celular inválido. Use DDD + número.' };
+    }
+
+    if (!email) return { ok: false, mensagem: 'Informe o e-mail para contato.' };
+    if (!validarEmail(email)) return { ok: false, mensagem: 'E-mail inválido.' };
+    if (!cidade) return { ok: false, mensagem: 'Informe a cidade.' };
+    if (!estado) return { ok: false, mensagem: 'Informe o estado (UF).' };
+    if (estado.length < 2) return { ok: false, mensagem: 'Estado inválido. Use a UF com 2 letras.' };
+
+    return { ok: true };
+  };
 
   const processarLogin = (usuario, senhaUsuario) => {
     if (fazerLogin(usuario, senhaUsuario)) {
@@ -192,6 +262,19 @@ export default function LoginPage() {
     e.preventDefault();
     setErro('');
 
+    const loginNormalizado = String(login || '').trim().toLowerCase();
+    const senhaNormalizada = String(senha || '').trim();
+    const ehLoginDemo = loginNormalizado === CREDENCIAIS_DEMO.login && senhaNormalizada === CREDENCIAIS_DEMO.senha;
+
+    if (ehLoginDemo) {
+      const validacao = validarCadastroDemoObrigatorio(cadastroDemo);
+      if (!validacao.ok) {
+        setErroCadastroDemo(validacao.mensagem);
+        setDialogCadastroDemo(true);
+        return;
+      }
+    }
+
     processarLogin(login, senha);
   };
 
@@ -199,6 +282,46 @@ export default function LoginPage() {
     setLogin(CREDENCIAIS_DEMO.login);
     setSenha(CREDENCIAIS_DEMO.senha);
     setErro('');
+
+    const validacao = validarCadastroDemoObrigatorio(cadastroDemo);
+    if (!validacao.ok) {
+      setErroCadastroDemo(validacao.mensagem);
+      setDialogCadastroDemo(true);
+      return;
+    }
+
+    processarLogin(CREDENCIAIS_DEMO.login, CREDENCIAIS_DEMO.senha);
+  };
+
+  const handleConfirmarCadastroDemo = () => {
+    const dadosNormalizados = {
+      nomeResponsavel: String(cadastroDemo.nomeResponsavel || '').trim(),
+      telefoneCelular: aplicarMascaraTelefone(cadastroDemo.telefoneCelular),
+      email: String(cadastroDemo.email || '').trim().toLowerCase(),
+      cidade: String(cadastroDemo.cidade || '').trim(),
+      estado: String(cadastroDemo.estado || '').trim().toUpperCase().slice(0, 2)
+    };
+
+    const validacao = validarCadastroDemoObrigatorio(dadosNormalizados);
+    if (!validacao.ok) {
+      setErroCadastroDemo(validacao.mensagem);
+      return;
+    }
+
+    try {
+      localStorage.setItem(DEMO_CONTACT_KEY, JSON.stringify({
+        ...dadosNormalizados,
+        capturadoEm: new Date().toISOString()
+      }));
+    } catch (error) {
+      console.warn('Não foi possível salvar os dados do cadastro demo:', error);
+    }
+
+    setCadastroDemo(dadosNormalizados);
+    setErroCadastroDemo('');
+    setDialogCadastroDemo(false);
+    setLogin(CREDENCIAIS_DEMO.login);
+    setSenha(CREDENCIAIS_DEMO.senha);
     processarLogin(CREDENCIAIS_DEMO.login, CREDENCIAIS_DEMO.senha);
   };
 
@@ -618,6 +741,95 @@ export default function LoginPage() {
         </Paper>
 
         {/* Dialog de Recuperação de Senha */}
+        <Dialog
+          open={dialogCadastroDemo}
+          onClose={() => setDialogCadastroDemo(false)}
+          maxWidth="sm"
+          fullWidth
+          PaperProps={{
+            sx: {
+              borderRadius: 3,
+              p: 1
+            }
+          }}
+        >
+          <DialogTitle sx={{ pb: 1 }}>
+            Cadastro Obrigatório para Acesso Demo
+          </DialogTitle>
+          <DialogContent>
+            <Alert severity="info" sx={{ mb: 2 }}>
+              Para usar a demonstração, informe seus dados de contato. Eles aparecerão no painel do Super Administrador para retorno comercial.
+            </Alert>
+
+            {erroCadastroDemo && (
+              <Alert severity="error" sx={{ mb: 2 }} onClose={() => setErroCadastroDemo('')}>
+                {erroCadastroDemo}
+              </Alert>
+            )}
+
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
+              <TextField
+                label="Nome do Responsável pelo Cadastro *"
+                fullWidth
+                required
+                value={cadastroDemo.nomeResponsavel}
+                onChange={(e) => setCadastroDemo((prev) => ({ ...prev, nomeResponsavel: e.target.value }))}
+                placeholder="Ex: Maria Silva"
+              />
+              <TextField
+                label="Telefone Celular *"
+                fullWidth
+                required
+                value={cadastroDemo.telefoneCelular}
+                onChange={(e) => setCadastroDemo((prev) => ({
+                  ...prev,
+                  telefoneCelular: aplicarMascaraTelefone(e.target.value)
+                }))}
+                placeholder="(99) 9 9999-9999"
+                inputProps={{ maxLength: 16 }}
+              />
+              <TextField
+                label="E-mail *"
+                type="email"
+                fullWidth
+                required
+                value={cadastroDemo.email}
+                onChange={(e) => setCadastroDemo((prev) => ({ ...prev, email: e.target.value }))}
+                placeholder="contato@escola.com.br"
+              />
+              <Box sx={{ display: 'flex', gap: 2 }}>
+                <TextField
+                  label="Cidade *"
+                  fullWidth
+                  required
+                  value={cadastroDemo.cidade}
+                  onChange={(e) => setCadastroDemo((prev) => ({ ...prev, cidade: e.target.value }))}
+                />
+                <TextField
+                  label="Estado (UF) *"
+                  fullWidth
+                  required
+                  value={cadastroDemo.estado}
+                  onChange={(e) => setCadastroDemo((prev) => ({
+                    ...prev,
+                    estado: String(e.target.value || '').toUpperCase().slice(0, 2)
+                  }))}
+                  placeholder="PI"
+                  inputProps={{ maxLength: 2 }}
+                />
+              </Box>
+            </Box>
+          </DialogContent>
+          <DialogActions sx={{ px: 3, pb: 2 }}>
+            <Button onClick={() => setDialogCadastroDemo(false)}>
+              Cancelar
+            </Button>
+            <Button variant="contained" onClick={handleConfirmarCadastroDemo}>
+              Salvar e Entrar no Demo
+            </Button>
+          </DialogActions>
+        </Dialog>
+
         <Dialog 
           open={dialogRecuperacao} 
           onClose={handleFecharRecuperacao}

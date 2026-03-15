@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import Layout from '../components/Layout';
 import {
   Box,
@@ -36,6 +36,106 @@ import {
 import { useData } from '../context/DataContext';
 import { imprimirEscopo } from '../utils/printUtils';
 
+const normalizarTexto = (valor) => {
+  return String(valor || '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ');
+};
+
+const isAlunoRelatorio = (cliente) => {
+  const tipoNormalizado = normalizarTexto(cliente?.tipo);
+  const categoriaNormalizada = normalizarTexto(cliente?.categoria);
+
+  const possuiVinculoAcademico =
+    String(cliente?.turmaId || '').trim().length > 0
+    || String(cliente?.serieId || '').trim().length > 0
+    || normalizarTexto(cliente?.turma).length > 0
+    || normalizarTexto(cliente?.nomeTurma).length > 0
+    || normalizarTexto(cliente?.serie).length > 0
+    || normalizarTexto(cliente?.nomeSerie).length > 0;
+
+  const perfisNaoAluno = [
+    'professor',
+    'funcionario',
+    'funcionario administrativo',
+    'bibliotecario',
+    'coordenador',
+    'diretor',
+    'gestor',
+    'servidor',
+    'admin',
+    'administrador',
+    'comunidade'
+  ];
+
+  if (tipoNormalizado === 'aluno' || categoriaNormalizada === 'estudante') {
+    return true;
+  }
+
+  if (tipoNormalizado === 'leitor') {
+    return possuiVinculoAcademico;
+  }
+
+  if (possuiVinculoAcademico) {
+    return !perfisNaoAluno.includes(tipoNormalizado) && !perfisNaoAluno.includes(categoriaNormalizada);
+  }
+
+  return false;
+};
+
+const obterChaveTurmaEmprestimo = (emprestimo) => {
+  const turmaId = String(emprestimo?.turmaId || '').trim();
+  if (turmaId) {
+    return turmaId;
+  }
+
+  const turmaNome = String(emprestimo?.turmaNome || '').trim();
+  if (!turmaNome) {
+    return '';
+  }
+
+  return `legacy:${turmaNome}`;
+};
+
+const obterInfoTurmaAluno = (aluno, turmasAcademicasMap) => {
+  const turmaId = String(aluno?.turmaId || '');
+
+  if (turmaId && turmasAcademicasMap.has(turmaId)) {
+    const turma = turmasAcademicasMap.get(turmaId);
+    const nomeTurma = String(turma?.nomeTurma || '').trim() || 'N/A';
+    const nomeSerie = String(turma?.nomeSerie || '').trim() || 'N/A';
+
+    return {
+      key: turmaId,
+      nomeTurma,
+      nomeSerie,
+      label: nomeSerie !== 'N/A' ? `${nomeSerie} - ${nomeTurma}` : nomeTurma
+    };
+  }
+
+  const nomeTurmaLegacy = String(aluno?.turma || '').trim();
+  if (!nomeTurmaLegacy) {
+    return {
+      key: '',
+      nomeTurma: '',
+      nomeSerie: '',
+      label: ''
+    };
+  }
+
+  const nomeSerieLegacy = String(aluno?.serie || '').trim();
+
+  return {
+    key: `legacy:${nomeTurmaLegacy}`,
+    nomeTurma: nomeTurmaLegacy,
+    nomeSerie: nomeSerieLegacy || 'N/A',
+    label: nomeSerieLegacy ? `${nomeSerieLegacy} - ${nomeTurmaLegacy}` : nomeTurmaLegacy
+  };
+};
+
 function RelatoriosPage() {
   const { 
     livros, 
@@ -43,6 +143,7 @@ function RelatoriosPage() {
     clientes, 
     emprestimos, 
     instituicoes,
+    turmasAcademicas,
     usuarioLogado,
     instituicaoAtiva,
     atualizarInstituicao
@@ -70,6 +171,38 @@ function RelatoriosPage() {
       });
     }
   }, [instituicaoAtiva, instituicoes]);
+
+  const isEmprestimoAtivo = (status) => {
+    const statusNormalizado = String(status || '').toLowerCase();
+    return statusNormalizado === 'ativo' || statusNormalizado === 'emprestado';
+  };
+
+  const livrosDidaticosAtivos = useMemo(() => {
+    return livros.filter((livro) => livro.tipo === 'Didático' && !livro.baixa);
+  }, [livros]);
+
+  const livroDidaticoMap = useMemo(() => {
+    const map = new Map();
+    livrosDidaticosAtivos.forEach((livro) => map.set(String(livro.id), livro));
+    return map;
+  }, [livrosDidaticosAtivos]);
+
+  const turmasAcademicasMap = useMemo(() => {
+    const map = new Map();
+    turmasAcademicas.forEach((turma) => {
+      map.set(String(turma.id), turma);
+    });
+    return map;
+  }, [turmasAcademicas]);
+
+  const alunosComTurma = useMemo(() => {
+    return clientes
+      .filter((cliente) => isAlunoRelatorio(cliente))
+      .filter((cliente) => {
+        const infoTurma = obterInfoTurmaAluno(cliente, turmasAcademicasMap);
+        return infoTurma.key.length > 0;
+      });
+  }, [clientes, turmasAcademicasMap]);
 
   // Funções de geração de relatórios
   const getRelatorioLivrosCadastrados = () => {
@@ -216,7 +349,7 @@ function RelatoriosPage() {
         posicao: 0, // Será preenchido depois da ordenação
         nome: c.nome,
         tipo: c.tipo || 'Leitor',
-        turma: c.turma || 'N/A',
+        turma: obterInfoTurmaAluno(c, turmasAcademicasMap).label || 'N/A',
         totalLivrosEmprestados: totalEmprestimos,
         livrosAtivos: emprestimosAtivos,
         livrosDevolvidos: emprestimosDevolvidos,
@@ -237,6 +370,145 @@ function RelatoriosPage() {
         mediaEmprestimosPorLeitor: rankingPorEmprestimos.length > 0 
           ? (rankingPorEmprestimos.reduce((sum, r) => sum + r.totalLivrosEmprestados, 0) / rankingPorEmprestimos.length).toFixed(1)
           : 0
+      }
+    };
+  };
+
+  const getRelatorioDidaticosPorTurma = () => {
+    const gruposTurma = new Map();
+
+    alunosComTurma.forEach((aluno) => {
+      const infoTurma = obterInfoTurmaAluno(aluno, turmasAcademicasMap);
+      if (!infoTurma.key) return;
+
+      if (!gruposTurma.has(infoTurma.key)) {
+        gruposTurma.set(infoTurma.key, {
+          key: infoTurma.key,
+          serie: infoTurma.nomeSerie || 'N/A',
+          turma: infoTurma.nomeTurma || 'N/A',
+          alunos: []
+        });
+      }
+
+      gruposTurma.get(infoTurma.key).alunos.push(aluno);
+    });
+
+    const dados = Array.from(gruposTurma.values())
+      .sort((a, b) => {
+        const serieCompare = String(a.serie).localeCompare(String(b.serie), 'pt-BR');
+        if (serieCompare !== 0) return serieCompare;
+        return String(a.turma).localeCompare(String(b.turma), 'pt-BR');
+      })
+      .map((grupo) => {
+      const alunosDaTurma = grupo.alunos;
+      const alunoIds = new Set(alunosDaTurma.map((aluno) => String(aluno.id)));
+
+      const emprestimosDidaticosAtivos = emprestimos.filter((emp) => {
+        const clienteId = emp.clienteId ?? emp.leitorId;
+        const livroId = String(emp.livroId || '');
+        const chaveTurmaEmprestimo = obterChaveTurmaEmprestimo(emp);
+        const pertencePelaTurmaEmprestimo = chaveTurmaEmprestimo && chaveTurmaEmprestimo === String(grupo.key || '');
+        return (
+          (
+            (clienteId !== undefined && clienteId !== null && alunoIds.has(String(clienteId)))
+            || pertencePelaTurmaEmprestimo
+          ) &&
+          isEmprestimoAtivo(emp.status) &&
+          livroDidaticoMap.has(livroId)
+        );
+      });
+
+      const titulosDistintosEntregues = new Set(
+        emprestimosDidaticosAtivos.map((emp) => String(emp.livroId || ''))
+      ).size;
+
+      const totalAlunos = alunosDaTurma.length;
+      const totalTitulosDidaticos = livrosDidaticosAtivos.length;
+      const coberturaEsperada = totalAlunos * totalTitulosDidaticos;
+      const coberturaAtual = emprestimosDidaticosAtivos.length;
+      const pendencias = Math.max(coberturaEsperada - coberturaAtual, 0);
+      const percentualCobertura = coberturaEsperada > 0
+        ? `${((coberturaAtual / coberturaEsperada) * 100).toFixed(1)}%`
+        : '0%';
+
+      return {
+        serie: grupo.serie,
+        turma: grupo.turma,
+        alunos: totalAlunos,
+        titulosDidaticos: totalTitulosDidaticos,
+        titulosEntregues: titulosDistintosEntregues,
+        emprestimosAtivos: coberturaAtual,
+        pendencias,
+        cobertura: percentualCobertura
+      };
+    });
+
+    return {
+      titulo: 'Didáticos por Turma',
+      colunas: ['Série', 'Turma', 'Alunos', 'Títulos Didáticos', 'Títulos Entregues', 'Empréstimos Ativos', 'Pendências', 'Cobertura'],
+      dados,
+      resumo: {
+        turmas: dados.length,
+        alunos: dados.reduce((sum, item) => sum + item.alunos, 0),
+        emprestimosAtivos: dados.reduce((sum, item) => sum + item.emprestimosAtivos, 0),
+        pendencias: dados.reduce((sum, item) => sum + item.pendencias, 0)
+      }
+    };
+  };
+
+  const getRelatorioPendenciasDidaticasPorAluno = () => {
+    const didaticos = livrosDidaticosAtivos;
+
+    const dados = alunosComTurma
+      .map((aluno) => {
+        const emprestimosAtivosAluno = emprestimos.filter((emp) => {
+          const clienteId = emp.clienteId ?? emp.leitorId;
+          return (
+            clienteId !== undefined &&
+            clienteId !== null &&
+            String(clienteId) === String(aluno.id) &&
+            isEmprestimoAtivo(emp.status) &&
+            livroDidaticoMap.has(String(emp.livroId || ''))
+          );
+        });
+
+        const livrosAtivosIds = new Set(
+          emprestimosAtivosAluno.map((emp) => String(emp.livroId || ''))
+        );
+
+        const titulosPendentes = didaticos
+          .filter((livro) => !livrosAtivosIds.has(String(livro.id)))
+          .map((livro) => livro.titulo);
+
+        const infoTurma = obterInfoTurmaAluno(aluno, turmasAcademicasMap);
+
+        return {
+          nome: aluno.nome,
+          serie: infoTurma.nomeSerie || 'N/A',
+          turma: infoTurma.nomeTurma || 'N/A',
+          matricula: aluno.matricula || 'N/A',
+          totalDidaticos: didaticos.length,
+          comEmprestimo: livrosAtivosIds.size,
+          pendentes: titulosPendentes.length,
+          titulosPendentes: titulosPendentes.join(', ') || 'Nenhum'
+        };
+      })
+      .filter((item) => item.pendentes > 0)
+      .sort((a, b) => {
+        const serieCompare = String(a.serie).localeCompare(String(b.serie), 'pt-BR');
+        if (serieCompare !== 0) return serieCompare;
+        const turmaCompare = String(a.turma).localeCompare(String(b.turma), 'pt-BR');
+        if (turmaCompare !== 0) return turmaCompare;
+        return String(a.nome).localeCompare(String(b.nome), 'pt-BR');
+      });
+
+    return {
+      titulo: 'Pendências Didáticas por Aluno',
+      colunas: ['Aluno', 'Série', 'Turma', 'Matrícula', 'Total Didáticos', 'Com Empréstimo', 'Pendências', 'Títulos Pendentes'],
+      dados,
+      resumo: {
+        alunosComPendencia: dados.length,
+        pendenciasTotais: dados.reduce((sum, item) => sum + item.pendentes, 0)
       }
     };
   };
@@ -370,13 +642,119 @@ function RelatoriosPage() {
     };
   };
 
+  const getRelatorioLeitoresCadastrados = () => {
+    const categoriasOrdem = ['Estudante', 'Professor', 'Funcionário', 'Comunidade'];
+
+    const todosOrdenados = [...clientes].sort((a, b) => {
+      const catA = categoriasOrdem.indexOf(a.categoria || '');
+      const catB = categoriasOrdem.indexOf(b.categoria || '');
+      const iA = catA >= 0 ? catA : 99;
+      const iB = catB >= 0 ? catB : 99;
+      if (iA !== iB) return iA - iB;
+      const serieComp = String(a.serie || '').localeCompare(String(b.serie || ''), 'pt-BR');
+      if (serieComp !== 0) return serieComp;
+      const infoA = obterInfoTurmaAluno(a, turmasAcademicasMap);
+      const infoB = obterInfoTurmaAluno(b, turmasAcademicasMap);
+      const turmaComp = String(infoA.label || '').localeCompare(String(infoB.label || ''), 'pt-BR');
+      if (turmaComp !== 0) return turmaComp;
+      return String(a.nome || '').localeCompare(String(b.nome || ''), 'pt-BR');
+    });
+
+    // Build section map
+    const secaoMap = new Map();
+    todosOrdenados.forEach((c) => {
+      const cat = c.categoria || 'Sem categoria';
+      if (!secaoMap.has(cat)) secaoMap.set(cat, []);
+      secaoMap.get(cat).push(c);
+    });
+
+    const categoriasPresentes = [
+      ...categoriasOrdem.filter(c => secaoMap.has(c)),
+      ...Array.from(secaoMap.keys()).filter(c => !categoriasOrdem.includes(c))
+    ];
+
+    const secoes = categoriasPresentes.map((cat) => {
+      const leitores = secaoMap.get(cat) || [];
+
+      if (cat === 'Estudante') {
+        const turmaMap = new Map();
+        leitores.forEach((l) => {
+          const info = obterInfoTurmaAluno(l, turmasAcademicasMap);
+          const turmaKey = info.label || 'Sem turma';
+          if (!turmaMap.has(turmaKey)) turmaMap.set(turmaKey, []);
+          turmaMap.get(turmaKey).push(l);
+        });
+
+        const subsecoes = Array.from(turmaMap.entries())
+          .sort(([a], [b]) => a.localeCompare(b, 'pt-BR'))
+          .map(([turmaLabel, alunos]) => ({
+            titulo: turmaLabel,
+            colunas: ['Nº', 'Nome', 'Matrícula', 'Série', 'Turma'],
+            dados: alunos.map((a, i) => {
+              const info = obterInfoTurmaAluno(a, turmasAcademicasMap);
+              return {
+                num: i + 1,
+                nome: a.nome,
+                matricula: a.matricula || '-',
+                serie: info.nomeSerie !== 'N/A' ? info.nomeSerie : (a.serie || '-'),
+                turma: info.nomeTurma !== 'N/A' ? info.nomeTurma : (a.turma || '-')
+              };
+            })
+          }));
+
+        return { titulo: `Estudantes (${leitores.length})`, subsecoes };
+      }
+
+      return {
+        titulo: `${cat} (${leitores.length})`,
+        colunas: ['Nº', 'Nome', 'Tipo', 'Telefone'],
+        dados: leitores.map((l, i) => ({
+          num: i + 1,
+          nome: l.nome,
+          tipo: l.tipo || '-',
+          telefone: l.telefone || '-'
+        }))
+      };
+    });
+
+    const dados = todosOrdenados.map((c, i) => {
+      const info = obterInfoTurmaAluno(c, turmasAcademicasMap);
+      return {
+        num: i + 1,
+        nome: c.nome,
+        categoria: c.categoria || '-',
+        tipo: c.tipo || '-',
+        matricula: c.matricula || '-',
+        serieTurma: info.label || '-'
+      };
+    });
+
+    return {
+      titulo: 'Leitores Cadastrados',
+      colunas: ['Nº', 'Nome', 'Categoria', 'Tipo', 'Matrícula', 'Série/Turma'],
+      dados,
+      secoes,
+      resumo: {
+        total: clientes.length,
+        ativos: clientes.filter(c => c.ativo).length,
+        estudantes: clientes.filter(c => c.categoria === 'Estudante').length,
+        professores: clientes.filter(c => c.categoria === 'Professor').length,
+        funcionarios: clientes.filter(c => c.categoria === 'Funcionário').length,
+        comunidade: clientes.filter(c => c.categoria === 'Comunidade').length
+      }
+    };
+  };
+
   const tiposRelatorio = [
     { value: 'livros-cadastrados', label: 'Livros Cadastrados' },
     { value: 'livros-emprestados', label: 'Livros Emprestados' },
+    { value: 'leitores-cadastrados', label: 'Leitores Cadastrados' },
     { value: 'pessoas-cadastradas', label: 'Pessoas Cadastradas' },
     { value: 'pessoas-com-emprestimos', label: 'Pessoas com Livros Emprestados' },
     { value: 'devolucoes-pendentes', label: 'Devoluções Pendentes' },
     { value: 'ranking-leitores', label: 'Ranking de Leitores' },
+    { value: 'didaticos-por-turma', label: 'Didáticos por Turma' },
+    { value: 'pendencias-didaticas-aluno', label: 'Pendências Didáticas por Aluno' },
     { value: 'patrimonio', label: 'Patrimônio' },
     { value: 'emprestimos-historico', label: 'Histórico de Empréstimos' },
   ];
@@ -393,10 +771,13 @@ function RelatoriosPage() {
     switch (tipoRelatorio) {
       case 'livros-cadastrados': return getRelatorioLivrosCadastrados();
       case 'livros-emprestados': return getRelatorioLivrosEmprestados();
+      case 'leitores-cadastrados': return getRelatorioLeitoresCadastrados();
       case 'pessoas-cadastradas': return getRelatorioPessoasCadastradas();
       case 'pessoas-com-emprestimos': return getRelatorioPessoasComEmprestimos();
       case 'devolucoes-pendentes': return getRelatorioDevolucoesPendentes();
       case 'ranking-leitores': return getRelatorioRankingLeitores();
+      case 'didaticos-por-turma': return getRelatorioDidaticosPorTurma();
+      case 'pendencias-didaticas-aluno': return getRelatorioPendenciasDidaticasPorAluno();
       case 'patrimonio': return getRelatorioPatrimonio();
       case 'emprestimos-historico': return getRelatorioEmprestimosHistorico();
       case 'escolas-cadastradas': return getRelatorioEscolasCadastradas();
@@ -586,38 +967,105 @@ function RelatoriosPage() {
             )}
 
             {/* Tabela de Dados */}
-            <TableContainer component={Paper} variant="outlined">
-              <Table size="small">
-                <TableHead>
-                  <TableRow sx={{ bgcolor: 'primary.main' }}>
-                    {relatorio.colunas.map((col) => (
-                      <TableCell key={col} sx={{ color: 'white', fontWeight: 'bold' }}>
-                        {col}
-                      </TableCell>
-                    ))}
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {relatorio.dados.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={relatorio.colunas.length} align="center">
-                        <Typography color="textSecondary">
-                          Nenhum dado disponível
+            {relatorio.secoes ? (
+              relatorio.secoes.map((secao, sIdx) => (
+                <Box key={sIdx} sx={{ mb: 3 }}>
+                  <Typography
+                    variant="subtitle1"
+                    fontWeight="bold"
+                    sx={{ bgcolor: 'primary.main', color: 'white', p: 1, mb: 1, borderRadius: 1 }}
+                  >
+                    {secao.titulo}
+                  </Typography>
+                  {secao.subsecoes ? (
+                    secao.subsecoes.map((sub, ssIdx) => (
+                      <Box key={ssIdx} sx={{ mb: 2 }}>
+                        <Typography
+                          variant="subtitle2"
+                          sx={{ bgcolor: 'grey.200', p: 0.5, px: 1, mb: 0.5, borderRadius: 0.5 }}
+                        >
+                          {sub.titulo} — {sub.dados.length} aluno(s)
                         </Typography>
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    relatorio.dados.map((row, index) => (
-                      <TableRow key={index} hover>
-                        {Object.values(row).map((value, i) => (
-                          <TableCell key={i}>{value}</TableCell>
-                        ))}
-                      </TableRow>
+                        <TableContainer component={Paper} variant="outlined">
+                          <Table size="small">
+                            <TableHead>
+                              <TableRow sx={{ bgcolor: 'grey.100' }}>
+                                {sub.colunas.map((col) => (
+                                  <TableCell key={col} sx={{ fontWeight: 'bold' }}>{col}</TableCell>
+                                ))}
+                              </TableRow>
+                            </TableHead>
+                            <TableBody>
+                              {sub.dados.map((row, i) => (
+                                <TableRow key={i} hover>
+                                  {Object.values(row).map((val, vi) => (
+                                    <TableCell key={vi}>{val}</TableCell>
+                                  ))}
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </TableContainer>
+                      </Box>
                     ))
+                  ) : (
+                    <TableContainer component={Paper} variant="outlined">
+                      <Table size="small">
+                        <TableHead>
+                          <TableRow sx={{ bgcolor: 'grey.100' }}>
+                            {secao.colunas.map((col) => (
+                              <TableCell key={col} sx={{ fontWeight: 'bold' }}>{col}</TableCell>
+                            ))}
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {secao.dados.map((row, i) => (
+                            <TableRow key={i} hover>
+                              {Object.values(row).map((val, vi) => (
+                                <TableCell key={vi}>{val}</TableCell>
+                              ))}
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
                   )}
-                </TableBody>
-              </Table>
-            </TableContainer>
+                </Box>
+              ))
+            ) : (
+              <TableContainer component={Paper} variant="outlined">
+                <Table size="small">
+                  <TableHead>
+                    <TableRow sx={{ bgcolor: 'primary.main' }}>
+                      {relatorio.colunas.map((col) => (
+                        <TableCell key={col} sx={{ color: 'white', fontWeight: 'bold' }}>
+                          {col}
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {relatorio.dados.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={relatorio.colunas.length} align="center">
+                          <Typography color="textSecondary">
+                            Nenhum dado disponível
+                          </Typography>
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      relatorio.dados.map((row, index) => (
+                        <TableRow key={index} hover>
+                          {Object.values(row).map((value, i) => (
+                            <TableCell key={i}>{value}</TableCell>
+                          ))}
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            )}
 
             <Box sx={{ mt: 3, textAlign: 'right' }}>
               <Typography variant="caption" color="textSecondary">

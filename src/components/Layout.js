@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate, useLocation, Outlet } from 'react-router-dom';
 import { useData } from '../context/DataContext';
 import AvisoLicenca from './AvisoLicenca';
@@ -46,6 +46,7 @@ import ReceiptIcon from '@mui/icons-material/Receipt';
 import InventoryIcon from '@mui/icons-material/Inventory';
 import AssignmentIcon from '@mui/icons-material/Assignment';
 import HistoryEduIcon from '@mui/icons-material/HistoryEdu';
+import FactCheckIcon from '@mui/icons-material/FactCheck';
 
 const drawerWidth = 240;
 const mobileDrawerWidth = 200;
@@ -83,7 +84,9 @@ export default function Layout({ children }) {
       { text: 'Relatórios de Livros', icon: <LibraryBooksIcon />, path: '/relatorios-livros' },
       { text: 'Patrimônio', icon: <BusinessIcon />, path: '/patrimonio' },
       { text: 'Leitores', icon: <PeopleIcon />, path: '/clientes' },
-      { text: 'Empréstimos', icon: <SwapHorizIcon />, path: '/emprestimos' },
+      { text: 'Séries e Turmas', icon: <SchoolIcon />, path: '/series-turmas' },
+      { text: 'Empréstimos Individuais', icon: <SwapHorizIcon />, path: '/emprestimos' },
+      { text: 'Empréstimos Didáticos em Lote', icon: <FactCheckIcon />, path: '/emprestimos-didaticos-lote' },
       { text: 'Devoluções', icon: <AssignmentReturnIcon />, path: '/devolucoes' },
       { text: 'Clube de Leitura', icon: <EmojiEventsIcon />, path: '/clube-leitura' },
       { text: 'Busca', icon: <SearchIcon />, path: '/busca' },
@@ -123,7 +126,9 @@ export default function Layout({ children }) {
     { label: 'Livros', icon: <MenuBookIcon />, path: '/livros', color: '#1976d2' },
     { label: 'Patrimônio', icon: <InventoryIcon />, path: '/patrimonio', color: '#388e3c' },
     { label: 'Leitores', icon: <PeopleIcon />, path: '/clientes', color: '#f57c00' },
-    { label: 'Empréstimos', icon: <AssignmentIcon />, path: '/emprestimos', color: '#7b1fa2' },
+    { label: 'Séries/Turmas', icon: <SchoolIcon />, path: '/series-turmas', color: '#8d6e63' },
+    { label: 'Emp. Individual', icon: <AssignmentIcon />, path: '/emprestimos', color: '#7b1fa2', shortcut: 'E' },
+    { label: 'Emp. em Lote', icon: <FactCheckIcon />, path: '/emprestimos-didaticos-lote', color: '#3949ab', shortcut: 'L' },
     { label: 'Devoluções', icon: <AssignmentReturnIcon />, path: '/devolucoes', color: '#d32f2f' },
     { label: 'Clube Leitura', icon: <EmojiEventsIcon />, path: '/clube-leitura', color: '#ffa726' },
     { label: 'Relatórios', icon: <AssessmentIcon />, path: '/relatorios', color: '#5c6bc0' },
@@ -146,6 +151,39 @@ export default function Layout({ children }) {
   const quickAccessItems = usuarioLogado?.perfil === 'SuperAdmin'
     ? quickAccessCardsAdmin
     : quickAccessCards;
+
+  useEffect(() => {
+    if (!Array.isArray(quickAccessItems) || quickAccessItems.length === 0) {
+      return undefined;
+    }
+
+    const atalhos = quickAccessItems.reduce((acc, item) => {
+      const atalho = String(item.shortcut || '').trim().toLowerCase();
+      if (atalho) {
+        acc[atalho] = item.path;
+      }
+      return acc;
+    }, {});
+
+    if (Object.keys(atalhos).length === 0) {
+      return undefined;
+    }
+
+    const handleShortcut = (event) => {
+      if (!event.altKey) return;
+
+      const key = String(event.key || '').toLowerCase();
+      const path = atalhos[key];
+      if (!path) return;
+
+      event.preventDefault();
+      navigate(path);
+      setMobileOpen(false);
+    };
+
+    window.addEventListener('keydown', handleShortcut);
+    return () => window.removeEventListener('keydown', handleShortcut);
+  }, [quickAccessItems, navigate]);
 
   const drawer = (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -365,21 +403,14 @@ export default function Layout({ children }) {
             py: { xs: 0.9, sm: 1.1 },
             px: { xs: 1, sm: 2 },
             zIndex: 1100,
-            overflowX: 'auto',
-            '&::-webkit-scrollbar': {
-              height: 5,
-            },
-            '&::-webkit-scrollbar-thumb': {
-              backgroundColor: 'rgba(102, 126, 234, 0.3)',
-              borderRadius: 3,
-            },
           }}
         >
-          <Grid container spacing={{ xs: 0.7, sm: 1 }} wrap="nowrap">
+          <Grid container spacing={{ xs: 0.7, sm: 1 }} justifyContent="center">
             {quickAccessItems.map((card, index) => (
               <Grid item key={index}>
                 <Card
                   sx={{
+                    position: 'relative',
                     width: { xs: 120, sm: 138 },
                     height: { xs: 46, sm: 52 },
                     boxShadow: location.pathname === card.path ? 4 : 1,
@@ -397,6 +428,7 @@ export default function Layout({ children }) {
                       navigate(card.path);
                       setMobileOpen(false);
                     }}
+                    title={card.shortcut ? `Atalho: Alt+${card.shortcut}` : undefined}
                     sx={{ 
                       px: { xs: 0.8, sm: 1 }, 
                       py: 0,
@@ -433,6 +465,26 @@ export default function Layout({ children }) {
                     >
                       {card.label}
                     </Typography>
+                    {card.shortcut && (
+                      <Box
+                        sx={{
+                          position: 'absolute',
+                          top: 3,
+                          right: 4,
+                          borderRadius: 1,
+                          px: 0.5,
+                          py: 0.1,
+                          fontSize: '0.58rem',
+                          fontWeight: 700,
+                          lineHeight: 1,
+                          color: card.color,
+                          bgcolor: `${card.color}22`,
+                          border: `1px solid ${card.color}55`
+                        }}
+                      >
+                        Alt+{card.shortcut}
+                      </Box>
+                    )}
                   </CardActionArea>
                 </Card>
               </Grid>
@@ -490,9 +542,9 @@ export default function Layout({ children }) {
         }}
       >
         <Toolbar />
-        {/* Espaço adicional quando há barra de atalhos */}
+        {/* Espaço adicional quando há barra de atalhos - altura para 2 linhas */}
         {quickAccessItems.length > 0 && (
-          <Box sx={{ height: { xs: 56, sm: 62 } }} />
+          <Box sx={{ height: { xs: 118, sm: 130 } }} />
         )}
         <Box sx={{ flexGrow: 1 }}>
           {/* Aviso de Licença */}

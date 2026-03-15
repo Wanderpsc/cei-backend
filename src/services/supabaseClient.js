@@ -8,14 +8,27 @@
 
 import { createClient } from '@supabase/supabase-js';
 
+const readRuntimeConfig = () => {
+  if (typeof window === 'undefined') {
+    return { url: '', anonKey: '' };
+  }
+
+  return {
+    url: window.localStorage.getItem('cei_supabase_url') || '',
+    anonKey: window.localStorage.getItem('cei_supabase_anon_key') || ''
+  };
+};
+
 // Configuração do Supabase
-const supabaseUrl = process.env.REACT_APP_SUPABASE_URL || '';
-const supabaseAnonKey = process.env.REACT_APP_SUPABASE_ANON_KEY || '';
+const runtimeConfig = readRuntimeConfig();
+const supabaseUrl = runtimeConfig.url || process.env.REACT_APP_SUPABASE_URL || '';
+const supabaseAnonKey = runtimeConfig.anonKey || process.env.REACT_APP_SUPABASE_ANON_KEY || '';
 
 // Verificar se as credenciais estão configuradas
 const isSupabaseConfigured = supabaseUrl && supabaseAnonKey && 
   supabaseUrl !== 'https://seu-projeto.supabase.co' &&
-  supabaseAnonKey !== 'sua-chave-publica-aqui';
+  supabaseAnonKey !== 'sua-chave-publica-aqui' &&
+  supabaseUrl.includes('supabase.co');
 
 // Criar cliente Supabase (se configurado)
 export const supabase = isSupabaseConfigured 
@@ -40,7 +53,8 @@ export const isCloudEnabled = isSupabaseConfigured;
 
 // Log de status
 if (isSupabaseConfigured) {
-  console.log('☁️ Supabase conectado:', supabaseUrl);
+  const source = runtimeConfig.url ? 'runtime/localStorage' : 'env';
+  console.log(`☁️ Supabase configurado (${source}):`, supabaseUrl);
 } else {
   console.log('💾 Modo LocalStorage (Supabase não configurado)');
 }
