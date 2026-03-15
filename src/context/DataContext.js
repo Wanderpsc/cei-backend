@@ -258,6 +258,7 @@ export const DataProvider = ({ children }) => {
   const emprestimosRef = useRef([]);
 
   const dataTypesSync = ['instituicoes', 'usuarios', 'livros', 'clientes', 'patrimonio', 'emprestimos'];
+  const localAcademicDataTypes = ['seriesAcademicas', 'turmasAcademicas'];
 
   const normalizeInstitutionId = (value) => {
     if (value === null || value === undefined || value === '') {
@@ -420,6 +421,101 @@ export const DataProvider = ({ children }) => {
       .filter((id) => id !== null && id !== 0);
 
     return userInstitutionIds.length === 1 ? userInstitutionIds[0] : null;
+  };
+
+  const normalizeAcademicText = (value) => String(value || '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+
+  const extractAcademicSeriesTurma = (value) => {
+    const normalized = String(value || '')
+      .replace(/[–—]/g, ' - ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    if (!normalized) {
+      return { serie: '', turma: '' };
+    }
+
+    const parts = normalized
+      .split(' - ')
+      .map((part) => part.trim())
+      .filter(Boolean);
+
+    if (parts.length <= 1) {
+      return { serie: normalized, turma: '' };
+    }
+
+    return {
+      serie: parts.slice(0, -1).join(' - ').trim(),
+      turma: parts[parts.length - 1].trim()
+    };
+  };
+
+  const getReaderAcademicFields = (reader) => {
+    const serieDireta = String(reader?.serie || reader?.nomeSerie || '').trim();
+    const turmaDireta = String(reader?.turma || reader?.nomeTurma || '').trim();
+
+    if (serieDireta || turmaDireta) {
+      return {
+        serie: serieDireta,
+        turma: turmaDireta
+      };
+    }
+
+    const combinedField = String(
+      reader?.anoSerieTurma
+      || reader?.serieTurma
+      || reader?.turmaSerie
+      || reader?.serie_turma
+      || ''
+    ).trim();
+
+    return extractAcademicSeriesTurma(combinedField);
+  };
+
+  const isReaderAcademicStudent = (reader) => {
+    const tipoNormalizado = normalizeAcademicText(reader?.tipo);
+    const categoriaNormalizada = normalizeAcademicText(reader?.categoria);
+    const academicFields = getReaderAcademicFields(reader);
+
+    const hasAcademicLink = Boolean(
+      String(reader?.turmaId || '').trim()
+      || String(reader?.serieId || '').trim()
+      || String(academicFields.serie || '').trim()
+      || String(academicFields.turma || '').trim()
+    );
+
+    const nonStudentProfiles = new Set([
+      'professor',
+      'funcionario',
+      'funcionario administrativo',
+      'bibliotecario',
+      'bibliotecario(a)',
+      'coordenador',
+      'diretor',
+      'gestor',
+      'servidor',
+      'admin',
+      'administrador',
+      'comunidade'
+    ]);
+
+    if (tipoNormalizado === 'aluno' || categoriaNormalizada === 'estudante') {
+      return true;
+    }
+
+    if (tipoNormalizado === 'leitor') {
+      return hasAcademicLink;
+    }
+
+    if (hasAcademicLink) {
+      return !nonStudentProfiles.has(tipoNormalizado) && !nonStudentProfiles.has(categoriaNormalizada);
+    }
+
+    return false;
   };
 
   const normalizeAllInstitutionData = (data = {}, fallbackInstitutionId = null) => {
@@ -1180,14 +1276,15 @@ export const DataProvider = ({ children }) => {
     let hasReaderUpdates = false;
 
     const updatedReaders = readers.map((reader) => {
-      const isStudent = String(reader?.tipo || '').trim().toLowerCase() === 'aluno';
+      const isStudent = isReaderAcademicStudent(reader);
       if (!isStudent) {
         return reader;
       }
 
       const institutionId = resolveInstitutionId(getItemInstitutionRaw(reader), fallbackInstitutionId);
-      const seriesName = String(reader?.serie || '').trim();
-      const turmaName = String(reader?.turma || '').trim();
+      const academicFields = getReaderAcademicFields(reader);
+      const seriesName = String(academicFields.serie || '').trim();
+      const turmaName = String(academicFields.turma || '').trim();
       const schoolYear = String(reader?.anoLetivo || defaultSchoolYear).trim();
 
       let seriesRecord = null;
@@ -1269,12 +1366,50 @@ export const DataProvider = ({ children }) => {
 
       const nextSeriesId = seriesRecord ? String(seriesRecord.id) : '';
       const nextTurmaId = turmaRecord ? String(turmaRecord.id) : '';
+      const nextSeriesName = seriesRecord?.nomeSerie || seriesName;
+      const nextTurmaName = turmaRecord?.nomeTurma || turmaName;
+      const currentSeriesName = String(reader?.serie || '').trim();
+      const currentSeriesLabel = String(reader?.nomeSerie || '').trim();
+      const currentTurmaName = String(reader?.turma || '').trim();
+      const currentTurmaLabel = String(reader?.nomeTurma || '').trim();
+      const currentCombinedAcademic = String(
+        reader?.anoSerieTurma
+        || reader?.serieTurma
+        || reader?.turmaSerie
+        || reader?.serie_turma
+        || ''
+      ).trim();
+      const nextCombinedAcademic = nextTurmaName ? `${nextSeriesName} - ${nextTurmaName}` : nextSeriesName;
+      const nextTipo = normalizeAcademicText(reader?.tipo) === 'aluno'
+        ? String(reader?.tipo || '').trim() || 'aluno'
+        : 'aluno';
+      const nextCategoria = String(reader?.categoria || '').trim() || 'estudante';
 
       if (nextSeriesId && currentSeriesId !== nextSeriesId) {
         readerChanged = true;
       }
 
       if (nextTurmaId && currentTurmaId !== nextTurmaId) {
+        readerChanged = true;
+      }
+
+      if (nextSeriesName && (currentSeriesName !== nextSeriesName || currentSeriesLabel !== nextSeriesName)) {
+        readerChanged = true;
+      }
+
+      if (nextTurmaName && (currentTurmaName !== nextTurmaName || currentTurmaLabel !== nextTurmaName)) {
+        readerChanged = true;
+      }
+
+      if (nextCombinedAcademic && !currentCombinedAcademic) {
+        readerChanged = true;
+      }
+
+      if (String(reader?.tipo || '').trim() !== nextTipo) {
+        readerChanged = true;
+      }
+
+      if (String(reader?.categoria || '').trim() !== nextCategoria) {
         readerChanged = true;
       }
 
@@ -1286,10 +1421,15 @@ export const DataProvider = ({ children }) => {
 
       return {
         ...reader,
-        serie: seriesRecord?.nomeSerie || seriesName,
+        tipo: nextTipo,
+        categoria: nextCategoria,
+        serie: nextSeriesName,
+        nomeSerie: nextSeriesName,
         serieId: nextSeriesId,
-        turma: turmaRecord?.nomeTurma || turmaName,
-        turmaId: nextTurmaId
+        turma: nextTurmaName,
+        nomeTurma: nextTurmaName,
+        turmaId: nextTurmaId,
+        anoSerieTurma: currentCombinedAcademic || nextCombinedAcademic
       };
     });
 
@@ -1553,6 +1693,8 @@ export const DataProvider = ({ children }) => {
     usuarios: usuariosRef.current.filter((item) => belongsToInstitution(item, institutionId, { includeLegacyWithoutInstitution: true }) && item.perfil !== 'SuperAdmin'),
     livros: livrosRef.current.filter((item) => belongsToInstitution(item, institutionId, { includeLegacyWithoutInstitution: true })),
     clientes: clientesRef.current.filter((item) => belongsToInstitution(item, institutionId, { includeLegacyWithoutInstitution: true })),
+    seriesAcademicas: seriesAcademicasRef.current.filter((item) => belongsToInstitution(item, institutionId, { includeLegacyWithoutInstitution: true })),
+    turmasAcademicas: turmasAcademicasRef.current.filter((item) => belongsToInstitution(item, institutionId, { includeLegacyWithoutInstitution: true })),
     patrimonio: patrimonioRef.current.filter((item) => belongsToInstitution(item, institutionId, { includeLegacyWithoutInstitution: true })),
     emprestimos: emprestimosRef.current.filter((item) => belongsToInstitution(item, institutionId, { includeLegacyWithoutInstitution: true }))
   });
@@ -1569,7 +1711,7 @@ export const DataProvider = ({ children }) => {
       if (rawLocal) {
         const parsedLocal = JSON.parse(rawLocal);
         if (parsedLocal && typeof parsedLocal === 'object') {
-          dataTypesSync.forEach((dataType) => {
+          [...dataTypesSync, ...localAcademicDataTypes].forEach((dataType) => {
             const lsAll = parsedLocal[dataType];
             if (!Array.isArray(lsAll)) return;
             const lsForInstitution = lsAll.filter(
@@ -1590,6 +1732,28 @@ export const DataProvider = ({ children }) => {
       mergedData[dataType] = mergeByIdPreferLatest(localList, cloudList);
     });
 
+    const mergedAcademicData = rebuildAcademicStructuresFromReaders(
+      {
+        instituicoes: mergedData.instituicoes || localSlices.instituicoes || [],
+        clientes: mergedData.clientes || [],
+        leitores: mergedData.clientes || [],
+        seriesAcademicas: localSlices.seriesAcademicas || [],
+        turmasAcademicas: localSlices.turmasAcademicas || []
+      },
+      institutionId
+    );
+
+    mergedData.clientes = Array.isArray(mergedAcademicData.clientes)
+      ? mergedAcademicData.clientes
+      : (mergedData.clientes || []);
+    mergedData.leitores = mergedData.clientes;
+    mergedData.seriesAcademicas = Array.isArray(mergedAcademicData.seriesAcademicas)
+      ? mergedAcademicData.seriesAcademicas
+      : (localSlices.seriesAcademicas || []);
+    mergedData.turmasAcademicas = Array.isArray(mergedAcademicData.turmasAcademicas)
+      ? mergedAcademicData.turmasAcademicas
+      : (localSlices.turmasAcademicas || []);
+
     setInstituicoes((prev) => {
       const normalizedTargetInstitutionId = normalizeInstitutionId(institutionId);
       const outras = prev.filter(
@@ -1605,6 +1769,8 @@ export const DataProvider = ({ children }) => {
 
     setLivros((prev) => replaceInstitutionSlice(prev, mergedData.livros, institutionId));
     setClientes((prev) => replaceInstitutionSlice(prev, mergedData.clientes, institutionId));
+    setSeriesAcademicas((prev) => replaceInstitutionSlice(prev, mergedData.seriesAcademicas, institutionId));
+    setTurmasAcademicas((prev) => replaceInstitutionSlice(prev, mergedData.turmasAcademicas, institutionId));
     setPatrimonio((prev) => replaceInstitutionSlice(prev, mergedData.patrimonio, institutionId));
     setEmprestimos((prev) => replaceInstitutionSlice(prev, mergedData.emprestimos, institutionId));
 
