@@ -546,7 +546,6 @@ function LeitoresPage() {
 
   const handleDelete = async (id) => {
     const idNormalizado = String(id);
-    const cliente = clientes.find((c) => String(c.id) === idNormalizado);
 
     const emprestimoAtivo = possuiEmprestimoAtivo(id);
 
@@ -560,16 +559,16 @@ function LeitoresPage() {
     }
 
     if (possuiHistoricoEmprestimos(id)) {
-      const desejaInativar = window.confirm(
-        'Não é possível excluir este leitor porque há histórico de empréstimos vinculado ao cadastro.\n\n' +
-        'Para preservar os dados já cadastrados, mantenha o leitor como inativo.\n\n' +
-        'Deseja inativar este leitor agora?'
+      const confirmarExclusao = window.confirm(
+        'Este leitor possui histórico de empréstimos vinculado ao cadastro.\n\n' +
+        'Ao excluir, o leitor sairá da listagem normal, mas o histórico da biblioteca será preservado.\n\n' +
+        'Deseja continuar com a exclusão?'
       );
 
-      if (desejaInativar && cliente?.ativo) {
-        atualizarCliente(cliente.id, { ativo: false });
+      if (!confirmarExclusao) {
+        return;
       }
-
+      await removerCliente(id);
       return;
     }
 

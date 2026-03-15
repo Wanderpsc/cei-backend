@@ -64,11 +64,14 @@ export default function ClubeDeLeituraPage() {
       return;
     }
 
+    const clienteSelecionado = clientes.find((cliente) => String(cliente.id) === String(resumo.clienteId));
+
     const novoResumo = {
       ...resumo,
       id: Date.now(),
       data: new Date().toISOString(),
       foto: fotoAluno,
+      clienteNome: clienteSelecionado?.nome || 'Leitor',
       status: 'aprovado'
     };
 
@@ -96,6 +99,11 @@ export default function ClubeDeLeituraPage() {
     setCameraOpen(false);
   };
 
+  const getNomeClienteResumo = (resumoItem) => {
+    const cliente = clientes.find((item) => String(item.id) === String(resumoItem?.clienteId));
+    return cliente?.nome || resumoItem?.clienteNome || 'Leitor';
+  };
+
   const getRankingLeitores = () => {
     const contagem = {};
     resumos.forEach(r => {
@@ -113,7 +121,8 @@ export default function ClubeDeLeituraPage() {
 
     return Object.entries(contagem)
       .map(([clienteId, data]) => ({
-        cliente: clientes.find(c => c.id === parseInt(clienteId)),
+        cliente: clientes.find((c) => String(c.id) === String(clienteId)),
+        clienteNome: data.resumos.find((resumoItem) => resumoItem?.clienteNome)?.clienteNome || 'Leitor',
         ...data
       }))
       .sort((a, b) => b.total - a.total);
@@ -166,7 +175,7 @@ export default function ClubeDeLeituraPage() {
                     <Person sx={{ fontSize: 50 }} />
                   </Avatar>
                   <Typography variant="h5" gutterBottom>
-                    {item.cliente?.nome || 'Cliente'}
+                    {item.cliente?.nome || item.clienteNome || 'Leitor'}
                   </Typography>
                   <Typography variant="h6" color="text.secondary">
                     <MenuBook sx={{ verticalAlign: 'middle', mr: 1 }} />
@@ -199,7 +208,7 @@ export default function ClubeDeLeituraPage() {
                         {ranking.slice(3).map((item, index) => (
                           <TableRow key={index}>
                             <TableCell>{index + 4}º</TableCell>
-                            <TableCell>{item.cliente?.nome || 'Cliente'}</TableCell>
+                            <TableCell>{item.cliente?.nome || item.clienteNome || 'Leitor'}</TableCell>
                             <TableCell align="center">{item.total}</TableCell>
                             <TableCell align="center">
                               <Rating value={item.notaMedia} readOnly size="small" />
@@ -238,7 +247,7 @@ export default function ClubeDeLeituraPage() {
                       <Avatar src={r.foto} sx={{ width: 32, height: 32 }}>
                         <Person />
                       </Avatar>
-                      {clientes.find(c => c.id === parseInt(r.clienteId))?.nome || 'Leitor'}
+                      {getNomeClienteResumo(r)}
                     </Box>
                   </TableCell>
                   <TableCell>

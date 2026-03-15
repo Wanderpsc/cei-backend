@@ -1037,8 +1037,40 @@ export const DataProvider = ({ children }) => {
       mergedTurmas: mergedTurmas.length
     };
 
+    const migrationAlreadyApplied = localStorage.getItem(LEGACY_STORAGE_MIGRATION_KEY) === 'true';
+    const hasPrimarySnapshot = [
+      'instituicoes',
+      'usuarios',
+      'livros',
+      'clientes',
+      'leitores',
+      'seriesAcademicas',
+      'turmasAcademicas',
+      'emprestimos',
+      'patrimonio'
+    ].some((key) => Array.isArray(currentData?.[key]));
+
     if (!readersImproved && !turmasImproved) {
       return { data: currentData, merged: false, stats };
+    }
+
+    // Após migrar uma vez, não reimportar chaves legadas sobre um snapshot principal existente.
+    if (migrationAlreadyApplied && hasPrimarySnapshot) {
+      try {
+        localStorage.removeItem(LEGACY_TURMAS_KEY);
+        localStorage.removeItem(LEGACY_CLIENTES_KEY);
+      } catch (_error) {
+        // Sem ação: limpeza de chave legada é melhor esforço.
+      }
+
+      return {
+        data: currentData,
+        merged: false,
+        stats: {
+          ...stats,
+          skippedByMigration: true
+        }
+      };
     }
 
     const mergedData = {
@@ -1068,16 +1100,21 @@ export const DataProvider = ({ children }) => {
     const mergedStudents = countStudentsForInstitutionInData(mergedSnapshot, institutionHint);
 
     const shouldApplyMerge =
-      mergedStudents >= currentStudents
-      || currentReaders.length === 0
-      || currentTurmas.length === 0
-      || localStorage.getItem(LEGACY_STORAGE_MIGRATION_KEY) !== 'true';
+      !migrationAlreadyApplied
+      || !hasPrimarySnapshot
+      || mergedStudents > currentStudents;
 
     if (!shouldApplyMerge) {
       return { data: currentData, merged: false, stats };
     }
 
     localStorage.setItem(LEGACY_STORAGE_MIGRATION_KEY, 'true');
+    try {
+      localStorage.removeItem(LEGACY_TURMAS_KEY);
+      localStorage.removeItem(LEGACY_CLIENTES_KEY);
+    } catch (_error) {
+      // Sem ação: limpeza de chave legada é melhor esforço.
+    }
 
     return {
       data: mergedData,
@@ -3216,6 +3253,26 @@ export const DataProvider = ({ children }) => {
     registrarLog('editar', 'clientes', `Leitor ID ${id} editado`, { clienteId: id });
   };
 
+  const preservarHistoricoLeitorExcluido = (emprestimo, cliente) => {
+    const dadosTermoAtualizados = {
+      ...(emprestimo?.dadosTermoEmprestimo || {}),
+      leitorNome: emprestimo?.dadosTermoEmprestimo?.leitorNome || emprestimo?.clienteNome || cliente?.nome || 'N/A',
+      leitorTelefone: emprestimo?.dadosTermoEmprestimo?.leitorTelefone || cliente?.telefone || 'N/A',
+      leitorEmail: emprestimo?.dadosTermoEmprestimo?.leitorEmail || cliente?.email || 'N/A',
+      leitorEndereco: emprestimo?.dadosTermoEmprestimo?.leitorEndereco || cliente?.endereco || 'N/A',
+      leitorMatricula: emprestimo?.dadosTermoEmprestimo?.leitorMatricula || cliente?.matricula || '',
+      leitorTurma: emprestimo?.dadosTermoEmprestimo?.leitorTurma || cliente?.turma || cliente?.nomeTurma || 'N/A',
+      leitorSerie: emprestimo?.dadosTermoEmprestimo?.leitorSerie || cliente?.serie || cliente?.nomeSerie || 'N/A'
+    };
+
+    return {
+      ...emprestimo,
+      clienteNome: emprestimo?.clienteNome || cliente?.nome || 'N/A',
+      leitorNome: emprestimo?.leitorNome || cliente?.nome || 'N/A',
+      dadosTermoEmprestimo: dadosTermoAtualizados
+    };
+  };
+
   const removerCliente = async (id) => {
     const idNormalizado = String(id);
     const cliente = clientes.find(c => String(c.id) === idNormalizado);
@@ -3229,12 +3286,91 @@ export const DataProvider = ({ children }) => {
       return clienteIdEmprestimo !== undefined && clienteIdEmprestimo !== null && String(clienteIdEmprestimo) === idNormalizado;
     });
 
-    if (possuiHistoricoEmprestimos) {
+    const possuiEmprestimoAtivo = emprestimos.some((emp) => {
+      const clienteIdEmprestimo = emp.clienteId ?? emp.leitorId;
+      const statusNormalizado = String(emp?.status || '').toLowerCase();
+      return (
+        clienteIdEmprestimo !== undefined &&
+        clienteIdEmprestimo !== null &&
+        String(clienteIdEmprestimo) === idNormalizado &&
+        (statusNormalizado === 'ativo' || statusNormalizado === 'emprestado')
+      );
+    });
+
+    if (possuiEmprestimoAtivo) {
       alert(
-        'Não é possível excluir este leitor porque há empréstimos vinculados ao cadastro.\n\n' +
-        'Para preservar o histórico da biblioteca, mantenha o leitor como inativo em vez de excluir.'
+        'Não é possível excluir este leitor porque há empréstimo(s) ativo(s) vinculados ao cadastro.\n\n' +
+        'Realize a devolução de todos os livros antes de tentar novamente.'
       );
       return false;
+    }
+
+    if (possuiHistoricoEmprestimos) {
+      const clienteAtualizado = {
+        ...cliente,
+        ativo: false,
+        excluido: true,
+        dataExclusao: new Date().toISOString(),
+        motivoExclusao: 'historico_emprestimos'
+      };
+
+      const clientesAntesDaExclusao = clientes;
+      const emprestimosAntesDaAtualizacao = emprestimos;
+      const emprestimosAtualizados = emprestimos.map((emp) => {
+        const clienteIdEmprestimo = emp.clienteId ?? emp.leitorId;
+        if (clienteIdEmprestimo === undefined || clienteIdEmprestimo === null || String(clienteIdEmprestimo) !== idNormalizado) {
+          return emp;
+        }
+
+        return preservarHistoricoLeitorExcluido(emp, cliente);
+      });
+
+      setClientes((clientesAtuais) =>
+        clientesAtuais.map((c) => String(c.id) === idNormalizado ? clienteAtualizado : c)
+      );
+      setEmprestimos(emprestimosAtualizados);
+
+      try {
+        const resumosSalvos = localStorage.getItem('cei_resumos_livros');
+        if (resumosSalvos) {
+          const resumos = JSON.parse(resumosSalvos);
+          if (Array.isArray(resumos)) {
+            const resumosAtualizados = resumos.map((resumo) =>
+              String(resumo?.clienteId) === idNormalizado
+                ? {
+                    ...resumo,
+                    clienteNome: resumo?.clienteNome || cliente?.nome || 'Leitor'
+                  }
+                : resumo
+            );
+            localStorage.setItem('cei_resumos_livros', JSON.stringify(resumosAtualizados));
+          }
+        }
+      } catch (_error) {
+        // Ignora falhas locais de enriquecimento de histórico auxiliar.
+      }
+
+      const instituicaoIdAlvo = cliente.instituicaoId || instituicaoAtiva;
+      if (isCloudEnabled && instituicaoIdAlvo && instituicaoIdAlvo !== 0) {
+        const clienteCloudResult = await syncToCloud('clientes', [clienteAtualizado], instituicaoIdAlvo);
+
+        if (!clienteCloudResult?.success) {
+          setClientes(clientesAntesDaExclusao);
+          setEmprestimos(emprestimosAntesDaAtualizacao);
+          alert(
+            'Não foi possível concluir a exclusão do leitor na nuvem.\n\n' +
+            'Nenhum dado foi perdido. Tente novamente em alguns instantes.'
+          );
+          return false;
+        }
+      }
+
+      registrarLog('excluir', 'clientes', `Leitor "${cliente.nome || id}" excluído da listagem com histórico preservado`, {
+        clienteId: cliente.id,
+        exclusaoLogica: true
+      });
+
+      return true;
     }
 
     const clientesAntesDaExclusao = clientes;
@@ -3479,10 +3615,12 @@ export const DataProvider = ({ children }) => {
   };
 
   const getClientesFiltrados = () => {
+    const clientesVisiveis = clientes.filter((c) => !c?.excluido);
+
     if (usuarioLogado?.perfil === 'SuperAdmin') {
-      return clientes;
+      return clientesVisiveis;
     }
-    return clientes.filter((c) =>
+    return clientesVisiveis.filter((c) =>
       belongsToInstitution(c, instituicaoAtiva, {
         includeLegacyWithoutInstitution: true,
         includeInstitutionAliases: true
@@ -3735,6 +3873,8 @@ export const DataProvider = ({ children }) => {
     if (!turma) return false;
 
     const turmaId = String(id);
+    const turmasRestantes = turmasAcademicas.filter((item) => String(item.id) !== turmaId);
+    const vaiFicarSemTurmas = turmasRestantes.length === 0;
     const nomeTurmaNormalizado = normalizarCampoAcademico(turma.nomeTurma);
     const nomeSerieNormalizado = normalizarCampoAcademico(turma.nomeSerie);
 
@@ -3744,8 +3884,14 @@ export const DataProvider = ({ children }) => {
       const clienteTurmaId = String(cliente.turmaId || '').trim();
       const vinculoPorId = clienteTurmaId === turmaId;
 
-      const nomeTurmaCliente = normalizarCampoAcademico(cliente.turma || cliente.nomeTurma);
-      const nomeSerieCliente = normalizarCampoAcademico(cliente.serie || cliente.nomeSerie);
+      const academicFieldsCliente = getReaderAcademicFields(cliente);
+
+      const nomeTurmaCliente = normalizarCampoAcademico(
+        cliente.turma || cliente.nomeTurma || academicFieldsCliente.turma
+      );
+      const nomeSerieCliente = normalizarCampoAcademico(
+        cliente.serie || cliente.nomeSerie || academicFieldsCliente.serie
+      );
       const vinculoPorNome = (
         !clienteTurmaId
         && nomeTurmaNormalizado.length > 0
@@ -3757,22 +3903,40 @@ export const DataProvider = ({ children }) => {
         return cliente;
       }
 
-      const turmaTexto = String(cliente.turma || cliente.nomeTurma || turma.nomeTurma || '').trim();
-      const serieTexto = String(cliente.serie || cliente.nomeSerie || turma.nomeSerie || '').trim();
+      const serieTexto = String(
+        cliente.serie || cliente.nomeSerie || academicFieldsCliente.serie || turma.nomeSerie || ''
+      ).trim();
+      const serieSanitizada = extractAcademicSeriesTurma(serieTexto).serie || serieTexto;
+      const combinadoSemTurma = serieSanitizada || '';
 
       return {
         ...cliente,
         turmaId: '',
         turma: '',
         nomeTurma: '',
-        serie: serieTexto,
-        nomeSerie: serieTexto
+        serie: serieSanitizada,
+        nomeSerie: serieSanitizada,
+        anoSerieTurma: combinadoSemTurma,
+        serieTurma: '',
+        turmaSerie: '',
+        serie_turma: ''
       };
     }));
 
     registrarLog('excluir', 'series-turmas', `Turma "${turma.nomeTurma}" removida`, {
       turmaId: turma.id
     });
+
+    if (vaiFicarSemTurmas) {
+      try {
+        localStorage.setItem(LEGACY_STORAGE_MIGRATION_KEY, 'true');
+        localStorage.removeItem(LEGACY_TURMAS_KEY);
+        localStorage.removeItem(LEGACY_CLIENTES_KEY);
+      } catch (_error) {
+        // Sem ação: limpeza legada é melhor esforço.
+      }
+    }
+
     return true;
   };
 

@@ -204,6 +204,52 @@ function RelatoriosPage() {
       });
   }, [clientes, turmasAcademicasMap]);
 
+  const getClienteByEmprestimo = (emprestimo) => {
+    const clienteId = String(emprestimo?.clienteId ?? emprestimo?.leitorId ?? '').trim();
+    if (!clienteId) {
+      return null;
+    }
+
+    return clientes.find((cliente) => String(cliente.id) === clienteId) || null;
+  };
+
+  const getNomeClienteEmprestimo = (emprestimo, clienteAtual = null) => {
+    const cliente = clienteAtual || getClienteByEmprestimo(emprestimo);
+    return (
+      cliente?.nome
+      || emprestimo?.clienteNome
+      || emprestimo?.leitorNome
+      || emprestimo?.dadosTermoEmprestimo?.leitorNome
+      || 'Leitor removido'
+    );
+  };
+
+  const getTelefoneClienteEmprestimo = (emprestimo, clienteAtual = null) => {
+    const cliente = clienteAtual || getClienteByEmprestimo(emprestimo);
+    return cliente?.telefone || emprestimo?.dadosTermoEmprestimo?.leitorTelefone || 'N/A';
+  };
+
+  const getTurmaClienteEmprestimo = (emprestimo, clienteAtual = null) => {
+    const cliente = clienteAtual || getClienteByEmprestimo(emprestimo);
+
+    if (cliente) {
+      const infoTurma = obterInfoTurmaAluno(cliente, turmasAcademicasMap);
+      if (infoTurma.label) {
+        return infoTurma.label;
+      }
+    }
+
+    const serieHistorica = String(
+      emprestimo?.dadosTermoEmprestimo?.leitorSerie || emprestimo?.serieNome || ''
+    ).trim();
+    const turmaHistorica = String(
+      emprestimo?.dadosTermoEmprestimo?.leitorTurma || emprestimo?.turmaNome || ''
+    ).trim();
+    const partes = [serieHistorica, turmaHistorica].filter((valor) => valor && valor !== 'N/A');
+
+    return partes.join(' - ') || 'N/A';
+  };
+
   // Funções de geração de relatórios
   const getRelatorioLivrosCadastrados = () => {
     return {
@@ -229,13 +275,13 @@ function RelatoriosPage() {
       .filter(e => e.status === 'ativo')
       .reduce((acc, emp) => {
         const livro = livros.find(l => l.id === emp.livroId);
-        const cliente = clientes.find(c => c.id === emp.clienteId);
+        const cliente = getClienteByEmprestimo(emp);
         
-        if (livro && cliente) {
+        if (livro) {
           acc.push({
             titulo: livro.titulo,
             autor: livro.autor,
-            cliente: cliente.nome,
+            cliente: getNomeClienteEmprestimo(emp, cliente),
             dataEmprestimo: new Date(emp.dataEmprestimo).toLocaleDateString('pt-BR'),
             dataDevolucao: new Date(emp.dataDevolucao).toLocaleDateString('pt-BR'),
             diasRestantes: Math.ceil((new Date(emp.dataDevolucao) - new Date()) / (1000 * 60 * 60 * 24))
@@ -308,16 +354,16 @@ function RelatoriosPage() {
     const devolucoesPendentes = emprestimos
       .filter(e => e.status === 'ativo')
       .map(e => {
-        const cliente = clientes.find(c => c.id === e.clienteId);
+        const cliente = getClienteByEmprestimo(e);
         const livro = livros.find(l => l.id === e.livroId);
         const dataDevolucao = new Date(e.dataDevolucao);
         const diasAtraso = Math.floor((hoje - dataDevolucao) / (1000 * 60 * 60 * 24));
         const situacao = diasAtraso > 0 ? 'Atrasado' : 'No Prazo';
 
         return {
-          cliente: cliente?.nome || 'N/A',
+          cliente: getNomeClienteEmprestimo(e, cliente),
           livro: livro?.titulo || 'N/A',
-          telefone: cliente?.telefone || 'N/A',
+          telefone: getTelefoneClienteEmprestimo(e, cliente),
           dataEmprestimo: new Date(e.dataEmprestimo).toLocaleDateString('pt-BR'),
           dataDevolucao: dataDevolucao.toLocaleDateString('pt-BR'),
           diasAtraso: diasAtraso > 0 ? diasAtraso : 0,
@@ -339,26 +385,57 @@ function RelatoriosPage() {
   };
 
   const getRelatorioRankingLeitores = () => {
-    // Contar empréstimos por leitor (total de livros já emprestados)
-    const rankingPorEmprestimos = clientes.map(c => {
-      const totalEmprestimos = emprestimos.filter(e => e.clienteId === c.id).length;
-      const emprestimosAtivos = emprestimos.filter(e => e.clienteId === c.id && e.status === 'ativo').length;
-      const emprestimosDevolvidos = emprestimos.filter(e => e.clienteId === c.id && e.status === 'devolvido').length;
-      
-      return {
-        posicao: 0, // Será preenchido depois da ordenação
-        nome: c.nome,
-        tipo: c.tipo || 'Leitor',
-        turma: obterInfoTurmaAluno(c, turmasAcademicasMap).label || 'N/A',
-        totalLivrosEmprestados: totalEmprestimos,
-        livrosAtivos: emprestimosAtivos,
-        livrosDevolvidos: emprestimosDevolvidos,
-        telefone: c.telefone || 'N/A'
+    const rankingMap = new Map();
+
+    emprestimos.forEach((emprestimo) => {
+      const clienteId = String(emprestimo?.clienteId ?? emprestimo?.leitorId ?? '').trim();
+      if (!clienteId) {
+        return;
+      }
+
+      const cliente = getClienteByEmprestimo(emprestimo);
+      const nome = getNomeClienteEmprestimo(emprestimo, cliente);
+      const telefone = getTelefoneClienteEmprestimo(emprestimo, cliente);
+      const turma = getTurmaClienteEmprestimo(emprestimo, cliente);
+      const existente = rankingMap.get(clienteId) || {
+        posicao: 0,
+        nome,
+        tipo: cliente?.tipo || 'Leitor',
+        turma,
+        totalLivrosEmprestados: 0,
+        livrosAtivos: 0,
+        livrosDevolvidos: 0,
+        telefone
       };
-    })
-    .filter(r => r.totalLivrosEmprestados > 0) // Apenas leitores com empréstimos
-    .sort((a, b) => b.totalLivrosEmprestados - a.totalLivrosEmprestados)
-    .map((r, index) => ({ ...r, posicao: index + 1 })); // Adicionar posição
+
+      existente.totalLivrosEmprestados += 1;
+
+      if (isEmprestimoAtivo(emprestimo.status)) {
+        existente.livrosAtivos += 1;
+      } else {
+        existente.livrosDevolvidos += 1;
+      }
+
+      if ((!existente.nome || existente.nome === 'Leitor removido') && nome) {
+        existente.nome = nome;
+      }
+      if ((!existente.telefone || existente.telefone === 'N/A') && telefone) {
+        existente.telefone = telefone;
+      }
+      if ((!existente.turma || existente.turma === 'N/A') && turma) {
+        existente.turma = turma;
+      }
+      if (cliente?.tipo && existente.tipo === 'Leitor') {
+        existente.tipo = cliente.tipo;
+      }
+
+      rankingMap.set(clienteId, existente);
+    });
+
+    const rankingPorEmprestimos = Array.from(rankingMap.values())
+      .filter((r) => r.totalLivrosEmprestados > 0)
+      .sort((a, b) => b.totalLivrosEmprestados - a.totalLivrosEmprestados)
+      .map((r, index) => ({ ...r, posicao: index + 1 }));
 
     return {
       titulo: 'Ranking de Leitores',
@@ -622,11 +699,11 @@ function RelatoriosPage() {
       titulo: 'Histórico de Empréstimos',
       colunas: ['Cliente', 'Livro', 'Data Empréstimo', 'Data Devolução', 'Data Retorno', 'Status'],
       dados: emprestimos.map(e => {
-        const cliente = clientes.find(c => c.id === e.clienteId);
+        const cliente = getClienteByEmprestimo(e);
         const livro = livros.find(l => l.id === e.livroId);
         
         return {
-          cliente: cliente?.nome || 'N/A',
+          cliente: getNomeClienteEmprestimo(e, cliente),
           livro: livro?.titulo || 'N/A',
           dataEmprestimo: new Date(e.dataEmprestimo).toLocaleDateString('pt-BR'),
           dataDevolucao: new Date(e.dataDevolucao).toLocaleDateString('pt-BR'),
