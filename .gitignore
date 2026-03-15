@@ -129,6 +129,15 @@ temp/
 tmp/
 *.temp
 
+# Logs e artefatos temporarios de build/deploy local
+.build-log.txt
+.deploy-*.txt
+.tmp-*.txt
+build_output.txt
+deploy_result.txt
+deploy_check_latest.txt
+deploy-refresh-route-fix-log.txt
+
 # ═══════════════════════════════════════════════════════════════════════════
 # BANCO DE DADOS
 # ═══════════════════════════════════════════════════════════════════════════
