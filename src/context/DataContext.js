@@ -3272,6 +3272,12 @@ export const DataProvider = ({ children }) => {
       return true;
     }
 
+    // Fallback por nome somente quando o leitor ainda nao possui turmaId.
+    // Assim evitamos mover/remover leitores vinculados a outra turma por ID.
+    if (clienteTurmaId) {
+      return false;
+    }
+
     const nomeTurmaAlvo = normalizarCampoAcademico(turmaAlvo?.nomeTurma || turmaAlvo?.turma);
     if (!nomeTurmaAlvo) {
       return false;
@@ -3687,12 +3693,34 @@ export const DataProvider = ({ children }) => {
 
     setTurmasAcademicas((prev) => prev.map((turma) => String(turma.id) === String(id) ? turmaAtualizada : turma));
 
+    const turmaIdAtual = String(id);
+    const nomeTurmaAnterior = normalizarCampoAcademico(turmaAtual.nomeTurma);
+    const nomeSerieAnterior = normalizarCampoAcademico(turmaAtual.nomeSerie);
+
     setClientes((prev) => prev.map((cliente) => {
-      if (String(cliente.turmaId || '') !== String(id)) return cliente;
+      const clienteTurmaId = String(cliente.turmaId || '').trim();
+      const vinculoPorId = clienteTurmaId === turmaIdAtual;
+
+      const nomeTurmaCliente = normalizarCampoAcademico(cliente.turma || cliente.nomeTurma);
+      const nomeSerieCliente = normalizarCampoAcademico(cliente.serie || cliente.nomeSerie);
+      const vinculoLegacyPorNome = (
+        !clienteTurmaId
+        && nomeTurmaAnterior.length > 0
+        && nomeTurmaCliente === nomeTurmaAnterior
+        && (!nomeSerieAnterior || !nomeSerieCliente || nomeSerieCliente === nomeSerieAnterior)
+      );
+
+      if (!vinculoPorId && !vinculoLegacyPorNome) {
+        return cliente;
+      }
+
       return {
         ...cliente,
+        turmaId: turmaAtualizada.id,
         turma: turmaAtualizada.nomeTurma,
+        nomeTurma: turmaAtualizada.nomeTurma,
         serie: turmaAtualizada.nomeSerie,
+        nomeSerie: turmaAtualizada.nomeSerie,
         serieId: turmaAtualizada.serieId
       };
     }));

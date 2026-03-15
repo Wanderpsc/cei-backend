@@ -193,85 +193,121 @@ export default function SeriesTurmasPage() {
     return false;
   };
 
+  const resolverTurmaAssociadaAoLeitor = (cliente) => {
+    const clienteTurmaId = String(cliente?.turmaId || '').trim();
+    if (clienteTurmaId && turmasAcademicasMap.has(clienteTurmaId)) {
+      return turmasAcademicasMap.get(clienteTurmaId);
+    }
+
+    const clienteTurmaBruta = String(cliente?.turma || cliente?.nomeTurma || '').trim();
+    if (!clienteTurmaBruta) {
+      return null;
+    }
+
+    const clienteSerieBruta = String(cliente?.serie || cliente?.nomeSerie || '').trim();
+    const clienteTurmaNormalizada = normalizarTexto(clienteTurmaBruta);
+    const clienteTurmaCompacta = compactarTexto(clienteTurmaBruta);
+    const clienteSerieNormalizada = normalizarTexto(clienteSerieBruta);
+    const clienteSerieCompacta = compactarTexto(clienteSerieBruta);
+    const numeroSerieCliente = extrairNumeroSerie(clienteSerieBruta);
+    const salaCliente = extrairSalaTurma(clienteTurmaBruta);
+    const cursoCliente = extrairCursoAcademico(clienteTurmaBruta, clienteSerieBruta);
+
+    const candidatas = turmasOrdenadas.filter((turma) => {
+      const turmaNomeNormalizada = normalizarTexto(turma.nomeTurma);
+      const turmaNomeCompacta = compactarTexto(turma.nomeTurma);
+      const serieTurmaNormalizada = normalizarTexto(turma.nomeSerie);
+      const serieTurmaCompacta = compactarTexto(turma.nomeSerie);
+      const numeroSerieTurma = extrairNumeroSerie(turma.nomeSerie);
+      const salaTurma = extrairSalaTurma(turma.nomeTurma);
+      const cursoTurma = extrairCursoAcademico(turma.nomeTurma, turma.nomeSerie);
+
+      const porNome =
+        clienteTurmaNormalizada === turmaNomeNormalizada
+        || (clienteTurmaCompacta && clienteTurmaCompacta === turmaNomeCompacta)
+        || (clienteTurmaCompacta && turmaNomeCompacta.includes(clienteTurmaCompacta))
+        || (clienteTurmaCompacta && clienteTurmaCompacta.includes(turmaNomeCompacta));
+
+      const porAssinatura =
+        Boolean(salaCliente)
+        && Boolean(salaTurma)
+        && salaCliente === salaTurma
+        && (!cursoCliente || !cursoTurma || cursoCliente === cursoTurma);
+
+      if (!porNome && !porAssinatura) {
+        return false;
+      }
+
+      const serieCompativel =
+        !clienteSerieNormalizada
+        || !serieTurmaNormalizada
+        || clienteSerieNormalizada === serieTurmaNormalizada
+        || (clienteSerieCompacta && clienteSerieCompacta === serieTurmaCompacta)
+        || (clienteSerieCompacta && serieTurmaCompacta.includes(clienteSerieCompacta))
+        || (clienteSerieCompacta && clienteSerieCompacta.includes(serieTurmaCompacta))
+        || (numeroSerieCliente && numeroSerieTurma && numeroSerieCliente === numeroSerieTurma);
+
+      return serieCompativel;
+    });
+
+    if (candidatas.length === 0) {
+      return null;
+    }
+
+    if (candidatas.length === 1) {
+      return candidatas[0];
+    }
+
+    const melhorMatch = candidatas.find((turma) => {
+      return (
+        normalizarTexto(turma.nomeTurma) === clienteTurmaNormalizada
+        && (!clienteSerieNormalizada || normalizarTexto(turma.nomeSerie) === clienteSerieNormalizada)
+      );
+    });
+
+    return melhorMatch || candidatas[0];
+  };
+
+  const contagemLeitoresPorTurma = useMemo(() => {
+    const mapa = new Map();
+    turmasOrdenadas.forEach((turma) => {
+      mapa.set(String(turma.id), 0);
+    });
+
+    clientes.forEach((cliente) => {
+      if (!isAlunoCliente(cliente)) {
+        return;
+      }
+
+      const turmaAssociada = resolverTurmaAssociadaAoLeitor(cliente);
+      if (!turmaAssociada) {
+        return;
+      }
+
+      const turmaId = String(turmaAssociada.id);
+      mapa.set(turmaId, (mapa.get(turmaId) || 0) + 1);
+    });
+
+    return mapa;
+  }, [clientes, turmasOrdenadas, turmasAcademicasMap]);
+
   const contadores = useMemo(() => {
     const seriesBase = (turmasAcademicas.length > 0 ? turmasAcademicas : seriesAcademicas)
       .map((item) => item?.nomeSerie)
       .map((nomeSerie) => normalizarTexto(nomeSerie))
       .filter(Boolean);
 
-    const alunosComTurma = clientes.filter((cliente) => {
-      const isAluno = isAlunoCliente(cliente);
-      const temTurma =
-        String(cliente.turmaId || '').trim().length > 0
-        || normalizarTexto(cliente.turma).length > 0
-        || normalizarTexto(cliente.nomeTurma).length > 0;
-      return isAluno && temTurma;
-    }).length;
+    const alunosComTurma = Array.from(contagemLeitoresPorTurma.values()).reduce((total, valor) => total + valor, 0);
 
     return {
       series: new Set(seriesBase).size,
       turmas: turmasAcademicas.length,
       alunosComTurma
     };
-  }, [seriesAcademicas, turmasAcademicas, clientes]);
+  }, [seriesAcademicas, turmasAcademicas, contagemLeitoresPorTurma]);
 
   const getTotalAlunosDaTurma = (turma) => {
-    const turmaIdAtual = String(turma?.id || '').trim();
-    const turmaSerieIdAtual = String(turma?.serieId || '').trim();
-    const turmaNomeAtual = normalizarTexto(turma?.nomeTurma);
-    const turmaNomeCompacto = compactarTexto(turma?.nomeTurma);
-    const serieNomeAtual = normalizarTexto(turma?.nomeSerie);
-    const serieNomeCompactoAtual = compactarTexto(turma?.nomeSerie);
-    const numeroSerieTurma = extrairNumeroSerie(turma?.nomeSerie);
-    const salaTurma = extrairSalaTurma(turma?.nomeTurma);
-    const cursoTurma = extrairCursoAcademico(turma?.nomeTurma, turma?.nomeSerie);
-
-    return clientes.filter((cliente) => {
-      const aluno = isAlunoCliente(cliente);
-      if (!aluno) return false;
-
-      const clienteTurmaId = String(cliente?.turmaId || '').trim();
-      const clienteSerieId = String(cliente?.serieId || '').trim();
-      const turmaVinculadaCliente = clienteTurmaId && turmasAcademicasMap.has(clienteTurmaId)
-        ? turmasAcademicasMap.get(clienteTurmaId)
-        : null;
-      const clienteTurmaBruta = String(
-        cliente?.turma || cliente?.nomeTurma || turmaVinculadaCliente?.nomeTurma || ''
-      ).trim();
-      const clienteSerieBruta = String(
-        cliente?.serie || cliente?.nomeSerie || turmaVinculadaCliente?.nomeSerie || ''
-      ).trim();
-      const clienteTurmaNome = normalizarTexto(clienteTurmaBruta);
-      const clienteTurmaCompacto = compactarTexto(clienteTurmaBruta);
-      const clienteSerieNome = normalizarTexto(clienteSerieBruta);
-      const clienteSerieCompacto = compactarTexto(clienteSerieBruta);
-      const numeroSerieCliente = extrairNumeroSerie(clienteSerieBruta);
-      const salaCliente = extrairSalaTurma(clienteTurmaBruta);
-      const cursoCliente = extrairCursoAcademico(clienteTurmaBruta, clienteSerieBruta);
-
-      const porId = turmaIdAtual.length > 0 && clienteTurmaId === turmaIdAtual;
-      const porNome = turmaNomeAtual.length > 0 && clienteTurmaNome === turmaNomeAtual;
-      const porNomeCompacto = turmaNomeCompacto.length > 0 && clienteTurmaCompacto === turmaNomeCompacto;
-
-      const serieCompativel =
-        serieNomeAtual.length === 0
-        || clienteSerieNome.length === 0
-        || clienteSerieNome === serieNomeAtual
-        || (serieNomeCompactoAtual.length > 0 && clienteSerieCompacto === serieNomeCompactoAtual)
-        || (serieNomeCompactoAtual.length > 0 && clienteSerieCompacto.includes(serieNomeCompactoAtual))
-        || (serieNomeCompactoAtual.length > 0 && serieNomeCompactoAtual.includes(clienteSerieCompacto))
-        || (turmaSerieIdAtual && clienteSerieId && turmaSerieIdAtual === clienteSerieId)
-        || (numeroSerieTurma && numeroSerieCliente && numeroSerieTurma === numeroSerieCliente);
-
-      const porAssinaturaAcademica =
-        Boolean(salaTurma)
-        && Boolean(salaCliente)
-        && salaTurma === salaCliente
-        && (!cursoTurma || (cursoCliente && cursoTurma === cursoCliente))
-        && serieCompativel;
-
-      return porId || ((porNome || porNomeCompacto) && serieCompativel) || porAssinaturaAcademica;
-    }).length;
+    return contagemLeitoresPorTurma.get(String(turma?.id || '')) || 0;
   };
 
   const limparSerieForm = () => {
@@ -464,7 +500,7 @@ export default function SeriesTurmasPage() {
         <Grid item xs={12} sm={4}>
           <Card>
             <CardContent>
-              <Typography variant="caption" color="text.secondary">Alunos alocados em turma</Typography>
+              <Typography variant="caption" color="text.secondary">Leitores/alunos alocados em turma</Typography>
               <Typography variant="h5">{contadores.alunosComTurma}</Typography>
             </CardContent>
           </Card>
@@ -595,7 +631,7 @@ export default function SeriesTurmasPage() {
                       <TableCell>Turma</TableCell>
                       <TableCell>Série</TableCell>
                       <TableCell>Ano</TableCell>
-                      <TableCell>Alunos</TableCell>
+                      <TableCell>Leitores</TableCell>
                       <TableCell align="right">Ações</TableCell>
                     </TableRow>
                   </TableHead>
