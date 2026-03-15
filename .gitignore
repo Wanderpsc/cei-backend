@@ -72,7 +72,8 @@ coverage/
 # Visual Studio Code
 .vscode/
 !.vscode/extensions.json
-!.vscode/settings.json (público)
+# Arquivo de configuracao compartilhavel
+!.vscode/settings.json
 *.code-workspace
 
 # IntelliJ IDEA
@@ -133,6 +134,10 @@ tmp/
 .build-log.txt
 .deploy-*.txt
 .tmp-*.txt
+.copilot-*.log
+.deploy.log
+build.log
+build-output.log
 build_output.txt
 deploy_result.txt
 deploy_check_latest.txt
