@@ -268,33 +268,44 @@ const isAlunoDaTurmaSelecionada = (aluno, turmaSelecionadaInfo, turmasAcademicas
     return true;
   }
 
-  const chaveAluno = obterChaveTurmaAluno(aluno, turmasAcademicasMap);
-  if (chaveAluno && chaveAluno === turmaSelecionadaInfo.key) {
-    return true;
-  }
-
-  const turmaSelecionadaAcademica = turmasAcademicasMap.has(String(turmaSelecionadaInfo.key))
-    ? turmasAcademicasMap.get(String(turmaSelecionadaInfo.key))
+  const chaveSelecionada = String(turmaSelecionadaInfo.key || '').trim();
+  const turmaSelecionadaAcademica = turmasAcademicasMap.has(chaveSelecionada)
+    ? turmasAcademicasMap.get(chaveSelecionada)
     : null;
 
-  const turmaReferencia = turmaSelecionadaAcademica || {
-    nomeTurma: turmaSelecionadaInfo?.nomeTurma || '',
-    nomeSerie: turmaSelecionadaInfo?.nomeSerie || ''
-  };
+  const turmaAlunoId = String(aluno?.turmaId || '').trim();
+  if (turmaSelecionadaAcademica && turmaAlunoId) {
+    return turmaAlunoId === chaveSelecionada;
+  }
 
-  const turmaAlunoAcademica = (() => {
-    const turmaId = String(aluno?.turmaId || '').trim();
-    if (turmaId && turmasAcademicasMap.has(turmaId)) {
-      return turmasAcademicasMap.get(turmaId);
-    }
+  const turmaSerieAluno = obterTurmaSerieTextoAluno(aluno);
+  const turmaNomeAluno = String(turmaSerieAluno.turma || '').trim();
+  const serieNomeAluno = String(turmaSerieAluno.serie || '').trim();
+  const turmaNomeSelecionada = String(
+    turmaSelecionadaAcademica?.nomeTurma || turmaSelecionadaInfo?.nomeTurma || ''
+  ).trim();
+  const serieNomeSelecionada = String(
+    turmaSelecionadaAcademica?.nomeSerie || turmaSelecionadaInfo?.nomeSerie || ''
+  ).trim();
 
-    const turmaSerieAluno = obterTurmaSerieTextoAluno(aluno);
-    const turmaNome = String(turmaSerieAluno.turma || '').trim();
-    const serieNome = String(turmaSerieAluno.serie || '').trim();
-    return { nomeTurma: turmaNome, nomeSerie: serieNome };
-  })();
+  if (!turmaNomeAluno || !turmaNomeSelecionada) {
+    return false;
+  }
 
-  return turmasSaoCompativeis(turmaAlunoAcademica, turmaReferencia);
+  const nomeTurmaIgual = (
+    normalizarTexto(turmaNomeAluno) === normalizarTexto(turmaNomeSelecionada)
+    || compactarTexto(turmaNomeAluno) === compactarTexto(turmaNomeSelecionada)
+  );
+
+  if (!nomeTurmaIgual) {
+    return false;
+  }
+
+  if (turmaSelecionadaAcademica && turmaAlunoId && turmaAlunoId !== chaveSelecionada) {
+    return false;
+  }
+
+  return seriesSaoCompativeis(serieNomeAluno, serieNomeSelecionada);
 };
 
 const localizarTurmaAcademicaDoAluno = (aluno, turmasAcademicasMap) => {
@@ -747,14 +758,6 @@ export default function EmprestimoDidaticoLotePage() {
 
     setSelecoes(montarEstadoAtual());
   }, [livrosSelecionadosDados, alunosSelecionados, emprestimoAtivoPorPar]);
-
-  useEffect(() => {
-    if (!turmaSelecionada || livrosSelecionados.length > 0 || livrosDidaticos.length === 0) {
-      return;
-    }
-
-    setLivrosSelecionados(livrosDidaticos.map((livro) => String(livro.id)));
-  }, [turmaSelecionada, livrosSelecionados.length, livrosDidaticos]);
 
   const disponibilidadePorLivro = useMemo(() => {
     const ativosPorLivro = {};
