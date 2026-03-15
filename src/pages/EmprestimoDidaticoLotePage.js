@@ -145,17 +145,43 @@ const extrairSerieTurmaCombinada = (valor) => {
     };
   }
 
+  const tokens = textoNormalizado.split(' ').map((token) => token.trim()).filter(Boolean);
+  if (tokens.length >= 2) {
+    const turmaSuffix = tokens[tokens.length - 1];
+    const serieBase = tokens.slice(0, -1).join(' ').trim();
+    const serieBaseNormalizada = normalizarTexto(serieBase);
+    const pareceSufixoTurma = /^[IVXLCDM]{1,4}-[A-Z]$/i.test(turmaSuffix) || /^[A-Z]$/i.test(turmaSuffix);
+    const pareceSerieAcademica = /\d/.test(serieBase)
+      || serieBaseNormalizada.includes('ano')
+      || serieBaseNormalizada.includes('serie');
+
+    if (pareceSufixoTurma && pareceSerieAcademica) {
+      return {
+        serie: serieBase,
+        turma: turmaSuffix.toUpperCase()
+      };
+    }
+  }
+
   return { serie: textoNormalizado, turma: '' };
 };
 
 const obterTurmaSerieTextoAluno = (aluno) => {
   const turmaDireta = String(aluno?.turma || aluno?.nomeTurma || '').trim();
   const serieDireta = String(aluno?.serie || aluno?.nomeSerie || '').trim();
+  const serieDiretaExtraida = serieDireta
+    ? extrairSerieTurmaCombinada(serieDireta)
+    : { serie: '', turma: '' };
+  const serieDiretaTemTurma = Boolean(serieDiretaExtraida.turma);
+  const turmaDiretaConfereComSerie = serieDiretaTemTurma
+    && normalizarTexto(turmaDireta) === normalizarTexto(serieDiretaExtraida.turma);
 
   if (turmaDireta || serieDireta) {
     return {
-      turma: turmaDireta,
-      serie: serieDireta
+      turma: turmaDireta || serieDiretaExtraida.turma || '',
+      serie: serieDiretaTemTurma && (!turmaDireta || turmaDiretaConfereComSerie)
+        ? serieDiretaExtraida.serie
+        : serieDireta
     };
   }
 

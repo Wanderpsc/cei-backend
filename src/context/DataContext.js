@@ -444,24 +444,50 @@ export const DataProvider = ({ children }) => {
       .map((part) => part.trim())
       .filter(Boolean);
 
-    if (parts.length <= 1) {
-      return { serie: normalized, turma: '' };
+    if (parts.length > 1) {
+      return {
+        serie: parts.slice(0, -1).join(' - ').trim(),
+        turma: parts[parts.length - 1].trim()
+      };
     }
 
-    return {
-      serie: parts.slice(0, -1).join(' - ').trim(),
-      turma: parts[parts.length - 1].trim()
-    };
+    const tokens = normalized.split(' ').map((token) => token.trim()).filter(Boolean);
+    if (tokens.length >= 2) {
+      const turmaSuffix = tokens[tokens.length - 1];
+      const serieBase = tokens.slice(0, -1).join(' ').trim();
+      const normalizedSerieBase = normalizeAcademicText(serieBase);
+      const looksLikeTurmaSuffix = /^[IVXLCDM]{1,4}-[A-Z]$/i.test(turmaSuffix) || /^[A-Z]$/i.test(turmaSuffix);
+      const looksLikeAcademicSerie = /\d/.test(serieBase)
+        || normalizedSerieBase.includes('ano')
+        || normalizedSerieBase.includes('serie');
+
+      if (looksLikeTurmaSuffix && looksLikeAcademicSerie) {
+        return {
+          serie: serieBase,
+          turma: turmaSuffix.toUpperCase()
+        };
+      }
+    }
+
+    return { serie: normalized, turma: '' };
   };
 
   const getReaderAcademicFields = (reader) => {
     const serieDireta = String(reader?.serie || reader?.nomeSerie || '').trim();
     const turmaDireta = String(reader?.turma || reader?.nomeTurma || '').trim();
+    const parsedSerieDireta = serieDireta
+      ? extractAcademicSeriesTurma(serieDireta)
+      : { serie: '', turma: '' };
+    const parsedSerieTemTurma = Boolean(parsedSerieDireta.turma);
+    const turmaDiretaConfereComSerie = parsedSerieTemTurma
+      && normalizeAcademicText(turmaDireta) === normalizeAcademicText(parsedSerieDireta.turma);
 
     if (serieDireta || turmaDireta) {
       return {
-        serie: serieDireta,
-        turma: turmaDireta
+        serie: parsedSerieTemTurma && (!turmaDireta || turmaDiretaConfereComSerie)
+          ? parsedSerieDireta.serie
+          : serieDireta,
+        turma: turmaDireta || parsedSerieDireta.turma || ''
       };
     }
 
