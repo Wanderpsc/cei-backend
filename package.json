@@ -2,7 +2,7 @@
   "name": "cei---controle-escolar-inteligente---biblioteca",
   "version": "1.0.0",
   "description": "CEI - Controle Escolar Inteligente - Sistema de Gestão de Biblioteca",
-  "homepage": "https://Wanderpsc.github.io/cei-backend",
+  "homepage": ".",
   "main": "index.js",
   "scripts": {
     "start": "react-scripts start",

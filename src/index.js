@@ -7,7 +7,7 @@ import { BrowserRouter } from 'react-router-dom';
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
   <React.StrictMode>
-    <BrowserRouter basename="/cei-backend">
+    <BrowserRouter basename={window.location.hostname.endsWith('surge.sh') ? '/' : '/cei-backend'}>
       <App />
     </BrowserRouter>
   </React.StrictMode>
