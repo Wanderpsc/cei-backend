@@ -3,8 +3,13 @@
 # © 2026 Wander Pires Silva Coelho - Todos os direitos reservados
 # ═══════════════════════════════════════════════════════════════════════════
 
+# LEGENDA
+# - Regras essenciais (ativas): linhas sem '#'
+# - Regras opcionais (desativadas): bloco final comentado
+#   Descomente apenas o que quiser aplicar.
+
 # ═══════════════════════════════════════════════════════════════════════════
-# ARQUIVOS SENSÍVEIS - NUNCA COMMITAR
+# REGRAS ESSENCIAIS (ATIVAS)
 # ═══════════════════════════════════════════════════════════════════════════
 
 # Variáveis de ambiente
@@ -168,13 +173,17 @@ documentos_pessoais/
 contratos_confidenciais/
 
 # ═══════════════════════════════════════════════════════════════════════════
-# ARQUIVOS GERADOS AUTOMATICAMENTE
+# REGRAS OPCIONAIS (DESATIVADAS POR PADRAO)
 # ═══════════════════════════════════════════════════════════════════════════
 
-# Package managers
-package-lock.json (opcional - descomentar se não quiser versionar)
-yarn.lock (opcional)
-pnpm-lock.yaml (opcional)
+# Lockfiles de package manager (normalmente recomendados para versionamento)
+# package-lock.json
+# yarn.lock
+# pnpm-lock.yaml
+
+# Logs locais adicionais (alem dos essenciais ja ignorados acima)
+# *.trace.log
+# profile-*.txt
 
 # ═══════════════════════════════════════════════════════════════════════════
 # NOTAS
