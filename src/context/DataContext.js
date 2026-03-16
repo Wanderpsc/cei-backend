@@ -3714,9 +3714,15 @@ export const DataProvider = ({ children }) => {
     setSeriesAcademicas((prev) => prev.map((serie) => String(serie.id) === String(id) ? serieAtualizada : serie));
 
     if (serieAtualizada.nomeSerie !== serieAtual.nomeSerie) {
+      const dataAtualizacaoLeitores = new Date().toISOString();
       setClientes((prev) => prev.map((cliente) => {
         if (String(cliente.serieId || '') !== String(id)) return cliente;
-        return { ...cliente, serie: serieAtualizada.nomeSerie };
+        return {
+          ...cliente,
+          serie: serieAtualizada.nomeSerie,
+          nomeSerie: serieAtualizada.nomeSerie,
+          dataAtualizacao: dataAtualizacaoLeitores
+        };
       }));
     }
 
@@ -3737,9 +3743,14 @@ export const DataProvider = ({ children }) => {
 
     setSeriesAcademicas((prev) => prev.filter((item) => String(item.id) !== String(id)));
 
+    const dataAtualizacaoLeitores = new Date().toISOString();
     setClientes((prev) => prev.map((cliente) => {
       if (String(cliente.serieId || '') !== String(id)) return cliente;
-      return { ...cliente, serieId: null };
+      return {
+        ...cliente,
+        serieId: null,
+        dataAtualizacao: dataAtualizacaoLeitores
+      };
     }));
 
     registrarLog('excluir', 'series-turmas', `Série "${serie.nomeSerie}" removida`, {
@@ -3834,6 +3845,7 @@ export const DataProvider = ({ children }) => {
     const turmaIdAtual = String(id);
     const nomeTurmaAnterior = normalizarCampoAcademico(turmaAtual.nomeTurma);
     const nomeSerieAnterior = normalizarCampoAcademico(turmaAtual.nomeSerie);
+    const dataAtualizacaoLeitores = new Date().toISOString();
 
     setClientes((prev) => prev.map((cliente) => {
       const clienteTurmaId = String(cliente.turmaId || '').trim();
@@ -3859,7 +3871,9 @@ export const DataProvider = ({ children }) => {
         nomeTurma: turmaAtualizada.nomeTurma,
         serie: turmaAtualizada.nomeSerie,
         nomeSerie: turmaAtualizada.nomeSerie,
-        serieId: turmaAtualizada.serieId
+        serieId: turmaAtualizada.serieId,
+        anoSerieTurma: `${turmaAtualizada.nomeSerie} - ${turmaAtualizada.nomeTurma}`,
+        dataAtualizacao: dataAtualizacaoLeitores
       };
     }));
 
@@ -3877,6 +3891,7 @@ export const DataProvider = ({ children }) => {
     const vaiFicarSemTurmas = turmasRestantes.length === 0;
     const nomeTurmaNormalizado = normalizarCampoAcademico(turma.nomeTurma);
     const nomeSerieNormalizado = normalizarCampoAcademico(turma.nomeSerie);
+    const dataAtualizacaoLeitores = new Date().toISOString();
 
     setTurmasAcademicas((prev) => prev.filter((item) => String(item.id) !== String(id)));
 
@@ -3919,7 +3934,8 @@ export const DataProvider = ({ children }) => {
         anoSerieTurma: combinadoSemTurma,
         serieTurma: '',
         turmaSerie: '',
-        serie_turma: ''
+        serie_turma: '',
+        dataAtualizacao: dataAtualizacaoLeitores
       };
     }));
 
