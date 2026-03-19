@@ -12,6 +12,7 @@ const GLOBAL_IDS_MIGRATION_KEY = 'cei_global_ids_migrated_v1';
 const LEGACY_STORAGE_MIGRATION_KEY = 'cei_legacy_storage_migrated_v1';
 const LEGACY_CLIENTES_KEY = 'cei_clientes';
 const LEGACY_TURMAS_KEY = 'cei_turmas_academicas';
+const REMOVED_TURMAS_TOMBSTONES_KEY = 'cei_removed_turmas_tombstones_v1';
 const STORAGE_PRESTADOR = 'cei_nf_prestador_config';
 const STORAGE_PREFEITURA = 'cei_nf_prefeitura_config';
 const DEMO_DEVICE_ID_KEY = 'cei_demo_device_id';
@@ -256,6 +257,7 @@ export const DataProvider = ({ children }) => {
   const clientesRef = useRef([]);
   const patrimonioRef = useRef([]);
   const emprestimosRef = useRef([]);
+  const usuarioAnteriorRef = useRef(null); // Para detectar novo login em outro dispositivo
 
   const dataTypesSync = ['instituicoes', 'usuarios', 'livros', 'clientes', 'patrimonio', 'emprestimos'];
   const localAcademicDataTypes = ['seriesAcademicas', 'turmasAcademicas'];
@@ -766,6 +768,92 @@ export const DataProvider = ({ children }) => {
     } catch (_error) {
       return [];
     }
+  };
+
+  const parseTurmaRemovalTombstones = () => {
+    try {
+      const rawSnapshot = localStorage.getItem(REMOVED_TURMAS_TOMBSTONES_KEY);
+      if (!rawSnapshot) {
+        return [];
+      }
+
+      const parsedSnapshot = JSON.parse(rawSnapshot);
+      return Array.isArray(parsedSnapshot) ? parsedSnapshot.filter((item) => item?.key) : [];
+    } catch (_error) {
+      return [];
+    }
+  };
+
+  const buildRemovedTurmaTombstoneKey = (institutionId, seriesName, turmaName, schoolYear) => {
+    const normalizedInstitutionId = normalizeInstitutionId(institutionId);
+    const normalizedSeriesName = normalizeAcademicText(seriesName);
+    const normalizedTurmaName = normalizeAcademicText(turmaName);
+    const normalizedSchoolYear = String(schoolYear || '').trim();
+
+    if (!normalizedTurmaName) {
+      return '';
+    }
+
+    return `${normalizedInstitutionId ?? 'null'}|${normalizedSeriesName}|${normalizedTurmaName}|${normalizedSchoolYear}`;
+  };
+
+  const upsertTurmaRemovalTombstone = (turmaLike) => {
+    const tombstoneKey = buildRemovedTurmaTombstoneKey(
+      getItemInstitutionRaw(turmaLike),
+      turmaLike?.nomeSerie || turmaLike?.serie,
+      turmaLike?.nomeTurma || turmaLike?.turma,
+      turmaLike?.anoLetivo || turmaLike?.ano || ''
+    );
+
+    if (!tombstoneKey) {
+      return;
+    }
+
+    try {
+      const tombstones = parseTurmaRemovalTombstones().filter((item) => item?.key !== tombstoneKey);
+      tombstones.push({ key: tombstoneKey, removedAt: new Date().toISOString() });
+      localStorage.setItem(
+        REMOVED_TURMAS_TOMBSTONES_KEY,
+        JSON.stringify(tombstones.slice(-200))
+      );
+    } catch (_error) {
+      // Sem ação: o bloqueio por tombstone é melhor esforço.
+    }
+  };
+
+  const clearTurmaRemovalTombstone = (turmaLike) => {
+    const tombstoneKey = buildRemovedTurmaTombstoneKey(
+      getItemInstitutionRaw(turmaLike),
+      turmaLike?.nomeSerie || turmaLike?.serie,
+      turmaLike?.nomeTurma || turmaLike?.turma,
+      turmaLike?.anoLetivo || turmaLike?.ano || ''
+    );
+
+    if (!tombstoneKey) {
+      return;
+    }
+
+    try {
+      const remaining = parseTurmaRemovalTombstones().filter((item) => item?.key !== tombstoneKey);
+      localStorage.setItem(REMOVED_TURMAS_TOMBSTONES_KEY, JSON.stringify(remaining));
+    } catch (_error) {
+      // Sem ação: limpeza de tombstone é melhor esforço.
+    }
+  };
+
+  const hasTurmaRemovalTombstone = (institutionId, seriesName, turmaName, schoolYear) => {
+    const tombstoneKey = buildRemovedTurmaTombstoneKey(
+      institutionId,
+      seriesName,
+      turmaName,
+      schoolYear
+    );
+
+    if (!tombstoneKey) {
+      return false;
+    }
+
+    return parseTurmaRemovalTombstones().some((item) => item?.key === tombstoneKey);
   };
 
   const buildReaderIdentityKey = (reader) => {
@@ -1405,7 +1493,16 @@ export const DataProvider = ({ children }) => {
         turmaRecord = turmasByKey.get(turmaKey) || null;
       }
 
-      if (!turmaRecord && turmaName) {
+      const turmaRemovidaIntencionalmente = !turmaRecord && turmaName
+        ? hasTurmaRemovalTombstone(
+          institutionId,
+          seriesRecord?.nomeSerie || seriesName,
+          turmaName,
+          schoolYear
+        )
+        : false;
+
+      if (!turmaRecord && turmaName && !turmaRemovidaIntencionalmente) {
         const newTurma = {
           id: generateUniqueId(),
           instituicaoId: institutionId ?? 0,
@@ -1428,9 +1525,9 @@ export const DataProvider = ({ children }) => {
       }
 
       const nextSeriesId = seriesRecord ? String(seriesRecord.id) : '';
-      const nextTurmaId = turmaRecord ? String(turmaRecord.id) : '';
+      const nextTurmaId = turmaRemovidaIntencionalmente ? '' : (turmaRecord ? String(turmaRecord.id) : '');
       const nextSeriesName = seriesRecord?.nomeSerie || seriesName;
-      const nextTurmaName = turmaRecord?.nomeTurma || turmaName;
+      const nextTurmaName = turmaRemovidaIntencionalmente ? '' : (turmaRecord?.nomeTurma || turmaName);
       const currentSeriesName = String(reader?.serie || '').trim();
       const currentSeriesLabel = String(reader?.nomeSerie || '').trim();
       const currentTurmaName = String(reader?.turma || '').trim();
@@ -1464,6 +1561,13 @@ export const DataProvider = ({ children }) => {
         readerChanged = true;
       }
 
+      if (
+        turmaRemovidaIntencionalmente &&
+        (currentTurmaId || currentTurmaName || currentTurmaLabel || currentCombinedAcademic)
+      ) {
+        readerChanged = true;
+      }
+
       if (nextCombinedAcademic && !currentCombinedAcademic) {
         readerChanged = true;
       }
@@ -1492,7 +1596,10 @@ export const DataProvider = ({ children }) => {
         turma: nextTurmaName,
         nomeTurma: nextTurmaName,
         turmaId: nextTurmaId,
-        anoSerieTurma: currentCombinedAcademic || nextCombinedAcademic
+        anoSerieTurma: turmaRemovidaIntencionalmente ? nextCombinedAcademic : (currentCombinedAcademic || nextCombinedAcademic),
+        serieTurma: turmaRemovidaIntencionalmente ? '' : reader?.serieTurma,
+        turmaSerie: turmaRemovidaIntencionalmente ? '' : reader?.turmaSerie,
+        serie_turma: turmaRemovidaIntencionalmente ? '' : reader?.serie_turma
       };
     });
 
@@ -2387,6 +2494,40 @@ export const DataProvider = ({ children }) => {
 
     sincronizarInstituicaoComNuvem(instituicaoAtiva, true);
   }, [dadosCarregados, instituicaoAtiva, usuarioLogado?.perfil]);
+
+  // ⭐ Sincronização ao fazer login em novo dispositivo (detecta login diferente)
+  useEffect(() => {
+    if (!dadosCarregados || !isCloudEnabled) return;
+    
+    // Verificar se é um novo login (mesmo usuário voltou a fazer login ou usuário diferente)
+    const usuarioAnterior = usuarioAnteriorRef.current;
+    const usuarioLoginAtual = usuarioLogado?.id ? `${usuarioLogado.id}-${usuarioLogado.login}` : null;
+    const usuarioLoginAnterior = usuarioAnterior?.id ? `${usuarioAnterior.id}-${usuarioAnterior.login}` : null;
+    
+    // Se houve mudança de usuário ou se há novo login
+    if (usuarioLoginAtual && usuarioLoginAtual !== usuarioLoginAnterior) {
+      console.log('🔄 [MULTI-DEVICE] Novo login detectado:', usuarioLogado.nome);
+      console.log('💾 [MULTI-DEVICE] Sincronizando dados para o novo dispositivo...');
+      
+      // Atualizar referência anterior
+      usuarioAnteriorRef.current = usuarioLogado;
+      
+      // Sincronizar instituição logo após novo login
+      if (!instituicaoAtiva || instituicaoAtiva === 0) return;
+      if (usuarioLogado.perfil === 'SuperAdmin') return;
+      
+      // Fazer sync com priority=true para garantir que pull muito dados
+      sincronizarInstituicaoComNuvem(instituicaoAtiva, true).then(() => {
+        console.log('✅ [MULTI-DEVICE] Dados sincronizados para novo dispositivo');
+      }).catch((error) => {
+        console.error('❌ [MULTI-DEVICE] Erro ao sincronizar dados:', error);
+      });
+    } else if (!usuarioLoginAtual && usuarioLoginAnterior) {
+      // Usuário saiu (logout)
+      console.log('🔓 [MULTI-DEVICE] Logout detectado');
+      usuarioAnteriorRef.current = null;
+    }
+  }, [usuarioLogado, dadosCarregados, instituicaoAtiva, isCloudEnabled]);
 
   // Pull periódico para refletir alterações feitas por outros computadores/usuários da mesma escola
   useEffect(() => {
@@ -3813,6 +3954,7 @@ export const DataProvider = ({ children }) => {
     };
 
     setTurmasAcademicas((prev) => [...prev, novaTurma]);
+    clearTurmaRemovalTombstone(novaTurma);
     registrarLog('adicionar', 'series-turmas', `Turma "${novaTurma.nomeTurma}" cadastrada`, {
       turmaId: novaTurma.id,
       serieId: serieResolvida.id
@@ -3841,6 +3983,7 @@ export const DataProvider = ({ children }) => {
     };
 
     setTurmasAcademicas((prev) => prev.map((turma) => String(turma.id) === String(id) ? turmaAtualizada : turma));
+    clearTurmaRemovalTombstone(turmaAtualizada);
 
     const turmaIdAtual = String(id);
     const nomeTurmaAnterior = normalizarCampoAcademico(turmaAtual.nomeTurma);
@@ -3888,11 +4031,16 @@ export const DataProvider = ({ children }) => {
 
     const turmaId = String(id);
     const turmasRestantes = turmasAcademicas.filter((item) => String(item.id) !== turmaId);
-    const vaiFicarSemTurmas = turmasRestantes.length === 0;
+    const instituicaoTurmaId = resolveInstitutionId(getItemInstitutionRaw(turma), instituicaoAtiva);
+    const turmasRestantesDaInstituicao = turmasRestantes.filter((item) => {
+      return resolveInstitutionId(getItemInstitutionRaw(item), instituicaoTurmaId) === instituicaoTurmaId;
+    });
+    const vaiFicarSemTurmas = turmasRestantesDaInstituicao.length === 0;
     const nomeTurmaNormalizado = normalizarCampoAcademico(turma.nomeTurma);
     const nomeSerieNormalizado = normalizarCampoAcademico(turma.nomeSerie);
     const dataAtualizacaoLeitores = new Date().toISOString();
 
+    upsertTurmaRemovalTombstone(turma);
     setTurmasAcademicas((prev) => prev.filter((item) => String(item.id) !== String(id)));
 
     setClientes((prev) => prev.map((cliente) => {

@@ -86,6 +86,43 @@ const isAlunoRelatorio = (cliente) => {
   return false;
 };
 
+const isClienteAtivoRelatorio = (cliente) => cliente?.ativo !== false;
+
+const obterCategoriaLeitorRelatorio = (cliente) => {
+  const tipoNormalizado = normalizarTexto(cliente?.tipo);
+  const categoriaNormalizada = normalizarTexto(cliente?.categoria);
+
+  if (isAlunoRelatorio(cliente)) {
+    return 'Estudante';
+  }
+
+  if (categoriaNormalizada === 'professor' || tipoNormalizado === 'professor') {
+    return 'Professor';
+  }
+
+  if (categoriaNormalizada === 'comunidade' || tipoNormalizado === 'comunidade') {
+    return 'Comunidade';
+  }
+
+  const perfisFuncionais = new Set([
+    'funcionario',
+    'funcionario administrativo',
+    'bibliotecario',
+    'coordenador',
+    'diretor',
+    'gestor',
+    'servidor',
+    'admin',
+    'administrador'
+  ]);
+
+  if (perfisFuncionais.has(categoriaNormalizada) || perfisFuncionais.has(tipoNormalizado)) {
+    return 'Funcionário';
+  }
+
+  return String(cliente?.categoria || cliente?.tipo || 'Sem categoria').trim() || 'Sem categoria';
+};
+
 const obterChaveTurmaEmprestimo = (emprestimo) => {
   const turmaId = String(emprestimo?.turmaId || '').trim();
   if (turmaId) {
@@ -310,12 +347,12 @@ function RelatoriosPage() {
         cpf: c.cpf || 'N/A',
         email: c.email || 'N/A',
         telefone: c.telefone || 'N/A',
-        status: c.ativo ? 'Ativo' : 'Inativo'
+        status: isClienteAtivoRelatorio(c) ? 'Ativo' : 'Inativo'
       })),
       resumo: {
         total: clientes.length,
-        ativos: clientes.filter(c => c.ativo).length,
-        inativos: clientes.filter(c => !c.ativo).length
+        ativos: clientes.filter(isClienteAtivoRelatorio).length,
+        inativos: clientes.filter((c) => !isClienteAtivoRelatorio(c)).length
       }
     };
   };
@@ -722,9 +759,15 @@ function RelatoriosPage() {
   const getRelatorioLeitoresCadastrados = () => {
     const categoriasOrdem = ['Estudante', 'Professor', 'Funcionário', 'Comunidade'];
 
-    const todosOrdenados = [...clientes].sort((a, b) => {
-      const catA = categoriasOrdem.indexOf(a.categoria || '');
-      const catB = categoriasOrdem.indexOf(b.categoria || '');
+    const leitoresNormalizados = clientes.map((cliente) => ({
+      ...cliente,
+      ativoRelatorio: isClienteAtivoRelatorio(cliente),
+      categoriaRelatorio: obterCategoriaLeitorRelatorio(cliente)
+    }));
+
+    const todosOrdenados = [...leitoresNormalizados].sort((a, b) => {
+      const catA = categoriasOrdem.indexOf(a.categoriaRelatorio || '');
+      const catB = categoriasOrdem.indexOf(b.categoriaRelatorio || '');
       const iA = catA >= 0 ? catA : 99;
       const iB = catB >= 0 ? catB : 99;
       if (iA !== iB) return iA - iB;
@@ -740,7 +783,7 @@ function RelatoriosPage() {
     // Build section map
     const secaoMap = new Map();
     todosOrdenados.forEach((c) => {
-      const cat = c.categoria || 'Sem categoria';
+      const cat = c.categoriaRelatorio || 'Sem categoria';
       if (!secaoMap.has(cat)) secaoMap.set(cat, []);
       secaoMap.get(cat).push(c);
     });
@@ -799,11 +842,33 @@ function RelatoriosPage() {
       return {
         num: i + 1,
         nome: c.nome,
-        categoria: c.categoria || '-',
+        categoria: c.categoriaRelatorio || '-',
         tipo: c.tipo || '-',
         matricula: c.matricula || '-',
         serieTurma: info.label || '-'
       };
+    });
+
+    const resumo = leitoresNormalizados.reduce((acc, cliente) => {
+      acc.total += 1;
+
+      if (cliente.ativoRelatorio) {
+        acc.ativos += 1;
+      }
+
+      if (cliente.categoriaRelatorio === 'Estudante') acc.estudantes += 1;
+      if (cliente.categoriaRelatorio === 'Professor') acc.professores += 1;
+      if (cliente.categoriaRelatorio === 'Funcionário') acc.funcionarios += 1;
+      if (cliente.categoriaRelatorio === 'Comunidade') acc.comunidade += 1;
+
+      return acc;
+    }, {
+      total: 0,
+      ativos: 0,
+      estudantes: 0,
+      professores: 0,
+      funcionarios: 0,
+      comunidade: 0
     });
 
     return {
@@ -811,14 +876,7 @@ function RelatoriosPage() {
       colunas: ['Nº', 'Nome', 'Categoria', 'Tipo', 'Matrícula', 'Série/Turma'],
       dados,
       secoes,
-      resumo: {
-        total: clientes.length,
-        ativos: clientes.filter(c => c.ativo).length,
-        estudantes: clientes.filter(c => c.categoria === 'Estudante').length,
-        professores: clientes.filter(c => c.categoria === 'Professor').length,
-        funcionarios: clientes.filter(c => c.categoria === 'Funcionário').length,
-        comunidade: clientes.filter(c => c.categoria === 'Comunidade').length
-      }
+      resumo
     };
   };
 
