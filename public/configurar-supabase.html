@@ -24,7 +24,9 @@
 <body>
   <div class="wrap">
     <h1>Configurar Supabase (sem código)</h1>
-    <p class="small">Use esta tela para configurar a nuvem sem editar arquivos. A configuração fica salva neste navegador.</p>
+    <p class="small">Use esta tela para configurar a nuvem sem editar arquivos. A configuracao fica salva apenas neste navegador/dispositivo.</p>
+
+    <p class="small"><strong>Para todos os dispositivos:</strong> preencha o arquivo <code>public/supabase-runtime-config.js</code> no deploy ou configure <code>.env.local</code> antes do build. O localStorage desta tela nao sincroniza a configuracao entre aparelhos.</p>
 
     <label for="url">Project URL</label>
     <input id="url" placeholder="https://SEU-PROJETO.supabase.co" />
@@ -41,7 +43,7 @@
     <div id="msg"></div>
 
     <hr style="margin:20px 0; border:none; border-top:1px solid #e5e7eb;" />
-    <p class="small">Depois de salvar, abra o sistema em <code>/cei-backend</code> e recarregue a página.</p>
+    <p class="small">Depois de salvar, abra o sistema e recarregue a pagina. Se outros dispositivos ainda ficarem sem dados, faltou configurar a nuvem de forma compartilhada no deploy.</p>
   </div>
 
   <script>

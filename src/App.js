@@ -39,6 +39,7 @@ import SeriesTurmasPage from './pages/SeriesTurmasPage';
 import GerenciarUsuariosPage from './pages/GerenciarUsuariosPage';
 import RelatorioUsuariosPage from './pages/RelatorioUsuariosPage';
 import ConfiguracoesPage from './pages/ConfiguracoesPage';
+import ConfiguracoesNuvemPage from './pages/ConfiguracoesNuvemPage';
 
 const theme = createTheme({
   palette: {
@@ -76,7 +77,8 @@ const ROUTE_TITLES = {
   '/notas-fiscais': 'Notas Fiscais',
   '/gerenciar-usuarios': 'Gerenciar Usuários',
   '/relatorio-usuarios': 'Relatório de Usuários',
-  '/configuracoes': 'Configurações'
+  '/configuracoes': 'Configurações',
+  '/configuracoes/nuvem': 'Nuvem e Sincronização'
 };
 
 function PrivateRoute({ children }) {
@@ -116,6 +118,13 @@ function PrivateRoute({ children }) {
     if (
       location.pathname === '/series-turmas' &&
       permissoesUsuario.includes('/clientes')
+    ) {
+      return true;
+    }
+
+    if (
+      location.pathname.startsWith('/configuracoes/') &&
+      permissoesUsuario.includes('/configuracoes')
     ) {
       return true;
     }
@@ -205,6 +214,7 @@ function AppRoutes() {
       <Route path="/gerenciar-usuarios" element={<PrivateRoute><GerenciarUsuariosPage /></PrivateRoute>} />
       <Route path="/relatorio-usuarios" element={<PrivateRoute><RelatorioUsuariosPage /></PrivateRoute>} />
       <Route path="/configuracoes" element={<PrivateRoute><ConfiguracoesPage /></PrivateRoute>} />
+      <Route path="/configuracoes/nuvem" element={<PrivateRoute><ConfiguracoesNuvemPage /></PrivateRoute>} />
     </Routes>
   );
 }

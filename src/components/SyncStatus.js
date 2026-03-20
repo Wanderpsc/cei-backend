@@ -7,14 +7,28 @@ import CloudSyncIcon from '@mui/icons-material/CloudSync';
 import SyncIcon from '@mui/icons-material/Sync';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import { useOnlineStatus } from '../hooks/useOnlineStatus';
+import { useData } from '../context/DataContext';
 import { getSyncStatus } from '../services/syncService';
-import { isCloudEnabled } from '../services/supabaseClient';
+import { cloudConfigScope, isCloudEnabled } from '../services/supabaseClient';
 
 export default function SyncStatus() {
   const isOnline = useOnlineStatus();
+  const { sincronizarNuvemAgora } = useData();
   const [syncing, setSyncing] = useState(false);
   const [lastSync, setLastSync] = useState(null);
   const [cloudConnected, setCloudConnected] = useState(false);
+
+  const getCloudScopeHint = () => {
+    if (cloudConfigScope === 'browser-local') {
+      return ' Credenciais da nuvem foram salvas apenas neste navegador.';
+    }
+
+    if (cloudConfigScope === 'shared') {
+      return ' Configuracao compartilhada para todos os dispositivos desta implantacao.';
+    }
+
+    return ' Dados ficam apenas neste navegador/dispositivo.';
+  };
 
   const updateLastSync = () => {
     const lastSyncDate = localStorage.getItem('cei_last_sync');
@@ -68,9 +82,9 @@ export default function SyncStatus() {
     if (!isCloudEnabled) {
       return {
         icon: <CloudOffIcon />,
-        label: 'Nuvem off',
+        label: 'Somente local',
         color: 'warning',
-        tooltip: 'Supabase não configurado - funcionamento apenas local'
+        tooltip: `Supabase nao configurado.${getCloudScopeHint()}`
       };
     }
 
@@ -97,7 +111,7 @@ export default function SyncStatus() {
         icon: <CloudOffIcon />,
         label: 'Nuvem indisponível',
         color: 'error',
-        tooltip: 'Sem conexão com Supabase - verifique projeto/credenciais/rede'
+        tooltip: `Sem conexao com Supabase - verifique projeto, credenciais e rede.${getCloudScopeHint()}`
       };
     }
 
@@ -108,21 +122,21 @@ export default function SyncStatus() {
           icon: <CloudDoneIcon />,
           label: 'Sync OK',
           color: 'success',
-          tooltip: `Nuvem conectada • Última sincronização: ${lastSync.toLocaleString('pt-BR')}`
+          tooltip: `Nuvem conectada • Ultima sincronizacao: ${lastSync.toLocaleString('pt-BR')}.${getCloudScopeHint()}`
         };
       } else if (diffMinutes < 60) {
         return {
           icon: <CloudSyncIcon />,
           label: `Sync há ${diffMinutes}min`,
           color: 'success',
-          tooltip: `Nuvem conectada • Última sincronização: ${lastSync.toLocaleString('pt-BR')}`
+          tooltip: `Nuvem conectada • Ultima sincronizacao: ${lastSync.toLocaleString('pt-BR')}.${getCloudScopeHint()}`
         };
       } else {
         return {
           icon: <CloudQueueIcon />,
           label: 'Sync atrasado',
           color: 'warning',
-          tooltip: `Nuvem conectada • Última sincronização: ${lastSync.toLocaleString('pt-BR')}`
+          tooltip: `Nuvem conectada • Ultima sincronizacao: ${lastSync.toLocaleString('pt-BR')}.${getCloudScopeHint()}`
         };
       }
     }
@@ -131,17 +145,21 @@ export default function SyncStatus() {
       icon: <CloudQueueIcon />,
       label: 'Aguardando',
       color: 'default',
-      tooltip: 'Nuvem conectada • aguardando primeira sincronização'
+      tooltip: `Nuvem conectada • aguardando primeira sincronizacao.${getCloudScopeHint()}`
     };
   };
 
   const status = getStatusInfo();
 
-  const handleManualSync = () => {
-    if (syncing) return;
-    window.dispatchEvent(new Event('sync-required'));
-    updateCloudStatus();
-    updateLastSync();
+  const handleManualSync = async () => {
+    if (syncing || !isCloudEnabled) return;
+
+    try {
+      await sincronizarNuvemAgora();
+    } finally {
+      updateCloudStatus();
+      updateLastSync();
+    }
   };
 
   return (
@@ -163,13 +181,13 @@ export default function SyncStatus() {
         />
       </Tooltip>
 
-      <Tooltip title={syncing ? 'Sincronização em andamento' : 'Sincronizar agora'} arrow>
+      <Tooltip title={syncing ? 'Sincronizacao em andamento' : isCloudEnabled ? 'Sincronizar agora' : 'Ative a nuvem para sincronizar entre dispositivos'} arrow>
         <span>
           <IconButton
             size="small"
             color="inherit"
             onClick={handleManualSync}
-            disabled={syncing}
+            disabled={syncing || !isCloudEnabled}
             sx={{
               color: 'white',
               background: 'rgba(255, 255, 255, 0.12)',

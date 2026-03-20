@@ -8,27 +8,96 @@
 
 import { createClient } from '@supabase/supabase-js';
 
-const readRuntimeConfig = () => {
+const normalizeConfigValue = (value) => String(value || '').trim();
+
+const isValidSupabaseConfig = (url, anonKey) => {
+  const normalizedUrl = normalizeConfigValue(url);
+  const normalizedAnonKey = normalizeConfigValue(anonKey);
+
+  return Boolean(
+    normalizedUrl &&
+    normalizedAnonKey &&
+    normalizedUrl !== 'https://seu-projeto.supabase.co' &&
+    normalizedAnonKey !== 'sua-chave-publica-aqui' &&
+    normalizedUrl.includes('supabase.co')
+  );
+};
+
+const readSharedRuntimeConfig = () => {
+  if (typeof window === 'undefined') {
+    return { url: '', anonKey: '' };
+  }
+
+  const sharedConfig = window.CEI_RUNTIME_CONFIG || {};
+
+  return {
+    url: normalizeConfigValue(sharedConfig.supabaseUrl || sharedConfig.supabase_url),
+    anonKey: normalizeConfigValue(sharedConfig.supabaseAnonKey || sharedConfig.supabase_anon_key)
+  };
+};
+
+const readBrowserLocalConfig = () => {
   if (typeof window === 'undefined') {
     return { url: '', anonKey: '' };
   }
 
   return {
-    url: window.localStorage.getItem('cei_supabase_url') || '',
-    anonKey: window.localStorage.getItem('cei_supabase_anon_key') || ''
+    url: normalizeConfigValue(window.localStorage.getItem('cei_supabase_url')),
+    anonKey: normalizeConfigValue(window.localStorage.getItem('cei_supabase_anon_key'))
+  };
+};
+
+const resolveCloudConfig = () => {
+  const sharedRuntimeConfig = readSharedRuntimeConfig();
+  if (isValidSupabaseConfig(sharedRuntimeConfig.url, sharedRuntimeConfig.anonKey)) {
+    return {
+      url: sharedRuntimeConfig.url,
+      anonKey: sharedRuntimeConfig.anonKey,
+      source: 'runtime-file'
+    };
+  }
+
+  const envConfig = {
+    url: normalizeConfigValue(process.env.REACT_APP_SUPABASE_URL),
+    anonKey: normalizeConfigValue(process.env.REACT_APP_SUPABASE_ANON_KEY)
+  };
+  if (isValidSupabaseConfig(envConfig.url, envConfig.anonKey)) {
+    return {
+      ...envConfig,
+      source: 'env'
+    };
+  }
+
+  const browserLocalConfig = readBrowserLocalConfig();
+  if (isValidSupabaseConfig(browserLocalConfig.url, browserLocalConfig.anonKey)) {
+    return {
+      url: browserLocalConfig.url,
+      anonKey: browserLocalConfig.anonKey,
+      source: 'localStorage'
+    };
+  }
+
+  return {
+    url: '',
+    anonKey: '',
+    source: 'none'
   };
 };
 
 // Configuração do Supabase
-const runtimeConfig = readRuntimeConfig();
-const supabaseUrl = runtimeConfig.url || process.env.REACT_APP_SUPABASE_URL || '';
-const supabaseAnonKey = runtimeConfig.anonKey || process.env.REACT_APP_SUPABASE_ANON_KEY || '';
+const resolvedCloudConfig = resolveCloudConfig();
+const supabaseUrl = resolvedCloudConfig.url;
+const supabaseAnonKey = resolvedCloudConfig.anonKey;
+
+export const cloudConfigSource = resolvedCloudConfig.source;
+export const cloudConfigScope = cloudConfigSource === 'localStorage'
+  ? 'browser-local'
+  : cloudConfigSource === 'none'
+    ? 'none'
+    : 'shared';
 
 // Verificar se as credenciais estão configuradas
-const isSupabaseConfigured = supabaseUrl && supabaseAnonKey && 
-  supabaseUrl !== 'https://seu-projeto.supabase.co' &&
-  supabaseAnonKey !== 'sua-chave-publica-aqui' &&
-  supabaseUrl.includes('supabase.co');
+const isSupabaseConfigured = isValidSupabaseConfig(supabaseUrl, supabaseAnonKey);
 
 // Criar cliente Supabase (se configurado)
 export const supabase = isSupabaseConfigured 
@@ -53,10 +122,9 @@ export const isCloudEnabled = isSupabaseConfigured;
 
 // Log de status
 if (isSupabaseConfigured) {
-  const source = runtimeConfig.url ? 'runtime/localStorage' : 'env';
-  console.log(`☁️ Supabase configurado (${source}):`, supabaseUrl);
+  console.log(`☁️ Supabase configurado (${cloudConfigSource}):`, supabaseUrl);
 } else {
-  console.log('💾 Modo LocalStorage (Supabase não configurado)');
+  console.log('💾 Modo local apenas neste navegador/dispositivo (Supabase não configurado)');
 }
 
 /**

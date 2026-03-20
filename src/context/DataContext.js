@@ -2009,6 +2009,26 @@ export const DataProvider = ({ children }) => {
     }
   };
 
+  const sincronizarNuvemAgora = async ({ somenteBaixar = false } = {}) => {
+    if (!isCloudEnabled || !instituicaoAtiva || instituicaoAtiva === 0 || usuarioLogado?.perfil === 'SuperAdmin') {
+      await sincronizarDados();
+      return;
+    }
+
+    if (sincronizando || !dadosCarregados) {
+      return;
+    }
+
+    try {
+      setSincronizando(true);
+      window.dispatchEvent(new Event('sync-start'));
+      await sincronizarInstituicaoComNuvem(instituicaoAtiva, !somenteBaixar);
+    } finally {
+      setSincronizando(false);
+      window.dispatchEvent(new Event('sync-end'));
+    }
+  };
+
   const rehidratarEstadoDoLocalStorageSeNecessario = () => {
     try {
       const rawSnapshot = localStorage.getItem('cei_data');
@@ -5100,6 +5120,7 @@ export const DataProvider = ({ children }) => {
     registrarLog,
     registrarAcessoPagina,
     logAtividades,
+    sincronizarNuvemAgora,
     
     // Funções Gerenciamento de Usuários
     adicionarUsuario,

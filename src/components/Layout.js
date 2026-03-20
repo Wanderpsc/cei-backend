@@ -47,6 +47,7 @@ import InventoryIcon from '@mui/icons-material/Inventory';
 import AssignmentIcon from '@mui/icons-material/Assignment';
 import HistoryEduIcon from '@mui/icons-material/HistoryEdu';
 import FactCheckIcon from '@mui/icons-material/FactCheck';
+import CloudIcon from '@mui/icons-material/Cloud';
 
 const drawerWidth = 240;
 const mobileDrawerWidth = 200;
@@ -77,6 +78,7 @@ export default function Layout({ children }) {
     return [
       { text: 'Dashboard', icon: <DashboardIcon />, path: '/' },
       { text: 'Configurações', icon: <SettingsIcon />, path: '/configuracoes' },
+      { text: 'Nuvem e Sync', icon: <CloudIcon />, path: '/configuracoes/nuvem' },
       { text: 'Gerenciar Usuários', icon: <PeopleIcon />, path: '/gerenciar-usuarios' },
       { text: 'Relatório Usuários', icon: <AssessmentIcon />, path: '/relatorio-usuarios' },
       { text: 'Financeiro', icon: <AccountBalanceWalletIcon />, path: '/financeiro' },

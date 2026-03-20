@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { Link as RouterLink } from 'react-router-dom';
 import Layout from '../components/Layout';
 import {
   Box,
@@ -21,7 +22,8 @@ import {
   Image as ImageIcon,
   Delete,
   School,
-  CheckCircle
+  CheckCircle,
+  Cloud
 } from '@mui/icons-material';
 import { useData } from '../context/DataContext';
 
@@ -175,6 +177,18 @@ export default function ConfiguracoesPage() {
           {erro}
         </Alert>
       )}
+
+      <Alert
+        severity="info"
+        sx={{ mb: 3 }}
+        action={
+          <Button component={RouterLink} to="/configuracoes/nuvem" color="inherit" size="small" startIcon={<Cloud />}>
+            Abrir Nuvem
+          </Button>
+        }
+      >
+        Acesso multi-dispositivo depende da configuracao da nuvem. Use a area "Nuvem" para verificar se os dados estao sincronizando entre aparelhos.
+      </Alert>
 
       <Grid container spacing={3}>
         {/* Configurações de Cabeçalho */}

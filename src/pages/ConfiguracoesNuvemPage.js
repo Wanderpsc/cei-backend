@@ -1,12 +1,12 @@
 /**
  * ═══════════════════════════════════════════════════════════════════════════
- * PÁGINA DE CONFIGURAÇÕES NUVEM - CEI Sistema
- * Configuração e monitoramento do Supabase
+ * PAGINA DE CONFIGURACOES NUVEM - CEI Sistema
+ * Configuracao e monitoramento do Supabase
  * © 2026 Wander Pires Silva Coelho
  * ═══════════════════════════════════════════════════════════════════════════
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Box,
   Card,
@@ -21,41 +21,53 @@ import {
   Divider,
   List,
   ListItem,
-  ListItemText,
   ListItemIcon,
+  ListItemText,
   Switch,
   FormControlLabel
 } from '@mui/material';
 import {
-  Cloud,
-  CloudOff,
-  CloudDone,
-  Sync,
-  Storage,
-  Security,
-  Speed,
   Backup,
   CheckCircle,
-  Error,
+  CloudDone,
+  CloudOff,
+  Launch,
+  Security,
+  Speed,
+  Storage,
+  Sync,
   Warning
 } from '@mui/icons-material';
 import Layout from '../components/Layout';
-import { isCloudEnabled, checkConnection } from '../services/supabaseClient';
-import { getSyncStatus, backupToCloud, restoreFromCloud } from '../services/syncService';
 import { useData } from '../context/DataContext';
+import { getSyncStatus } from '../services/syncService';
+import { cloudConfigScope, cloudConfigSource, isCloudEnabled } from '../services/supabaseClient';
 
 const ConfiguracoesNuvemPage = () => {
-  const { livros, leitores, emprestimos, patrimonio, usuarios, currentInstituicao } = useData();
+  const {
+    livros,
+    clientes,
+    emprestimos,
+    patrimonio,
+    instituicoes,
+    instituicaoAtiva,
+    sincronizarNuvemAgora
+  } = useData();
+
   const [cloudStatus, setCloudStatus] = useState(null);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
-  const [autoSyncEnabled, setAutoSyncEnabled] = useState(true);
   const [lastSync, setLastSync] = useState(null);
+
+  const currentInstituicao = instituicoes.find(
+    (instituicao) => Number(instituicao?.id) === Number(instituicaoAtiva)
+  ) || null;
+  const publicBasePath = process.env.PUBLIC_URL || '';
+  const browserConfigUrl = `${publicBasePath}/configurar-supabase.html`;
 
   useEffect(() => {
     checkCloudStatus();
-    
-    // Verificar status a cada 30 segundos
+
     const interval = setInterval(checkCloudStatus, 30000);
     return () => clearInterval(interval);
   }, []);
@@ -65,14 +77,13 @@ const ConfiguracoesNuvemPage = () => {
     try {
       const status = await getSyncStatus();
       setCloudStatus(status);
-      
-      // Carregar última sincronização
+
       const lastSyncTime = localStorage.getItem('cei_last_sync');
       if (lastSyncTime) {
         setLastSync(new Date(lastSyncTime));
       }
     } catch (error) {
-      console.error('Erro ao verificar status:', error);
+      console.error('Erro ao verificar status da nuvem:', error);
     } finally {
       setLoading(false);
     }
@@ -81,47 +92,32 @@ const ConfiguracoesNuvemPage = () => {
   const handleSync = async () => {
     setSyncing(true);
     try {
-      const allData = {
-        livros,
-        leitores,
-        emprestimos,
-        patrimonio,
-        usuarios
-      };
-
-      const result = await backupToCloud(allData, currentInstituicao?.id || 0);
-      
-      if (result.success) {
-        alert('✅ Sincronização concluída com sucesso!');
-        localStorage.setItem('cei_last_sync', new Date().toISOString());
-        setLastSync(new Date());
-      } else {
-        alert('❌ Erro na sincronização: ' + result.error);
-      }
+      await sincronizarNuvemAgora();
+      localStorage.setItem('cei_last_sync', new Date().toISOString());
+      setLastSync(new Date());
+      await checkCloudStatus();
+      alert('✅ Sincronizacao concluida com sucesso!');
     } catch (error) {
-      alert('❌ Erro ao sincronizar: ' + error.message);
+      alert(`❌ Erro ao sincronizar: ${error.message}`);
     } finally {
       setSyncing(false);
     }
   };
 
-  const handleRestore = async () => {
-    if (!window.confirm('⚠️ Deseja restaurar os dados da nuvem? Isso substituirá os dados locais.')) {
+  const handleDownloadFromCloud = async () => {
+    if (!window.confirm('Deseja baixar e mesclar os dados da nuvem com este dispositivo?')) {
       return;
     }
 
     setSyncing(true);
     try {
-      const result = await restoreFromCloud(currentInstituicao?.id || 0);
-      
-      if (result.success) {
-        alert('✅ Dados restaurados com sucesso! Recarregue a página.');
-        window.location.reload();
-      } else {
-        alert('❌ Erro na restauração: ' + result.error);
-      }
+      await sincronizarNuvemAgora({ somenteBaixar: true });
+      localStorage.setItem('cei_last_sync', new Date().toISOString());
+      setLastSync(new Date());
+      await checkCloudStatus();
+      alert('✅ Dados da nuvem baixados e mesclados com sucesso!');
     } catch (error) {
-      alert('❌ Erro ao restaurar: ' + error.message);
+      alert(`❌ Erro ao baixar dados da nuvem: ${error.message}`);
     } finally {
       setSyncing(false);
     }
@@ -144,16 +140,31 @@ const ConfiguracoesNuvemPage = () => {
   const getStatusText = () => {
     if (!cloudStatus) return 'Verificando...';
     if (cloudStatus.connected) return 'Conectado';
-    if (cloudStatus.enabled) return 'Offline';
-    return 'Não configurado';
+    if (cloudStatus.enabled) return 'Configurado sem conexao';
+    return 'Nao configurado';
   };
 
-  const totalRecords = livros.length + leitores.length + emprestimos.length + patrimonio.length;
+  const getConfigSourceLabel = () => {
+    if (cloudConfigSource === 'runtime-file') {
+      return 'Arquivo compartilhado do deploy';
+    }
+
+    if (cloudConfigSource === 'env') {
+      return 'Variaveis de ambiente';
+    }
+
+    if (cloudConfigSource === 'localStorage') {
+      return 'Somente este navegador';
+    }
+
+    return 'Nao configurado';
+  };
+
+  const totalRecords = livros.length + clientes.length + emprestimos.length + patrimonio.length;
 
   return (
-    <Layout title="Configurações de Nuvem">
+    <Layout title="Configuracoes de Nuvem">
       <Box sx={{ p: 3 }}>
-        {/* Status Card */}
         <Card sx={{ mb: 3 }}>
           <CardContent>
             <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
@@ -161,10 +172,33 @@ const ConfiguracoesNuvemPage = () => {
               <Typography variant="h5" sx={{ ml: 2, flexGrow: 1 }}>
                 Status da Nuvem
               </Typography>
-              <Chip 
-                label={getStatusText()}
-                color={getStatusColor()}
-                icon={getStatusIcon()}
+              <Chip label={getStatusText()} color={getStatusColor()} icon={getStatusIcon()} />
+            </Box>
+
+            <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 2 }}>
+              <Chip label={`Fonte: ${getConfigSourceLabel()}`} variant="outlined" />
+              {currentInstituicao && (
+                <Chip
+                  label={`Instituicao: ${currentInstituicao.nomeInstituicao || currentInstituicao.nome || currentInstituicao.id}`}
+                  variant="outlined"
+                />
+              )}
+              <Chip
+                label={
+                  cloudConfigScope === 'shared'
+                    ? 'Compartilhada entre dispositivos'
+                    : cloudConfigScope === 'browser-local'
+                      ? 'Configuracao local deste navegador'
+                      : 'Sem configuracao de nuvem'
+                }
+                color={
+                  cloudConfigScope === 'shared'
+                    ? 'success'
+                    : cloudConfigScope === 'browser-local'
+                      ? 'warning'
+                      : 'default'
+                }
+                variant="outlined"
               />
             </Box>
 
@@ -175,46 +209,47 @@ const ConfiguracoesNuvemPage = () => {
             ) : (
               <>
                 {!isCloudEnabled && (
-                  <Alert severity="info" sx={{ mb: 2 }}>
+                  <Alert severity="warning" sx={{ mb: 2 }}>
                     <Typography variant="body2" sx={{ fontWeight: 'bold', mb: 1 }}>
-                      💾 Modo LocalStorage Ativo
+                      Dados apenas neste navegador
                     </Typography>
                     <Typography variant="body2" sx={{ mb: 2 }}>
-                      O sistema está funcionando apenas com armazenamento local. 
-                      Para ativar a sincronização em nuvem:
+                      Sem Supabase configurado, os dados ficam somente neste aparelho. Por isso um dispositivo pode ter registros e outro abrir vazio.
                     </Typography>
                     <ol style={{ margin: 0, paddingLeft: 20 }}>
-                      <li>Crie uma conta em: <a href="https://supabase.com" target="_blank" rel="noopener noreferrer">supabase.com</a></li>
-                      <li>Crie um novo projeto chamado "cei-sistema"</li>
-                      <li>Copie as credenciais para o arquivo <code>.env.local</code></li>
-                      <li>Reinicie o sistema</li>
+                      <li>Crie ou use seu projeto em <a href="https://supabase.com" target="_blank" rel="noopener noreferrer">supabase.com</a></li>
+                      <li>Preencha <code>public/supabase-runtime-config.js</code> no deploy para valer em todos os dispositivos</li>
+                      <li>Ou configure <code>.env.local</code> antes do build</li>
+                      <li>Se quiser testar so neste aparelho, use o configurador deste navegador</li>
                     </ol>
-                    <Typography variant="body2" sx={{ mt: 2 }}>
-                      📖 Documentação completa: <code>IMPLEMENTACAO_SUPABASE.md</code>
-                    </Typography>
+                  </Alert>
+                )}
+
+                {cloudConfigSource === 'localStorage' && (
+                  <Alert severity="warning" sx={{ mb: 2 }}>
+                    A nuvem foi configurada apenas neste navegador. Outros dispositivos so acessarao os mesmos dados se a configuracao for movida para <code>public/supabase-runtime-config.js</code> ou para as variaveis de ambiente do build.
                   </Alert>
                 )}
 
                 {cloudStatus?.connected && (
                   <Alert severity="success" sx={{ mb: 2 }}>
-                    ✅ Conectado ao Supabase. Sincronização automática ativa.
+                    Supabase conectado. Sincronizacao automatica ativa.
                   </Alert>
                 )}
 
                 {cloudStatus?.enabled && !cloudStatus?.connected && (
                   <Alert severity="warning" sx={{ mb: 2 }}>
-                    ⚠️ Supabase configurado mas sem conexão. Verifique sua internet.
+                    Supabase configurado, mas sem conexao. Verifique internet, URL e chave.
                   </Alert>
                 )}
 
-                {/* Estatísticas */}
                 <Grid container spacing={2} sx={{ mt: 2 }}>
                   <Grid item xs={12} sm={6} md={3}>
                     <Paper sx={{ p: 2, textAlign: 'center' }}>
                       <Storage sx={{ fontSize: 40, color: 'primary.main', mb: 1 }} />
                       <Typography variant="h4">{totalRecords}</Typography>
                       <Typography variant="body2" color="text.secondary">
-                        Registros Totais
+                        Registros totais
                       </Typography>
                     </Paper>
                   </Grid>
@@ -232,7 +267,7 @@ const ConfiguracoesNuvemPage = () => {
                   <Grid item xs={12} sm={6} md={3}>
                     <Paper sx={{ p: 2, textAlign: 'center' }}>
                       <Security sx={{ fontSize: 40, color: 'info.main', mb: 1 }} />
-                      <Typography variant="h4">{leitores.length}</Typography>
+                      <Typography variant="h4">{clientes.length}</Typography>
                       <Typography variant="body2" color="text.secondary">
                         Leitores
                       </Typography>
@@ -244,39 +279,48 @@ const ConfiguracoesNuvemPage = () => {
                       <Backup sx={{ fontSize: 40, color: 'warning.main', mb: 1 }} />
                       <Typography variant="h4">{emprestimos.length}</Typography>
                       <Typography variant="body2" color="text.secondary">
-                        Empréstimos
+                        Emprestimos
                       </Typography>
                     </Paper>
                   </Grid>
                 </Grid>
 
-                {/* Última Sincronização */}
                 {lastSync && (
                   <Box sx={{ mt: 3, p: 2, bgcolor: 'background.default', borderRadius: 1 }}>
                     <Typography variant="body2" color="text.secondary">
-                      Última sincronização: {lastSync.toLocaleString('pt-BR')}
+                      Ultima sincronizacao: {lastSync.toLocaleString('pt-BR')}
                     </Typography>
                   </Box>
                 )}
 
-                {/* Ações */}
                 <Box sx={{ mt: 3, display: 'flex', gap: 2, flexWrap: 'wrap' }}>
                   <Button
                     variant="contained"
                     startIcon={syncing ? <CircularProgress size={20} /> : <Sync />}
                     onClick={handleSync}
-                    disabled={!isCloudEnabled || syncing}
+                    disabled={syncing || !currentInstituicao}
                   >
-                    {syncing ? 'Sincronizando...' : 'Sincronizar Agora'}
+                    {syncing ? 'Sincronizando...' : 'Sincronizar agora'}
                   </Button>
 
                   <Button
                     variant="outlined"
                     startIcon={<CloudDone />}
-                    onClick={handleRestore}
-                    disabled={!isCloudEnabled || syncing}
+                    onClick={handleDownloadFromCloud}
+                    disabled={syncing || !isCloudEnabled || !currentInstituicao}
                   >
-                    Restaurar da Nuvem
+                    Baixar da nuvem
+                  </Button>
+
+                  <Button
+                    variant="outlined"
+                    startIcon={<Launch />}
+                    component="a"
+                    href={browserConfigUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Configurar neste navegador
                   </Button>
 
                   <Button
@@ -284,33 +328,34 @@ const ConfiguracoesNuvemPage = () => {
                     startIcon={<Backup />}
                     onClick={() => window.open('https://supabase.com/dashboard', '_blank')}
                   >
-                    Abrir Dashboard
+                    Abrir dashboard
                   </Button>
                 </Box>
 
-                {/* Configurações Adicionais */}
+                <Paper sx={{ mt: 3, p: 2, bgcolor: 'background.default' }}>
+                  <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                    Ativacao para qualquer dispositivo
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Para os dados aparecerem de qualquer lugar, a configuracao da nuvem precisa estar compartilhada no deploy. O arquivo indicado e <code>public/supabase-runtime-config.js</code>. Salvar credenciais no localStorage resolve apenas neste navegador.
+                  </Typography>
+                </Paper>
+
                 <Divider sx={{ my: 3 }} />
 
                 <Typography variant="h6" sx={{ mb: 2 }}>
-                  Configurações de Sincronização
+                  Configuracoes de sincronizacao
                 </Typography>
 
                 <FormControlLabel
-                  control={
-                    <Switch 
-                      checked={autoSyncEnabled} 
-                      onChange={(e) => setAutoSyncEnabled(e.target.checked)}
-                      disabled={!isCloudEnabled}
-                    />
-                  }
-                  label="Sincronização automática (a cada 5 minutos)"
+                  control={<Switch checked disabled />}
+                  label="Sincronizacao automatica habilitada pelo sistema"
                 />
 
-                {/* Benefícios */}
                 <Divider sx={{ my: 3 }} />
 
                 <Typography variant="h6" sx={{ mb: 2 }}>
-                  Benefícios da Nuvem Supabase
+                  Beneficios da nuvem Supabase
                 </Typography>
 
                 <List>
@@ -319,7 +364,7 @@ const ConfiguracoesNuvemPage = () => {
                       <CheckCircle color="success" />
                     </ListItemIcon>
                     <ListItemText
-                      primary="Acesso Multi-dispositivo"
+                      primary="Acesso multi-dispositivo"
                       secondary="Acesse seus dados de qualquer lugar"
                     />
                   </ListItem>
@@ -328,8 +373,8 @@ const ConfiguracoesNuvemPage = () => {
                       <CheckCircle color="success" />
                     </ListItemIcon>
                     <ListItemText
-                      primary="Backup Automático"
-                      secondary="Backup diário na nuvem"
+                      primary="Backup automatico"
+                      secondary="Persistencia em nuvem para evitar perda por dispositivo"
                     />
                   </ListItem>
                   <ListItem>
@@ -337,8 +382,8 @@ const ConfiguracoesNuvemPage = () => {
                       <CheckCircle color="success" />
                     </ListItemIcon>
                     <ListItemText
-                      primary="Segurança SSL/TLS"
-                      secondary="Criptografia em todas as conexões"
+                      primary="Seguranca SSL/TLS"
+                      secondary="Criptografia nas conexoes com a nuvem"
                     />
                   </ListItem>
                   <ListItem>
@@ -346,8 +391,8 @@ const ConfiguracoesNuvemPage = () => {
                       <CheckCircle color="success" />
                     </ListItemIcon>
                     <ListItemText
-                      primary="500MB Grátis"
-                      secondary="PostgreSQL + Storage inclusos"
+                      primary="Sincronizacao entre aparelhos"
+                      secondary="Um cadastro feito em um dispositivo pode aparecer nos demais"
                     />
                   </ListItem>
                 </List>
