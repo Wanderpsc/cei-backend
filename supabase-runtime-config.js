@@ -2,4 +2,4 @@
 // Fill these values once in production to enable cloud sync everywhere.
 window.CEI_RUNTIME_CONFIG = window.CEI_RUNTIME_CONFIG || {};
 window.CEI_RUNTIME_CONFIG.supabaseUrl = 'https://tnvjdmdhbpckciqflzcq.supabase.co';
-window.CEI_RUNTIME_CONFIG.supabaseAnonKey = '';
+window.CEI_RUNTIME_CONFIG.supabaseAnonKey = 'sb_publishable_FlXtiXR_alXHlyTsGCQTgQ_bjlPqtIt';
