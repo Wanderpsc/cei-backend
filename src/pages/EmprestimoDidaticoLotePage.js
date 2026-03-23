@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import Layout from '../components/Layout';
 import { useData } from '../context/DataContext';
+import { useNavigate } from 'react-router-dom';
+import TermoEmprestimo from '../components/TermoEmprestimo';
 import {
   Box,
   Button,
@@ -36,7 +38,9 @@ import {
   AssignmentTurnedIn,
   Undo,
   Save,
-  Groups
+  Groups,
+  Description,
+  Print
 } from '@mui/icons-material';
 
 const formatDateForInput = (date) => {
@@ -405,6 +409,16 @@ const isTipoParadidatico = (tipoLivro) => {
   );
 };
 
+const isTipoLivroProfessor = (tipoLivro) => {
+  const tipoNormalizado = normalizarTexto(tipoLivro);
+  return (
+    tipoNormalizado === 'livro do professor'
+    || tipoNormalizado === 'livro professor'
+    || tipoNormalizado === 'material do professor'
+    || tipoNormalizado === 'professor'
+  );
+};
+
 const isAlunoLote = (cliente) => {
   const tipoNormalizado = normalizarTexto(cliente?.tipo);
   const categoriaNormalizada = normalizarTexto(cliente?.categoria);
@@ -510,12 +524,15 @@ const botaoAcaoSx = {
 };
 
 export default function EmprestimoDidaticoLotePage() {
+  const navigate = useNavigate();
+
   const {
     clientes,
     livros,
     emprestimos,
     adicionarEmprestimo,
     devolverLivro,
+    adicionarCliente,
     turmasAcademicas
   } = useData();
 
@@ -534,6 +551,26 @@ export default function EmprestimoDidaticoLotePage() {
   const [resultadoAplicacao, setResultadoAplicacao] = useState(null);
   const [confirmacaoAberta, setConfirmacaoAberta] = useState(false);
   const [resumoConfirmacao, setResumoConfirmacao] = useState(null);
+  const [termosLote, setTermosLote] = useState([]);
+  const [indiceTermoLote, setIndiceTermoLote] = useState(0);
+  const [termoLoteOpen, setTermoLoteOpen] = useState(false);
+  const [buscaLeitorLote, setBuscaLeitorLote] = useState('');
+  const [cadastroLeitorLoteOpen, setCadastroLeitorLoteOpen] = useState(false);
+  const [novoLeitorLote, setNovoLeitorLote] = useState({
+    nome: '',
+    cpf: '',
+    telefone: '',
+    email: '',
+    endereco: '',
+    tipo: 'Aluno',
+    categoria: 'Estudante',
+    matricula: '',
+    serie: '',
+    serieId: '',
+    turma: '',
+    turmaId: '',
+    ativo: true
+  });
 
   const observacaoPadraoAplicada = 'Empréstimo em lote por turma';
 
@@ -607,8 +644,9 @@ export default function EmprestimoDidaticoLotePage() {
 
         const didatico = isTipoDidatico(livro.tipo);
         const paradidatico = isTipoParadidatico(livro.tipo);
+        const livroProfessor = isTipoLivroProfessor(livro.tipo);
 
-        if (!didatico && !paradidatico) {
+        if (!didatico && !paradidatico && !livroProfessor) {
           return false;
         }
 
@@ -620,7 +658,11 @@ export default function EmprestimoDidaticoLotePage() {
           return paradidatico;
         }
 
-        return didatico || paradidatico;
+        if (tipoAcervoSelecionado === 'professor') {
+          return livroProfessor;
+        }
+
+        return didatico || paradidatico || livroProfessor;
       })
       .sort((a, b) => String(a.titulo || '').localeCompare(String(b.titulo || ''), 'pt-BR'));
   }, [livros, tipoAcervoSelecionado]);
@@ -715,6 +757,158 @@ export default function EmprestimoDidaticoLotePage() {
     };
   }, [alunosFiltrados, alunosSelecionadosMapa]);
 
+  const prepararLeitorLoteInicial = (termoBusca = '') => {
+    const termoLimpo = String(termoBusca || '').trim();
+    const termoDigitos = termoLimpo.replace(/\D/g, '');
+
+    const turmaAcademicaSelecionada = turmaSelecionadaInfo && turmasAcademicasMap.has(String(turmaSelecionadaInfo.key))
+      ? turmasAcademicasMap.get(String(turmaSelecionadaInfo.key))
+      : null;
+
+    const nomeTurmaPadrao = turmaAcademicaSelecionada?.nomeTurma || turmaSelecionadaInfo?.nomeTurma || '';
+    const nomeSeriePadrao = turmaAcademicaSelecionada?.nomeSerie || turmaSelecionadaInfo?.nomeSerie || '';
+
+    return {
+      nome: termoDigitos.length >= 11 ? '' : termoLimpo,
+      cpf: termoDigitos.length >= 11 ? termoDigitos.slice(0, 11) : '',
+      telefone: '',
+      email: '',
+      endereco: '',
+      tipo: 'Aluno',
+      categoria: 'Estudante',
+      matricula: '',
+      serie: nomeSeriePadrao,
+      serieId: turmaAcademicaSelecionada?.serieId ? String(turmaAcademicaSelecionada.serieId) : '',
+      turma: nomeTurmaPadrao,
+      turmaId: turmaAcademicaSelecionada?.id ? String(turmaAcademicaSelecionada.id) : '',
+      ativo: true
+    };
+  };
+
+  const localizarLeitoresPorTermo = (termo) => {
+    const termoLimpo = String(termo || '').trim();
+    if (!termoLimpo) return [];
+
+    const termoNormalizado = normalizarTexto(termoLimpo);
+    const termoDigitos = termoLimpo.replace(/\D/g, '');
+
+    return clientes.filter((cliente) => {
+      if (cliente?.ativo === false) return false;
+
+      const nomeNormalizado = normalizarTexto(cliente?.nome);
+      const cpfDigitos = String(cliente?.cpf || '').replace(/\D/g, '');
+      const matriculaNormalizada = normalizarTexto(cliente?.matricula);
+
+      const porNome = nomeNormalizado.includes(termoNormalizado);
+      const porCpf = termoDigitos.length > 0 && cpfDigitos.includes(termoDigitos);
+      const porMatricula = matriculaNormalizada.includes(termoNormalizado);
+
+      return porNome || porCpf || porMatricula;
+    });
+  };
+
+  const abrirCadastroLeitorLote = (termoBusca = '') => {
+    setNovoLeitorLote(prepararLeitorLoteInicial(termoBusca));
+    setCadastroLeitorLoteOpen(true);
+  };
+
+  const handleBuscarLeitorLote = () => {
+    const termo = String(buscaLeitorLote || '').trim();
+    if (!termo) {
+      alert('Digite o nome, CPF ou matrícula para buscar o leitor.');
+      return;
+    }
+
+    const encontrados = localizarLeitoresPorTermo(termo);
+
+    if (encontrados.length === 0) {
+      const confirmarCadastro = window.confirm(
+        `Leitor não encontrado para "${termo}".\n\nDeseja cadastrá-lo agora?`
+      );
+
+      if (confirmarCadastro) {
+        abrirCadastroLeitorLote(termo);
+      }
+      return;
+    }
+
+    if (encontrados.length > 1) {
+      alert(`Foram encontrados ${encontrados.length} leitores. Refine a busca para selecionar apenas um.`);
+      return;
+    }
+
+    const leitorEncontrado = encontrados[0];
+    const leitorEstaNoFiltroAtual = alunosDisponiveisParaSelecao.some(
+      (aluno) => String(aluno.id) === String(leitorEncontrado.id)
+    );
+
+    if (!leitorEstaNoFiltroAtual) {
+      const confirmarMudancaModo = window.confirm(
+        `O leitor "${leitorEncontrado.nome}" existe, mas não aparece no filtro atual.\n\nDeseja mudar para o modo individual para incluí-lo no lote?`
+      );
+
+      if (!confirmarMudancaModo) {
+        return;
+      }
+
+      setModoSelecaoAlunos('individual');
+      setTurmaSelecionada('');
+    }
+
+    setAlunosSelecionadosMapa((prev) => ({
+      ...prev,
+      [String(leitorEncontrado.id)]: true
+    }));
+    setResultadoAplicacao(null);
+    alert(`✅ Leitor "${leitorEncontrado.nome}" selecionado para o lote.`);
+  };
+
+  const handleCadastrarLeitorLote = () => {
+    if (!novoLeitorLote.nome || !novoLeitorLote.cpf) {
+      alert('Nome e CPF são obrigatórios para cadastrar o leitor.');
+      return;
+    }
+
+    const cpfNovo = String(novoLeitorLote.cpf || '').replace(/\D/g, '');
+    const leitorExistenteCpf = clientes.find(
+      (cliente) => String(cliente?.cpf || '').replace(/\D/g, '') === cpfNovo
+    );
+
+    if (leitorExistenteCpf) {
+      const usarLeitorExistente = window.confirm(
+        `Já existe um leitor cadastrado com este CPF:\n\n${leitorExistenteCpf.nome}\n\nDeseja utilizá-lo no lote?`
+      );
+
+      if (usarLeitorExistente) {
+        setAlunosSelecionadosMapa((prev) => ({
+          ...prev,
+          [String(leitorExistenteCpf.id)]: true
+        }));
+        setCadastroLeitorLoteOpen(false);
+      }
+
+      return;
+    }
+
+    const leitorCadastrado = adicionarCliente({
+      ...novoLeitorLote,
+      ativo: true
+    });
+
+    if (!leitorCadastrado) {
+      return;
+    }
+
+    setAlunosSelecionadosMapa((prev) => ({
+      ...prev,
+      [String(leitorCadastrado.id)]: true
+    }));
+    setCadastroLeitorLoteOpen(false);
+    setBuscaLeitorLote('');
+    setResultadoAplicacao(null);
+    alert(`✅ Leitor "${leitorCadastrado.nome}" cadastrado e selecionado no lote.`);
+  };
+
   useEffect(() => {
     const idsDisponiveis = new Set(alunosDisponiveisParaSelecao.map((aluno) => String(aluno.id)));
 
@@ -743,7 +937,9 @@ export default function EmprestimoDidaticoLotePage() {
     alunosSelecionados.forEach((aluno) => {
       livrosSelecionadosDados.forEach((livro) => {
         const chave = `${aluno.id}-${livro.id}`;
-        estado[chave] = emprestimoAtivoPorPar.has(chave);
+        // No lote, por padrão marcamos todos os pares selecionados para facilitar
+        // o cenário comum de emprestar todos os livros para todos os alunos.
+        estado[chave] = true;
       });
     });
 
@@ -985,6 +1181,7 @@ export default function EmprestimoDidaticoLotePage() {
 
     setProcessando(true);
     try {
+      const emprestimosCriadosAgora = [];
       const devolucoesPorLivro = {};
       devolverSolicitacoes.forEach((emp) => {
         const livroId = String(emp.livroId);
@@ -1040,7 +1237,7 @@ export default function EmprestimoDidaticoLotePage() {
           || turmaSelecionadaInfo?.rotulo
           || turmaSelecionada;
 
-        adicionarEmprestimo({
+        const emprestimoCriado = adicionarEmprestimo({
           clienteId: solicitacao.aluno.id,
           livroId: solicitacao.livro.id,
           clienteNome: solicitacao.aluno.nome,
@@ -1056,6 +1253,10 @@ export default function EmprestimoDidaticoLotePage() {
           dataDevolucao: dataDevolucaoPrevista,
           observacoes: `${observacaoPadraoAplicada} | Turma: ${turmaTexto}`
         });
+
+        if (emprestimoCriado) {
+          emprestimosCriadosAgora.push(emprestimoCriado);
+        }
       });
 
       if (criacoesBloqueadas.length > 0) {
@@ -1079,9 +1280,31 @@ export default function EmprestimoDidaticoLotePage() {
         detalhesBloqueio,
         excessoBloqueio: Math.max(criacoesBloqueadas.length - detalhesBloqueio.length, 0)
       });
+
+      setTermosLote(emprestimosCriadosAgora.filter((emp) => emp?.dadosTermoEmprestimo));
+      setIndiceTermoLote(0);
     } finally {
       setProcessando(false);
     }
+  };
+
+  const abrirTermosLote = () => {
+    if (termosLote.length === 0) {
+      alert('Não há termos de empréstimo gerados neste lote.');
+      return;
+    }
+
+    setIndiceTermoLote(0);
+    setTermoLoteOpen(true);
+  };
+
+  const abrirProximoTermoLote = () => {
+    if (indiceTermoLote >= termosLote.length - 1) {
+      setTermoLoteOpen(false);
+      return;
+    }
+
+    setIndiceTermoLote((prev) => prev + 1);
   };
 
   const semDadosParaMatriz = livrosSelecionadosDados.length === 0 || alunosSelecionados.length === 0;
@@ -1090,7 +1313,7 @@ export default function EmprestimoDidaticoLotePage() {
     <Layout title="Empréstimos em Lote">
       {livrosDidaticos.length === 0 && (
         <Alert severity="warning" sx={{ mb: 2 }}>
-          Nenhum livro compatível com o filtro selecionado foi encontrado. Cadastre livros do tipo <strong>Didático</strong> ou <strong>Paradidático</strong> para usar esta funcionalidade.
+          Nenhum livro compatível com o filtro selecionado foi encontrado. Cadastre livros do tipo <strong>Didático</strong>, <strong>Paradidático</strong> ou <strong>Livro do Professor</strong> para usar esta funcionalidade.
         </Alert>
       )}
       {turmasDisponiveis.length === 0 && (
@@ -1153,9 +1376,10 @@ export default function EmprestimoDidaticoLotePage() {
                     setResultadoAplicacao(null);
                   }}
                 >
-                  <MenuItem value="todos">Didáticos e paradidáticos</MenuItem>
+                  <MenuItem value="todos">Didáticos, paradidáticos e livro do professor</MenuItem>
                   <MenuItem value="didatico">Somente didáticos</MenuItem>
                   <MenuItem value="paradidatico">Somente paradidáticos</MenuItem>
+                  <MenuItem value="professor">Somente livro do professor</MenuItem>
                 </Select>
               </FormControl>
             </Grid>
@@ -1209,6 +1433,26 @@ export default function EmprestimoDidaticoLotePage() {
                 ? 'Selecione a turma e marque alunos específicos ou a turma inteira para receber os livros.'
                 : 'Busque e marque alunos individualmente. Você pode filtrar por turma quando necessário.'}
             </Typography>
+
+            <Box sx={{ display: 'flex', gap: 1, mb: 1, flexWrap: 'wrap' }}>
+              <TextField
+                size="small"
+                fullWidth
+                label="Buscar leitor por nome, CPF ou matrícula"
+                value={buscaLeitorLote}
+                onChange={(e) => setBuscaLeitorLote(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    handleBuscarLeitorLote();
+                  }
+                }}
+                placeholder="Ex: João da Silva, 12345678901, MAT2026..."
+                sx={{ flex: 1, minWidth: 260 }}
+              />
+              <Button variant="outlined" onClick={handleBuscarLeitorLote}>
+                Localizar / Cadastrar
+              </Button>
+            </Box>
 
             <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 1 }}>
               <Button
@@ -1426,6 +1670,129 @@ export default function EmprestimoDidaticoLotePage() {
         </DialogActions>
       </Dialog>
 
+      <Dialog
+        open={cadastroLeitorLoteOpen}
+        onClose={() => setCadastroLeitorLoteOpen(false)}
+        fullWidth
+        maxWidth="sm"
+      >
+        <DialogTitle>Cadastrar novo leitor para o lote</DialogTitle>
+        <DialogContent dividers>
+          <Alert severity="info" sx={{ mb: 2 }}>
+            O leitor será inserido no sistema e poderá receber os empréstimos do lote atual.
+          </Alert>
+
+          <Grid container spacing={2}>
+            <Grid item xs={12}>
+              <TextField
+                label="Nome Completo"
+                fullWidth
+                required
+                value={novoLeitorLote.nome}
+                onChange={(e) => setNovoLeitorLote((prev) => ({ ...prev, nome: e.target.value }))}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                label="CPF"
+                fullWidth
+                required
+                value={novoLeitorLote.cpf}
+                onChange={(e) => setNovoLeitorLote((prev) => ({ ...prev, cpf: e.target.value }))}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                label="Matrícula"
+                fullWidth
+                value={novoLeitorLote.matricula}
+                onChange={(e) => setNovoLeitorLote((prev) => ({ ...prev, matricula: e.target.value }))}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                label="Tipo"
+                fullWidth
+                select
+                value={novoLeitorLote.tipo}
+                onChange={(e) => setNovoLeitorLote((prev) => ({ ...prev, tipo: e.target.value }))}
+              >
+                {['Aluno', 'Professor', 'Funcionário', 'Visitante'].map((tipo) => (
+                  <MenuItem key={tipo} value={tipo}>{tipo}</MenuItem>
+                ))}
+              </TextField>
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                label="Categoria"
+                fullWidth
+                select
+                value={novoLeitorLote.categoria}
+                onChange={(e) => setNovoLeitorLote((prev) => ({ ...prev, categoria: e.target.value }))}
+              >
+                <MenuItem value="">— Não informado —</MenuItem>
+                {['Estudante', 'Professor', 'Funcionário', 'Comunidade'].map((cat) => (
+                  <MenuItem key={cat} value={cat}>{cat}</MenuItem>
+                ))}
+              </TextField>
+            </Grid>
+            {novoLeitorLote.tipo === 'Aluno' && (
+              <>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    label="Série/Ano"
+                    fullWidth
+                    value={novoLeitorLote.serie}
+                    onChange={(e) => setNovoLeitorLote((prev) => ({ ...prev, serie: e.target.value }))}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    label="Turma"
+                    fullWidth
+                    value={novoLeitorLote.turma}
+                    onChange={(e) => setNovoLeitorLote((prev) => ({ ...prev, turma: e.target.value }))}
+                  />
+                </Grid>
+              </>
+            )}
+            <Grid item xs={12} sm={6}>
+              <TextField
+                label="Telefone"
+                fullWidth
+                value={novoLeitorLote.telefone}
+                onChange={(e) => setNovoLeitorLote((prev) => ({ ...prev, telefone: e.target.value }))}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                label="Email"
+                fullWidth
+                type="email"
+                value={novoLeitorLote.email}
+                onChange={(e) => setNovoLeitorLote((prev) => ({ ...prev, email: e.target.value }))}
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                label="Endereço"
+                fullWidth
+                value={novoLeitorLote.endereco}
+                onChange={(e) => setNovoLeitorLote((prev) => ({ ...prev, endereco: e.target.value }))}
+              />
+            </Grid>
+          </Grid>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setCadastroLeitorLoteOpen(false)}>
+            Cancelar
+          </Button>
+          <Button variant="contained" onClick={handleCadastrarLeitorLote}>
+            Cadastrar leitor
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       {resultadoAplicacao && (
         <Alert
           severity={resultadoAplicacao.bloqueados > 0 ? 'warning' : 'success'}
@@ -1445,6 +1812,29 @@ export default function EmprestimoDidaticoLotePage() {
                   • ... e mais {resultadoAplicacao.excessoBloqueio} bloqueio(s)
                 </Typography>
               )}
+            </Box>
+          )}
+
+          {resultadoAplicacao.criados > 0 && (
+            <Box sx={{ mt: 1.5, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+              <Button
+                size="small"
+                variant="outlined"
+                color="success"
+                startIcon={<Description />}
+                onClick={abrirTermosLote}
+              >
+                Gerar termos do lote ({termosLote.length})
+              </Button>
+              <Button
+                size="small"
+                variant="outlined"
+                color="primary"
+                startIcon={<Print />}
+                onClick={() => navigate('/relatorios-livros')}
+              >
+                Ver estoque disponível
+              </Button>
             </Box>
           )}
         </Alert>
@@ -1532,6 +1922,15 @@ export default function EmprestimoDidaticoLotePage() {
           Dica: marcar checkbox gera empréstimo ativo; desmarcar checkbox processa devolução em lote.
         </Typography>
       </Box>
+
+      <TermoEmprestimo
+        open={termoLoteOpen}
+        onClose={() => setTermoLoteOpen(false)}
+        dados={termosLote[indiceTermoLote]?.dadosTermoEmprestimo || null}
+        tipo="preenchido"
+        onNext={indiceTermoLote < termosLote.length - 1 ? abrirProximoTermoLote : null}
+        nextLabel={`Próximo termo (${indiceTermoLote + 2}/${termosLote.length})`}
+      />
     </Layout>
   );
 }

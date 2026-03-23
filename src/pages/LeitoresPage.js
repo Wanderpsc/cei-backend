@@ -3,6 +3,8 @@ import Layout from '../components/Layout';
 import {
   Box,
   Button,
+  Card,
+  CardContent,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -220,6 +222,67 @@ function LeitoresPage() {
 
   const tiposCliente = ['Aluno', 'Professor', 'Funcionário', 'Visitante'];
 
+  const getPerfilLeitor = (cliente) => {
+    const tipo = normalizarTexto(cliente?.tipo);
+    const categoria = normalizarTexto(cliente?.categoria);
+    const possuiVinculoAcademico = Boolean(
+      String(cliente?.turmaId || '').trim()
+      || String(cliente?.serieId || '').trim()
+      || normalizarTexto(cliente?.turma || cliente?.nomeTurma)
+      || normalizarTexto(cliente?.serie || cliente?.nomeSerie)
+    );
+
+    if (tipo === 'aluno' || categoria === 'estudante' || (tipo === 'leitor' && possuiVinculoAcademico)) {
+      return 'estudante';
+    }
+
+    if (tipo.includes('professor')) {
+      return 'professor';
+    }
+
+    if (
+      tipo.includes('funcion')
+      || tipo.includes('bibliotec')
+      || tipo.includes('coorden')
+      || tipo.includes('diretor')
+      || tipo.includes('gestor')
+      || tipo.includes('servidor')
+      || tipo.includes('admin')
+      || categoria.includes('funcion')
+      || categoria.includes('servidor')
+    ) {
+      return 'funcionario';
+    }
+
+    return 'comunidade';
+  };
+
+  const clientesVisiveis = useMemo(
+    () => clientes.filter((cliente) => !cliente?.excluido),
+    [clientes]
+  );
+
+  const resumoLeitores = useMemo(() => {
+    const acumulado = {
+      turmas: turmasAcademicas.length,
+      total: clientesVisiveis.length,
+      estudantes: 0,
+      professores: 0,
+      funcionarios: 0,
+      comunidade: 0
+    };
+
+    clientesVisiveis.forEach((cliente) => {
+      const perfil = getPerfilLeitor(cliente);
+      if (perfil === 'estudante') acumulado.estudantes += 1;
+      else if (perfil === 'professor') acumulado.professores += 1;
+      else if (perfil === 'funcionario') acumulado.funcionarios += 1;
+      else acumulado.comunidade += 1;
+    });
+
+    return acumulado;
+  }, [clientesVisiveis, turmasAcademicas]);
+
   const localizarSeriePorNome = (nomeSerie) => {
     const nomeNormalizado = normalizarTexto(nomeSerie);
     if (!nomeNormalizado) return null;
@@ -391,6 +454,26 @@ function LeitoresPage() {
     setEditando(null);
   };
 
+  const abrirCadastroRapido = (tipo) => {
+    setEditando(null);
+    setFormData({
+      nome: '',
+      cpf: '',
+      telefone: '',
+      email: '',
+      endereco: '',
+      tipo,
+      categoria: tipo === 'Aluno' ? 'Estudante' : '',
+      serie: '',
+      serieId: '',
+      turma: '',
+      turmaId: '',
+      matricula: '',
+      ativo: true
+    });
+    setOpen(true);
+  };
+
   const handleSubmit = () => {
     const dadosParaSalvar = { ...formData };
 
@@ -499,7 +582,7 @@ function LeitoresPage() {
   const turmasParaExclusao = useMemo(() => {
     return [...turmasAcademicas]
       .map((turma) => {
-        const leitoresDaTurma = clientes.filter((cliente) => clientePertenceTurma(cliente, turma));
+        const leitoresDaTurma = clientesVisiveis.filter((cliente) => clientePertenceTurma(cliente, turma));
         const totalLeitores = leitoresDaTurma.length;
         const elegiveisExclusao = leitoresDaTurma.filter((cliente) => !possuiHistoricoEmprestimos(cliente.id)).length;
 
@@ -517,7 +600,7 @@ function LeitoresPage() {
         if (serieA !== serieB) return serieA.localeCompare(serieB, 'pt-BR');
         return String(a.nomeTurma || '').localeCompare(String(b.nomeTurma || ''), 'pt-BR');
       });
-  }, [clientes, turmasAcademicas, emprestimos]);
+  }, [clientesVisiveis, turmasAcademicas, emprestimos]);
 
   const turmaSelecionadaExclusao = useMemo(() => {
     return turmasParaExclusao.find((turma) => String(turma.id) === String(turmaParaExclusao)) || null;
@@ -623,17 +706,17 @@ function LeitoresPage() {
   };
 
   const handleDeleteAll = async () => {
-    const totalSemHistorico = clientes.filter((c) => {
+    const totalSemHistorico = clientesVisiveis.filter((c) => {
       return !possuiHistoricoEmprestimos(c.id);
     }).length;
 
-    const totalComHistorico = clientes.length - totalSemHistorico;
+    const totalComHistorico = clientesVisiveis.length - totalSemHistorico;
 
     const mensagem =
       `Tem certeza que deseja EXCLUIR TODOS os leitores?
 
 ` +
-      `Total de leitores: ${clientes.length}
+      `Total de leitores: ${clientesVisiveis.length}
 ` +
       `Sem histórico (serão excluídos): ${totalSemHistorico}
 ` +
@@ -739,13 +822,16 @@ function LeitoresPage() {
     setImportOpen(false);
   };
 
-  const clientesFiltrados = clientes.filter(cliente =>
-    cliente.nome.toLowerCase().includes(busca.toLowerCase()) ||
-    cliente.cpf.includes(busca) ||
-    cliente.matricula?.includes(busca) ||
-    cliente.turma?.toLowerCase().includes(busca.toLowerCase()) ||
-    cliente.serie?.toLowerCase().includes(busca.toLowerCase())
-  );
+  const clientesFiltrados = clientesVisiveis.filter((cliente) => {
+    const buscaNormalizada = busca.toLowerCase();
+    return (
+      String(cliente?.nome || '').toLowerCase().includes(buscaNormalizada)
+      || String(cliente?.cpf || '').includes(busca)
+      || String(cliente?.matricula || '').includes(busca)
+      || String(cliente?.turma || '').toLowerCase().includes(buscaNormalizada)
+      || String(cliente?.serie || '').toLowerCase().includes(buscaNormalizada)
+    );
+  });
 
   const turmasCadastradas = useMemo(() => {
     const serieSelecionadaId = String(formData.serieId || '');
@@ -765,7 +851,7 @@ function LeitoresPage() {
       }
     });
 
-    clientes
+    clientesVisiveis
       .filter((cliente) => String(cliente.tipo || '').toLowerCase() === 'aluno')
       .forEach((cliente) => {
         const mesmaSerie = serieSelecionadaNome
@@ -780,7 +866,7 @@ function LeitoresPage() {
     return Array.from(nomesTurma)
       .filter(Boolean)
       .sort((a, b) => a.localeCompare(b, 'pt-BR'));
-  }, [clientes, turmasAcademicas, formData.serie, formData.serieId]);
+  }, [clientesVisiveis, turmasAcademicas, formData.serie, formData.serieId]);
 
   const seriesCadastradas = useMemo(() => {
     const nomesSeries = new Set(
@@ -789,7 +875,7 @@ function LeitoresPage() {
         .filter(Boolean)
     );
 
-    clientes
+    clientesVisiveis
       .filter((cliente) => String(cliente.tipo || '').toLowerCase() === 'aluno')
       .forEach((cliente) => {
         nomesSeries.add(String(cliente.serie || '').trim());
@@ -798,10 +884,94 @@ function LeitoresPage() {
     return Array.from(nomesSeries)
       .filter(Boolean)
       .sort((a, b) => a.localeCompare(b, 'pt-BR'));
-  }, [clientes, seriesAcademicas]);
+  }, [clientesVisiveis, seriesAcademicas]);
 
   return (
     <Layout title="Leitores">
+      <Box
+        sx={{
+          mb: 2,
+          display: 'grid',
+          gridTemplateColumns: {
+            xs: '1fr 1fr',
+            md: 'repeat(3, minmax(180px, 1fr))',
+            lg: 'repeat(6, minmax(170px, 1fr))'
+          },
+          gap: 1.5
+        }}
+      >
+        <Card variant="outlined">
+          <CardContent sx={{ py: 1.5 }}>
+            <Typography variant="caption" color="text.secondary">Turmas</Typography>
+            <Typography variant="h5" fontWeight={700}>{resumoLeitores.turmas}</Typography>
+            <Typography variant="body2" color="text.secondary">cadastradas</Typography>
+          </CardContent>
+        </Card>
+
+        <Card variant="outlined">
+          <CardContent sx={{ py: 1.5 }}>
+            <Typography variant="caption" color="text.secondary">Estudantes</Typography>
+            <Typography variant="h5" fontWeight={700}>{resumoLeitores.estudantes}</Typography>
+            <Typography variant="body2" color="text.secondary">leitores cadastrados</Typography>
+          </CardContent>
+        </Card>
+
+        <Card variant="outlined">
+          <CardContent sx={{ py: 1.5 }}>
+            <Typography variant="caption" color="text.secondary">Professores</Typography>
+            <Typography variant="h5" fontWeight={700}>{resumoLeitores.professores}</Typography>
+            <Typography variant="body2" color="text.secondary">leitores cadastrados</Typography>
+          </CardContent>
+        </Card>
+
+        <Card variant="outlined">
+          <CardContent sx={{ py: 1.5 }}>
+            <Typography variant="caption" color="text.secondary">Funcionários</Typography>
+            <Typography variant="h5" fontWeight={700}>{resumoLeitores.funcionarios}</Typography>
+            <Typography variant="body2" color="text.secondary">leitores cadastrados</Typography>
+          </CardContent>
+        </Card>
+
+        <Card variant="outlined">
+          <CardContent sx={{ py: 1.5 }}>
+            <Typography variant="caption" color="text.secondary">Comunidade</Typography>
+            <Typography variant="h5" fontWeight={700}>{resumoLeitores.comunidade}</Typography>
+            <Typography variant="body2" color="text.secondary">leitores cadastrados</Typography>
+          </CardContent>
+        </Card>
+
+        <Card variant="outlined" sx={{ borderColor: 'secondary.main', bgcolor: 'secondary.50' }}>
+          <CardContent sx={{ py: 1.5 }}>
+            <Typography variant="caption" color="text.secondary">Total</Typography>
+            <Typography variant="h5" fontWeight={700}>{resumoLeitores.total}</Typography>
+            <Typography variant="body2" color="text.secondary">leitores cadastrados</Typography>
+          </CardContent>
+        </Card>
+      </Box>
+
+      <Paper variant="outlined" sx={{ p: 1.5, mb: 2 }}>
+        <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1 }}>
+          Iniciação Rápida
+        </Typography>
+        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+          <Button size="small" variant="contained" onClick={() => abrirCadastroRapido('Aluno')}>
+            Novo Estudante
+          </Button>
+          <Button size="small" variant="outlined" onClick={() => abrirCadastroRapido('Professor')}>
+            Novo Professor
+          </Button>
+          <Button size="small" variant="outlined" onClick={() => abrirCadastroRapido('Funcionário')}>
+            Novo Funcionário
+          </Button>
+          <Button size="small" variant="outlined" onClick={() => abrirCadastroRapido('Visitante')}>
+            Nova Comunidade
+          </Button>
+          <Button size="small" variant="text" startIcon={<UploadFile />} onClick={() => setImportOpen(true)}>
+            Importar em lote
+          </Button>
+        </Box>
+      </Paper>
+
       <Box sx={{ mb: 2, display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
         <TextField
           placeholder="Buscar por nome, CPF ou matrícula..."

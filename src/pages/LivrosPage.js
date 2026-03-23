@@ -85,6 +85,7 @@ function LivrosPage() {
     'Juvenil',
     'Didático',
     'Paradidático',
+    'Livro do Professor',
     'Poesia',
     'Drama',
     'Comédia',
@@ -107,7 +108,7 @@ function LivrosPage() {
     quantidade: 1,
     localizacao: '',
     fotoUrl: '',
-    tipo: 'Paradidático', // Didático ou Paradidático
+    tipo: 'Paradidático', // Didático, Paradidático ou Livro do Professor
     anoVigencia: '' // Apenas para livros didáticos
   });
 
@@ -440,7 +441,7 @@ function LivrosPage() {
                     <Chip 
                       label={livro.tipo || 'Paradidático'} 
                       size="small" 
-                      color={livro.tipo === 'Didático' ? 'primary' : 'default'}
+                      color={livro.tipo === 'Didático' ? 'primary' : livro.tipo === 'Livro do Professor' ? 'secondary' : 'default'}
                     />
                   </TableCell>
                   <TableCell>
@@ -556,10 +557,15 @@ function LivrosPage() {
               <Select
                 value={formData.tipo}
                 label="Tipo de Livro *"
-                onChange={(e) => setFormData({ ...formData, tipo: e.target.value, anoVigencia: e.target.value === 'Paradidático' ? '' : formData.anoVigencia })}
+                onChange={(e) => setFormData({
+                  ...formData,
+                  tipo: e.target.value,
+                  anoVigencia: e.target.value === 'Didático' ? formData.anoVigencia : ''
+                })}
               >
                 <MenuItem value="Didático">Didático</MenuItem>
                 <MenuItem value="Paradidático">Paradidático</MenuItem>
+                <MenuItem value="Livro do Professor">Livro do Professor</MenuItem>
               </Select>
             </FormControl>
             {formData.tipo === 'Didático' && (

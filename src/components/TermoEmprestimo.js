@@ -15,7 +15,7 @@ import {
 } from '@mui/material';
 import { Print, Close } from '@mui/icons-material';
 
-function TermoEmprestimo({ open, onClose, dados, tipo = 'preenchido' }) {
+function TermoEmprestimo({ open, onClose, dados, tipo = 'preenchido', onNext = null, nextLabel = 'Próximo termo' }) {
   const termoRef = useRef();
 
   const handleImprimir = () => {
@@ -590,6 +590,15 @@ function TermoEmprestimo({ open, onClose, dados, tipo = 'preenchido' }) {
           Imprimir Termo
         </Button>
       </DialogActions>
+        {typeof onNext === 'function' && (
+          <Button
+            onClick={onNext}
+            variant="outlined"
+            color="primary"
+          >
+            {nextLabel}
+          </Button>
+        )}
     </Dialog>
   );
 }

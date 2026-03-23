@@ -17,6 +17,8 @@ const STORAGE_PRESTADOR = 'cei_nf_prestador_config';
 const STORAGE_PREFEITURA = 'cei_nf_prefeitura_config';
 const DEMO_DEVICE_ID_KEY = 'cei_demo_device_id';
 const DEMO_CONTACT_KEY = 'cei_demo_contact';
+const MAX_LOG_ATIVIDADES = 3000;
+const MAX_BACKUP_SNAPSHOTS = 8;
 
 const DEFAULT_PREFEITURA_CURIMATA = {
   razaoSocial: 'PREFEITURA MUNICIPAL DE CURIMATÁ',
@@ -54,6 +56,77 @@ export const useData = () => {
 };
 
 export const DataProvider = ({ children }) => {
+  const compactarDadosTermoEmprestimo = (dadosTermo = {}) => {
+    if (!dadosTermo || typeof dadosTermo !== 'object') {
+      return {};
+    }
+
+    // Mantém apenas campos essenciais para reduzir crescimento do localStorage.
+    return {
+      codigoEmprestimo: dadosTermo.codigoEmprestimo,
+      dataEmprestimo: dadosTermo.dataEmprestimo,
+      dataDevolucao: dadosTermo.dataDevolucao,
+      livroCodigo: dadosTermo.livroCodigo,
+      livroTitulo: dadosTermo.livroTitulo,
+      livroAutor: dadosTermo.livroAutor,
+      livroISBN: dadosTermo.livroISBN,
+      livroEditora: dadosTermo.livroEditora,
+      livroTipo: dadosTermo.livroTipo,
+      leitorCodigo: dadosTermo.leitorCodigo,
+      leitorNome: dadosTermo.leitorNome,
+      leitorCPF: dadosTermo.leitorCPF,
+      leitorTelefone: dadosTermo.leitorTelefone,
+      leitorEmail: dadosTermo.leitorEmail,
+      leitorEndereco: dadosTermo.leitorEndereco,
+      leitorMatricula: dadosTermo.leitorMatricula,
+      leitorTurma: dadosTermo.leitorTurma,
+      leitorSerie: dadosTermo.leitorSerie,
+      instituicaoNome: dadosTermo.instituicaoNome,
+      instituicaoCidade: dadosTermo.instituicaoCidade,
+      responsavelNome: dadosTermo.responsavelNome,
+      responsavelCargo: dadosTermo.responsavelCargo,
+      observacoes: dadosTermo.observacoes
+    };
+  };
+
+  const compactarEmprestimoParaStorage = (emprestimo = {}) => {
+    if (!emprestimo || typeof emprestimo !== 'object') {
+      return emprestimo;
+    }
+
+    if (!emprestimo.dadosTermoEmprestimo) {
+      return emprestimo;
+    }
+
+    return {
+      ...emprestimo,
+      dadosTermoEmprestimo: compactarDadosTermoEmprestimo(emprestimo.dadosTermoEmprestimo)
+    };
+  };
+
+  const podarSnapshotsAntigosLocalStorage = () => {
+    try {
+      // Remove o backup fixo (cópia integral de cei_data) para liberar espaço antes do save.
+      localStorage.removeItem('cei_data_backup');
+      localStorage.removeItem('cei_data_emergency');
+
+      const keys = Object.keys(localStorage);
+      const backupKeys = keys
+        .filter((key) => key.startsWith('cei_backup_v') || key.startsWith('cei_data_backup_import_'))
+        .sort();
+
+      if (backupKeys.length <= MAX_BACKUP_SNAPSHOTS) {
+        return;
+      }
+
+      backupKeys
+        .slice(0, backupKeys.length - MAX_BACKUP_SNAPSHOTS)
+        .forEach((key) => localStorage.removeItem(key));
+    } catch (_error) {
+      // Melhor esforço: poda de snapshots não deve interromper o fluxo.
+    }
+  };
+
   const validarSenhaForte = (senha) => {
     if (!senha || senha.length < 8) return 'A senha deve ter no mínimo 8 caracteres.';
     if (!/[A-Z]/.test(senha)) return 'A senha deve conter pelo menos 1 letra maiúscula.';
@@ -255,6 +328,8 @@ export const DataProvider = ({ children }) => {
   const usuariosRef = useRef([]);
   const livrosRef = useRef([]);
   const clientesRef = useRef([]);
+  const seriesAcademicasRef = useRef([]);
+  const turmasAcademicasRef = useRef([]);
   const patrimonioRef = useRef([]);
   const emprestimosRef = useRef([]);
   const usuarioAnteriorRef = useRef(null); // Para detectar novo login em outro dispositivo
@@ -505,6 +580,10 @@ export const DataProvider = ({ children }) => {
   };
 
   const isReaderAcademicStudent = (reader) => {
+    if (reader?.excluido) {
+      return false;
+    }
+
     const tipoNormalizado = normalizeAcademicText(reader?.tipo);
     const categoriaNormalizada = normalizeAcademicText(reader?.categoria);
     const academicFields = getReaderAcademicFields(reader);
@@ -682,6 +761,10 @@ export const DataProvider = ({ children }) => {
     const fallbackInstitutionId = aliasIds.length === 1 ? aliasIds[0] : null;
 
     return readers.filter((reader) => {
+      if (reader?.excluido) {
+        return false;
+      }
+
       const institutionId = resolveInstitutionId(getItemInstitutionRaw(reader), fallbackInstitutionId);
       return institutionId !== null && aliasSet.has(institutionId);
     }).length;
@@ -706,6 +789,10 @@ export const DataProvider = ({ children }) => {
     const fallbackInstitutionId = aliasIds.length === 1 ? aliasIds[0] : null;
 
     return readers.filter((reader) => {
+      if (reader?.excluido) {
+        return false;
+      }
+
       const isAluno = String(reader?.tipo || '').trim().toLowerCase() === 'aluno';
       if (!isAluno) {
         return false;
@@ -1845,6 +1932,16 @@ export const DataProvider = ({ children }) => {
         return;
       }
 
+      const localSoftDeleted = Boolean(localItem?.excluido);
+      const cloudSoftDeleted = Boolean(cloudItem?.excluido);
+
+      // Once logically deleted, prefer the deleted record to avoid resurrection
+      // due to timestamp drift between local device and cloud.
+      if (localSoftDeleted !== cloudSoftDeleted) {
+        mergedMap.set(mergeKey, localSoftDeleted ? localItem : cloudItem);
+        return;
+      }
+
       const localTs = getItemTimestamp(localItem);
       const cloudTs = getItemTimestamp(cloudItem);
       mergedMap.set(mergeKey, cloudTs > localTs ? cloudItem : localItem);
@@ -1869,7 +1966,9 @@ export const DataProvider = ({ children }) => {
     emprestimos: emprestimosRef.current.filter((item) => belongsToInstitution(item, institutionId, { includeLegacyWithoutInstitution: true }))
   });
 
-  const aplicarDadosNuvemNaInstituicao = (institutionId, cloudDataByType) => {
+  const aplicarDadosNuvemNaInstituicao = (institutionId, cloudDataByType, options = {}) => {
+    const cloudFetchStatus = options.cloudFetchStatus || {};
+    const preferCloudSnapshot = options.preferCloudSnapshot === true;
     const localSlices = getInstitutionSlices(institutionId);
 
     // Guard: if localStorage has more items than the stale in-memory refs for a data type,
@@ -1898,8 +1997,14 @@ export const DataProvider = ({ children }) => {
     const mergedData = {};
     dataTypesSync.forEach((dataType) => {
       const localList = localSlices[dataType] || [];
-      const cloudList = cloudDataByType[dataType] || [];
-      mergedData[dataType] = mergeByIdPreferLatest(localList, cloudList);
+      const cloudList = Array.isArray(cloudDataByType[dataType]) ? cloudDataByType[dataType] : [];
+      const cloudFetchSucceeded = cloudFetchStatus[dataType] !== false;
+
+      if (preferCloudSnapshot && cloudFetchSucceeded) {
+        mergedData[dataType] = cloudList;
+      } else {
+        mergedData[dataType] = mergeByIdPreferLatest(localList, cloudList);
+      }
     });
 
     const mergedAcademicData = rebuildAcademicStructuresFromReaders(
@@ -1949,13 +2054,18 @@ export const DataProvider = ({ children }) => {
 
   const baixarDadosNuvemInstituicao = async (institutionId) => {
     const cloudDataByType = {};
+    const cloudFetchStatus = {};
 
     for (const dataType of dataTypesSync) {
       const result = await syncFromCloud(dataType, institutionId);
+      cloudFetchStatus[dataType] = Boolean(result.success);
       cloudDataByType[dataType] = result.success ? (result.data || []) : [];
     }
 
-    return cloudDataByType;
+    return {
+      cloudDataByType,
+      cloudFetchStatus
+    };
   };
 
   const enviarDadosInstituicaoParaNuvem = async (institutionId, slices = null) => {
@@ -1978,7 +2088,9 @@ export const DataProvider = ({ children }) => {
     }
   };
 
-  const sincronizarInstituicaoComNuvem = async (institutionId, pushAfterMerge = false) => {
+  const sincronizarInstituicaoComNuvem = async (institutionId, pushAfterMerge = false, options = {}) => {
+    const preferCloudSnapshot = options.preferCloudSnapshot === true;
+
     if (!isCloudEnabled || !institutionId || institutionId === 0) return;
     if (cloudPullingRef.current) return;
 
@@ -1994,8 +2106,11 @@ export const DataProvider = ({ children }) => {
 
     cloudPullingRef.current = true;
     try {
-      const cloudDataByType = await baixarDadosNuvemInstituicao(institutionId);
-      const merged = aplicarDadosNuvemNaInstituicao(institutionId, cloudDataByType);
+      const { cloudDataByType, cloudFetchStatus } = await baixarDadosNuvemInstituicao(institutionId);
+      const merged = aplicarDadosNuvemNaInstituicao(institutionId, cloudDataByType, {
+        cloudFetchStatus,
+        preferCloudSnapshot
+      });
 
       if (pushAfterMerge) {
         await enviarDadosInstituicaoParaNuvem(institutionId, merged);
@@ -2022,7 +2137,9 @@ export const DataProvider = ({ children }) => {
     try {
       setSincronizando(true);
       window.dispatchEvent(new Event('sync-start'));
-      await sincronizarInstituicaoComNuvem(instituicaoAtiva, !somenteBaixar);
+      await sincronizarInstituicaoComNuvem(instituicaoAtiva, !somenteBaixar, {
+        preferCloudSnapshot: somenteBaixar
+      });
     } finally {
       setSincronizando(false);
       window.dispatchEvent(new Event('sync-end'));
@@ -2179,9 +2296,11 @@ export const DataProvider = ({ children }) => {
     usuariosRef.current = usuarios;
     livrosRef.current = livros;
     clientesRef.current = clientes;
+    seriesAcademicasRef.current = seriesAcademicas;
+    turmasAcademicasRef.current = turmasAcademicas;
     patrimonioRef.current = patrimonio;
     emprestimosRef.current = emprestimos;
-  }, [instituicoes, usuarios, livros, clientes, patrimonio, emprestimos]);
+  }, [instituicoes, usuarios, livros, clientes, seriesAcademicas, turmasAcademicas, patrimonio, emprestimos]);
 
   // Carregar dados do localStorage ao iniciar
   useEffect(() => {
@@ -2427,7 +2546,7 @@ export const DataProvider = ({ children }) => {
         setClientes(dados.clientes || []);
         setSeriesAcademicas(dados.seriesAcademicas || []);
         setTurmasAcademicas(dados.turmasAcademicas || []);
-        setEmprestimos(dados.emprestimos || []);
+        setEmprestimos((dados.emprestimos || []).map(compactarEmprestimoParaStorage));
         setPlanos(dados.planos || planosPadrao);
         setNotasFiscais(dados.notasFiscais || []);
         setLogAtividades(dados.logAtividades || []);
@@ -2590,15 +2709,10 @@ export const DataProvider = ({ children }) => {
       return;
     }
 
-    // 🛡️ Criar backup antes de salvar (a cada 10 salvamentos ou 1 hora)
+    // Backup automático criado APÓS salvar com sucesso (evita duplicar uso de espaço)
     const lastBackup = localStorage.getItem('cei_last_backup');
     const shouldBackup = !lastBackup || 
       (Date.now() - new Date(lastBackup).getTime()) > 60 * 60 * 1000; // 1 hora
-    
-    if (shouldBackup && dadosCarregados) {
-      console.log('📦 [BACKUP] Criando backup automático...');
-      createBackup();
-    }
     
     const dados = {
       instituicoes,
@@ -2607,11 +2721,15 @@ export const DataProvider = ({ children }) => {
       clientes,
       seriesAcademicas,
       turmasAcademicas,
-      emprestimos,
+      emprestimos: Array.isArray(emprestimos)
+        ? emprestimos.map((item) => compactarEmprestimoParaStorage(item))
+        : [],
       usuarios,
       planos,
       notasFiscais,
-      logAtividades
+      logAtividades: Array.isArray(logAtividades)
+        ? logAtividades.slice(-MAX_LOG_ATIVIDADES)
+        : []
     };
     
     try {
@@ -2635,8 +2753,16 @@ export const DataProvider = ({ children }) => {
           dataSize: dadosSize
         }
       };
+
+      // Libera espaço antes da escrita principal para reduzir falhas por quota.
+      podarSnapshotsAntigosLocalStorage();
       
       localStorage.setItem('cei_data', JSON.stringify(dadosComVersao));
+
+      // Criar backup APÓS salvar com sucesso (cópia do dado já compacto)
+      if (shouldBackup) {
+        createBackup();
+      }
       
       console.log('💾 Dados salvos no localStorage:', {
         version: SYSTEM_VERSION,
@@ -2653,6 +2779,38 @@ export const DataProvider = ({ children }) => {
       });
     } catch (error) {
       console.error('❌ [SAVE] Erro ao salvar dados:', error);
+
+      // Em quota excedida, liberar backups antigos e tentar novamente uma vez.
+      if (String(error?.name || '').toLowerCase().includes('quota')) {
+        try {
+          // Remover backups fixos e versioned para liberar espaço
+          localStorage.removeItem('cei_data_backup');
+          localStorage.removeItem('cei_data_emergency');
+
+          const backupKeys = Object.keys(localStorage)
+            .filter((key) => key.startsWith('cei_backup_v') || key.startsWith('cei_data_backup_import_'))
+            .sort();
+
+          backupKeys.slice(0, Math.max(backupKeys.length - 5, 0)).forEach((key) => {
+            localStorage.removeItem(key);
+          });
+
+          const dadosComVersaoCompacto = {
+            ...dados,
+            _metadata: {
+              version: SYSTEM_VERSION,
+              savedAt: new Date().toISOString(),
+              compacted: true
+            }
+          };
+
+          localStorage.setItem('cei_data', JSON.stringify(dadosComVersaoCompacto));
+          console.warn('⚠️ [SAVE] Salvamento recuperado após compactação por quota.');
+          return;
+        } catch (retryError) {
+          console.error('❌ [SAVE] Falha ao recuperar salvamento após compactação:', retryError);
+        }
+      }
       
       // Tentar salvar em backup de emergência
       try {
@@ -3078,7 +3236,7 @@ export const DataProvider = ({ children }) => {
         includeLegacyWithoutInstitution: true,
         includeInstitutionAliases: true
       })
-    );
+    ).filter((c) => !c?.excluido);
     
     return {
       permitido: true,
@@ -3265,6 +3423,21 @@ export const DataProvider = ({ children }) => {
       instituicaoId: usuarioLogado?.perfil === 'SuperAdmin' ? 0 : instituicaoAtiva,
       dataCadastro: new Date().toISOString()
     };
+
+    // Persistir imediatamente no localStorage para evitar perda do cadastro
+    // caso o pull periódico da nuvem rode antes do autosave do React concluir.
+    try {
+      const dadosStorage = parseJson(localStorage.getItem(DATA_KEY), {});
+      if (dadosStorage && typeof dadosStorage === 'object') {
+        const clientesStorage = Array.isArray(dadosStorage.clientes) ? dadosStorage.clientes : [];
+        dadosStorage.clientes = [...clientesStorage, novoCliente];
+        localStorage.setItem(DATA_KEY, JSON.stringify(dadosStorage));
+      }
+    } catch (_e) { /* melhor esforço */ }
+
+    // Reusar a janela de proteção já aplicada ao lote para bloquear pull imediato.
+    localStorage.setItem('cei_lote_import_flag', String(Date.now()));
+
     setClientes((clientesAtuais) => [...clientesAtuais, novoCliente]);
     registrarLog('adicionar', 'clientes', `Leitor "${novoCliente.nome || novoCliente.id}" cadastrado`, {
       clienteId: novoCliente.id
@@ -3327,15 +3500,24 @@ export const DataProvider = ({ children }) => {
           })
         );
 
-    const cpfExistente = new Set(
-      clientesDaInstituicao
+    const clientesVisiveisDaInstituicao = clientesDaInstituicao.filter((clienteExistente) => !clienteExistente?.excluido);
+    const cpfExistenteAtivo = new Set(
+      clientesVisiveisDaInstituicao
         .map((clienteExistente) => String(clienteExistente?.cpf || '').replace(/\D/g, ''))
         .filter(Boolean)
+    );
+    const clientesExcluidosPorCpf = new Map(
+      clientesDaInstituicao
+        .filter((clienteExistente) => clienteExistente?.excluido)
+        .map((clienteExistente) => [String(clienteExistente?.cpf || '').replace(/\D/g, ''), clienteExistente])
+        .filter(([cpfDigitos]) => Boolean(cpfDigitos))
     );
 
     const cpfLote = new Set();
     const novosClientes = [];
+    const clientesReativados = [];
     const detalhesIgnorados = [];
+    const nowIso = new Date().toISOString();
 
     candidatos.forEach((cliente) => {
       const nome = String(cliente?.nome || '').trim();
@@ -3347,7 +3529,7 @@ export const DataProvider = ({ children }) => {
         return;
       }
 
-      if (cpfExistente.has(cpfDigitos)) {
+      if (cpfExistenteAtivo.has(cpfDigitos)) {
         detalhesIgnorados.push({ nome, motivo: 'cpf já cadastrado' });
         return;
       }
@@ -3357,26 +3539,49 @@ export const DataProvider = ({ children }) => {
         return;
       }
 
-      if (novosClientes.length >= vagasRestantes) {
+      if ((novosClientes.length + clientesReativados.length) >= vagasRestantes) {
         detalhesIgnorados.push({ nome, motivo: 'limite da conta atingido' });
         return;
       }
 
-      const numeroSequencial = String(clientesDaInstituicao.length + novosClientes.length + 1).padStart(6, '0');
+      const clienteExcluido = clientesExcluidosPorCpf.get(cpfDigitos);
+      if (clienteExcluido) {
+        const clienteReativado = {
+          ...clienteExcluido,
+          ...cliente,
+          id: clienteExcluido.id,
+          instituicaoId: clienteExcluido.instituicaoId || instituicaoIdAlvo,
+          codigoIdentificacao: clienteExcluido.codigoIdentificacao || cliente.codigoIdentificacao,
+          ativo: true,
+          excluido: false,
+          motivoExclusao: '',
+          dataExclusao: null,
+          dataAtualizacao: nowIso
+        };
+
+        clientesReativados.push(clienteReativado);
+        cpfLote.add(cpfDigitos);
+        cpfExistenteAtivo.add(cpfDigitos);
+        return;
+      }
+
+      const numeroSequencial = String(
+        clientesVisiveisDaInstituicao.length + novosClientes.length + clientesReativados.length + 1
+      ).padStart(6, '0');
 
       const novoCliente = {
         ...cliente,
         id: gerarIdUnico(),
         instituicaoId: instituicaoIdAlvo,
         codigoIdentificacao: cliente.codigoIdentificacao || `LEIT${numeroSequencial}`,
-        dataCadastro: new Date().toISOString()
+        dataCadastro: nowIso
       };
 
       novosClientes.push(novoCliente);
       cpfLote.add(cpfDigitos);
     });
 
-    if (novosClientes.length > 0) {
+    if (novosClientes.length > 0 || clientesReativados.length > 0) {
       // 1) Persistir SINCRONAMENTE no localStorage antes de atualizar o estado React.
       //    O callback do setClientes no React 18 é chamado de forma assíncrona (batched),
       //    então não podemos depender dele para escrever no localStorage a tempo.
@@ -3384,7 +3589,16 @@ export const DataProvider = ({ children }) => {
         const dadosStorage = parseJson(localStorage.getItem(DATA_KEY), {});
         if (dadosStorage && typeof dadosStorage === 'object') {
           const clientesStorage = Array.isArray(dadosStorage.clientes) ? dadosStorage.clientes : [];
-          dadosStorage.clientes = [...clientesStorage, ...novosClientes];
+          const reativadosPorId = new Map(
+            clientesReativados.map((clienteAtualizado) => [String(clienteAtualizado.id), clienteAtualizado])
+          );
+
+          const clientesAtualizados = clientesStorage.map((clienteAtual) => {
+            const clienteReativado = reativadosPorId.get(String(clienteAtual?.id));
+            return clienteReativado || clienteAtual;
+          });
+
+          dadosStorage.clientes = [...clientesAtualizados, ...novosClientes];
           localStorage.setItem(DATA_KEY, JSON.stringify(dadosStorage));
         }
       } catch (_e) { /* se localStorage estiver cheio, continua mesmo assim */ }
@@ -3394,14 +3608,27 @@ export const DataProvider = ({ children }) => {
       //    impedindo que os 20 do Supabase sobrescrevam os recém-inseridos.
       localStorage.setItem('cei_lote_import_flag', String(Date.now()));
 
-      setClientes((clientesAtuais) => [...clientesAtuais, ...novosClientes]);
-      registrarLog('adicionar', 'clientes', `${novosClientes.length} leitores cadastrados em lote`, {
-        quantidade: novosClientes.length
+      setClientes((clientesAtuais) => {
+        const reativadosPorId = new Map(
+          clientesReativados.map((clienteAtualizado) => [String(clienteAtualizado.id), clienteAtualizado])
+        );
+
+        const clientesComReativados = clientesAtuais.map((clienteAtual) => {
+          const clienteReativado = reativadosPorId.get(String(clienteAtual?.id));
+          return clienteReativado || clienteAtual;
+        });
+
+        return [...clientesComReativados, ...novosClientes];
+      });
+      registrarLog('adicionar', 'clientes', `${novosClientes.length + clientesReativados.length} leitores cadastrados em lote`, {
+        quantidade: novosClientes.length + clientesReativados.length,
+        reativados: clientesReativados.length,
+        novos: novosClientes.length
       });
     }
 
     return {
-      inseridos: novosClientes.length,
+      inseridos: novosClientes.length + clientesReativados.length,
       ignorados: detalhesIgnorados.length,
       detalhesIgnorados
     };
@@ -3433,6 +3660,15 @@ export const DataProvider = ({ children }) => {
       dadosTermoEmprestimo: dadosTermoAtualizados
     };
   };
+
+  const criarClienteExcluido = (cliente, motivoExclusao = 'exclusao_manual', dataExclusaoIso = new Date().toISOString()) => ({
+    ...cliente,
+    ativo: false,
+    excluido: true,
+    dataExclusao: dataExclusaoIso,
+    dataAtualizacao: dataExclusaoIso,
+    motivoExclusao
+  });
 
   const removerCliente = async (id) => {
     const idNormalizado = String(id);
@@ -3467,13 +3703,7 @@ export const DataProvider = ({ children }) => {
     }
 
     if (possuiHistoricoEmprestimos) {
-      const clienteAtualizado = {
-        ...cliente,
-        ativo: false,
-        excluido: true,
-        dataExclusao: new Date().toISOString(),
-        motivoExclusao: 'historico_emprestimos'
-      };
+      const clienteAtualizado = criarClienteExcluido(cliente, 'historico_emprestimos');
 
       const clientesAntesDaExclusao = clientes;
       const emprestimosAntesDaAtualizacao = emprestimos;
@@ -3534,12 +3764,15 @@ export const DataProvider = ({ children }) => {
       return true;
     }
 
+    const clienteAtualizado = criarClienteExcluido(cliente, 'exclusao_manual');
     const clientesAntesDaExclusao = clientes;
-    setClientes((clientesAtuais) => clientesAtuais.filter(c => String(c.id) !== idNormalizado));
+    setClientes((clientesAtuais) =>
+      clientesAtuais.map((c) => String(c.id) === idNormalizado ? clienteAtualizado : c)
+    );
 
     const instituicaoIdAlvo = cliente.instituicaoId || instituicaoAtiva;
     if (isCloudEnabled && instituicaoIdAlvo && instituicaoIdAlvo !== 0) {
-      const cloudResult = await deleteFromCloud('clientes', cliente.id, instituicaoIdAlvo);
+      const cloudResult = await syncToCloud('clientes', [clienteAtualizado], instituicaoIdAlvo);
 
       if (!cloudResult?.success) {
         setClientes(clientesAntesDaExclusao);
@@ -3551,7 +3784,10 @@ export const DataProvider = ({ children }) => {
       }
     }
 
-    registrarLog('excluir', 'clientes', `Leitor "${cliente.nome || id}" excluído`, { clienteId: cliente.id });
+    registrarLog('excluir', 'clientes', `Leitor "${cliente.nome || id}" removido da listagem`, {
+      clienteId: cliente.id,
+      exclusaoLogica: true
+    });
     return true;
   };
 
@@ -3606,7 +3842,9 @@ export const DataProvider = ({ children }) => {
           })
         );
 
-    const semEmprestimo = clientesDaInstituicao.filter((c) => {
+    const clientesVisiveisInstituicao = clientesDaInstituicao.filter((c) => !c?.excluido);
+
+    const semEmprestimo = clientesVisiveisInstituicao.filter((c) => {
       const idStr = String(c.id);
       return !emprestimos.some((e) => {
         const eid = e.clienteId ?? e.leitorId;
@@ -3619,14 +3857,28 @@ export const DataProvider = ({ children }) => {
     }
 
     const clientesAntesDaExclusao = clientes;
-    const idsRemover = new Set(semEmprestimo.map((c) => String(c.id)));
-    setClientes((prev) => prev.filter((c) => !idsRemover.has(String(c.id))));
+    const dataExclusaoIso = new Date().toISOString();
+    const clientesMarcadosMap = new Map(
+      semEmprestimo.map((c) => [
+        String(c.id),
+        criarClienteExcluido(c, 'exclusao_em_lote', dataExclusaoIso)
+      ])
+    );
+
+    setClientes((prev) => prev.map((c) => clientesMarcadosMap.get(String(c.id)) || c));
 
     let falhasNuvem = [];
 
-    if (isCloudEnabled && instituicaoAtiva && instituicaoAtiva !== 0) {
+    if (isCloudEnabled) {
       for (const c of semEmprestimo) {
-        const cloudResult = await deleteFromCloud('clientes', c.id, c.instituicaoId || instituicaoAtiva);
+        const instituicaoIdCliente = c.instituicaoId || instituicaoAtiva;
+        if (!instituicaoIdCliente || instituicaoIdCliente === 0) {
+          continue;
+        }
+
+        const clienteAtualizado = clientesMarcadosMap.get(String(c.id));
+        const cloudResult = await syncToCloud('clientes', [clienteAtualizado], instituicaoIdCliente);
+
         if (!cloudResult?.success) {
           falhasNuvem.push(c);
         }
@@ -3637,11 +3889,18 @@ export const DataProvider = ({ children }) => {
       const falhaIds = new Set(falhasNuvem.map((c) => String(c.id)));
 
       setClientes((prev) => {
-        const idsAtuais = new Set(prev.map((c) => String(c.id)));
-        const restaurar = clientesAntesDaExclusao.filter(
-          (c) => falhaIds.has(String(c.id)) && !idsAtuais.has(String(c.id))
+        const clientesOriginaisMap = new Map(
+          clientesAntesDaExclusao.map((item) => [String(item.id), item])
         );
-        return [...prev, ...restaurar];
+
+        return prev.map((c) => {
+          const idCliente = String(c.id);
+          if (!falhaIds.has(idCliente)) {
+            return c;
+          }
+
+          return clientesOriginaisMap.get(idCliente) || c;
+        });
       });
 
       const removidosComSucesso = semEmprestimo.length - falhasNuvem.length;
@@ -3653,15 +3912,19 @@ export const DataProvider = ({ children }) => {
         `Os leitores com falha foram restaurados para evitar retorno inesperado.`
       );
 
-      registrarLog('excluir', 'clientes', `${removidosComSucesso} leitores excluídos em massa (${falhasNuvem.length} falhas na nuvem)`, {
+      registrarLog('excluir', 'clientes', `${removidosComSucesso} leitores removidos da listagem em massa (${falhasNuvem.length} falhas na nuvem)`, {
         quantidade: removidosComSucesso,
-        falhasNuvem: falhasNuvem.length
+        falhasNuvem: falhasNuvem.length,
+        exclusaoLogica: true
       });
 
       return { removidos: removidosComSucesso, falhas: falhasNuvem.length };
     }
 
-    registrarLog('excluir', 'clientes', `${semEmprestimo.length} leitores excluídos em massa`, { quantidade: semEmprestimo.length });
+    registrarLog('excluir', 'clientes', `${semEmprestimo.length} leitores removidos da listagem em massa`, {
+      quantidade: semEmprestimo.length,
+      exclusaoLogica: true
+    });
     return { removidos: semEmprestimo.length, falhas: 0 };
   };
 
@@ -3689,12 +3952,13 @@ export const DataProvider = ({ children }) => {
         );
 
     const clientesDaTurma = clientesDaInstituicao.filter((cliente) => clientePertenceTurma(cliente, turmaAlvo));
+    const clientesVisiveisTurma = clientesDaTurma.filter((cliente) => !cliente?.excluido);
 
-    if (clientesDaTurma.length === 0) {
+    if (clientesVisiveisTurma.length === 0) {
       return { totalTurma: 0, removidos: 0, preservadosHistorico: 0, falhas: 0 };
     }
 
-    const semEmprestimo = clientesDaTurma.filter((c) => {
+    const semEmprestimo = clientesVisiveisTurma.filter((c) => {
       const idStr = String(c.id);
       return !emprestimos.some((e) => {
         const eid = e.clienteId ?? e.leitorId;
@@ -3702,11 +3966,11 @@ export const DataProvider = ({ children }) => {
       });
     });
 
-    const preservadosHistorico = Math.max(clientesDaTurma.length - semEmprestimo.length, 0);
+    const preservadosHistorico = Math.max(clientesVisiveisTurma.length - semEmprestimo.length, 0);
 
     if (semEmprestimo.length === 0) {
       return {
-        totalTurma: clientesDaTurma.length,
+        totalTurma: clientesVisiveisTurma.length,
         removidos: 0,
         preservadosHistorico,
         falhas: 0
@@ -3714,8 +3978,15 @@ export const DataProvider = ({ children }) => {
     }
 
     const clientesAntesDaExclusao = clientes;
-    const idsRemover = new Set(semEmprestimo.map((c) => String(c.id)));
-    setClientes((prev) => prev.filter((c) => !idsRemover.has(String(c.id))));
+    const dataExclusaoIso = new Date().toISOString();
+    const clientesMarcadosMap = new Map(
+      semEmprestimo.map((c) => [
+        String(c.id),
+        criarClienteExcluido(c, 'exclusao_turma', dataExclusaoIso)
+      ])
+    );
+
+    setClientes((prev) => prev.map((c) => clientesMarcadosMap.get(String(c.id)) || c));
 
     const falhasNuvem = [];
 
@@ -3726,7 +3997,8 @@ export const DataProvider = ({ children }) => {
           continue;
         }
 
-        const cloudResult = await deleteFromCloud('clientes', c.id, instituicaoIdCliente);
+        const clienteAtualizado = clientesMarcadosMap.get(String(c.id));
+        const cloudResult = await syncToCloud('clientes', [clienteAtualizado], instituicaoIdCliente);
         if (!cloudResult?.success) {
           falhasNuvem.push(c);
         }
@@ -3739,36 +4011,45 @@ export const DataProvider = ({ children }) => {
       const falhaIds = new Set(falhasNuvem.map((c) => String(c.id)));
 
       setClientes((prev) => {
-        const idsAtuais = new Set(prev.map((c) => String(c.id)));
-        const restaurar = clientesAntesDaExclusao.filter(
-          (c) => falhaIds.has(String(c.id)) && !idsAtuais.has(String(c.id))
+        const clientesOriginaisMap = new Map(
+          clientesAntesDaExclusao.map((item) => [String(item.id), item])
         );
-        return [...prev, ...restaurar];
+
+        return prev.map((c) => {
+          const idCliente = String(c.id);
+          if (!falhaIds.has(idCliente)) {
+            return c;
+          }
+
+          return clientesOriginaisMap.get(idCliente) || c;
+        });
       });
 
       const removidosComSucesso = semEmprestimo.length - falhasNuvem.length;
 
-      registrarLog('excluir', 'clientes', `${removidosComSucesso} leitores excluídos da turma "${nomeTurmaLog}" (${falhasNuvem.length} falhas na nuvem)`, {
+      registrarLog('excluir', 'clientes', `${removidosComSucesso} leitores removidos da listagem da turma "${nomeTurmaLog}" (${falhasNuvem.length} falhas na nuvem)`, {
         quantidade: removidosComSucesso,
         falhasNuvem: falhasNuvem.length,
-        turma: nomeTurmaLog
+        turma: nomeTurmaLog,
+        exclusaoLogica: true
       });
 
       return {
-        totalTurma: clientesDaTurma.length,
+        totalTurma: clientesVisiveisTurma.length,
         removidos: removidosComSucesso,
         preservadosHistorico,
         falhas: falhasNuvem.length
       };
     }
 
-    registrarLog('excluir', 'clientes', `${semEmprestimo.length} leitores excluídos da turma "${nomeTurmaLog}"`, {
+    registrarLog('excluir', 'clientes', `${semEmprestimo.length} leitores removidos da listagem da turma "${nomeTurmaLog}"`, {
       quantidade: semEmprestimo.length,
-      turma: nomeTurmaLog
+      turma: nomeTurmaLog,
+      exclusaoLogica: true
     });
 
     return {
-      totalTurma: clientesDaTurma.length,
+      totalTurma: clientesVisiveisTurma.length,
       removidos: semEmprestimo.length,
       preservadosHistorico,
       falhas: 0
@@ -4209,8 +4490,22 @@ export const DataProvider = ({ children }) => {
       turmaNome: turmaNomeResolvida,
       serieNome: serieNomeResolvida,
       dataEmprestimo: emprestimoData.dataEmprestimo || new Date().toISOString(),
-      dadosTermoEmprestimo: dadosTermoEmprestimo
+      dadosTermoEmprestimo: compactarDadosTermoEmprestimo(dadosTermoEmprestimo)
     };
+
+    // Persistir imediatamente para reduzir risco de perda em corrida com pull da nuvem.
+    try {
+      const dadosStorage = parseJson(localStorage.getItem(DATA_KEY), {});
+      if (dadosStorage && typeof dadosStorage === 'object') {
+        const emprestimosStorage = Array.isArray(dadosStorage.emprestimos) ? dadosStorage.emprestimos : [];
+        dadosStorage.emprestimos = [...emprestimosStorage, novoEmprestimo];
+        localStorage.setItem(DATA_KEY, JSON.stringify(dadosStorage));
+      }
+    } catch (_e) { /* melhor esforço */ }
+
+    // Reaproveita janela de bloqueio de pull para evitar sobrescrita imediata.
+    localStorage.setItem('cei_lote_import_flag', String(Date.now()));
+
     setEmprestimos((prev) => [...prev, novoEmprestimo]);
     registrarLog('emprestimo', 'emprestimos', `Empréstimo "${codigoEmprestimo}" criado`, {
       emprestimoId: novoEmprestimo.id,
@@ -4397,7 +4692,7 @@ export const DataProvider = ({ children }) => {
   
   const registrarLog = (acao, modulo, descricao, detalhes = {}) => {
     const novoLog = {
-      id: logAtividades.length > 0 ? Math.max(...logAtividades.map(l => l.id)) + 1 : 1,
+      id: Date.now() + Math.floor(Math.random() * 1000),
       usuarioId: usuarioLogado?.id,
       usuarioNome: usuarioLogado?.nome,
       instituicaoId: instituicaoAtiva,
@@ -4408,7 +4703,10 @@ export const DataProvider = ({ children }) => {
       dataHora: new Date().toISOString()
     };
     
-    setLogAtividades([...logAtividades, novoLog]);
+    setLogAtividades((prev) => {
+      const next = [...(Array.isArray(prev) ? prev : []), novoLog];
+      return next.slice(-MAX_LOG_ATIVIDADES);
+    });
     return novoLog;
   };
 
@@ -4731,7 +5029,7 @@ export const DataProvider = ({ children }) => {
       console.log('✔️ [LOGIN] Verificação - localStorage após salvar:', verificacao ? 'OK' : 'FALHOU');
 
       const logLogin = {
-        id: logAtividades.length > 0 ? Math.max(...logAtividades.map(l => l.id)) + 1 : 1,
+        id: Date.now() + Math.floor(Math.random() * 1000),
         usuarioId: usuario.id,
         usuarioNome: usuario.nome,
         instituicaoId: usuario.instituicaoId,
@@ -4744,7 +5042,10 @@ export const DataProvider = ({ children }) => {
         },
         dataHora: new Date().toISOString()
       };
-      setLogAtividades([...logAtividades, logLogin]);
+      setLogAtividades((prev) => {
+        const next = [...(Array.isArray(prev) ? prev : []), logLogin];
+        return next.slice(-MAX_LOG_ATIVIDADES);
+      });
       
       return true;
     }

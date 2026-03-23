@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import Layout from '../components/Layout';
 import {
   Box,
@@ -30,15 +30,19 @@ import {
 import { Add, Edit, AssignmentReturn, Search, PersonAdd, CheckCircle, Print, Description, PrintOutlined } from '@mui/icons-material';
 import { useData } from '../context/DataContext';
 import TermoEmprestimo from '../components/TermoEmprestimo';
+import { useNavigate } from 'react-router-dom';
 
 function EmprestimosPage() {
+  const navigate = useNavigate();
+
   const { 
     emprestimos, 
     adicionarEmprestimo, 
     atualizarEmprestimo,
     livros,
     clientes,
-    adicionarCliente
+    adicionarCliente,
+    adicionarLivro
   } = useData();
   const [open, setOpen] = useState(false);
   
@@ -46,6 +50,7 @@ function EmprestimosPage() {
   const [isbnBusca, setIsbnBusca] = useState('');
   const [livroSelecionado, setLivroSelecionado] = useState(null);
   const [etapaAtual, setEtapaAtual] = useState(1); // 1: buscar livro, 2: selecionar/cadastrar leitor
+  const [mostrarCadastroLivro, setMostrarCadastroLivro] = useState(false);
   const [buscaLeitor, setBuscaLeitor] = useState('');
   const [mostrarCadastroLeitor, setMostrarCadastroLeitor] = useState(false);
   
@@ -71,10 +76,96 @@ function EmprestimosPage() {
     endereco: ''
   });
 
+  const [novoLivro, setNovoLivro] = useState({
+    titulo: '',
+    autor: '',
+    isbn: '',
+    editora: '',
+    categoria: '',
+    quantidade: 1,
+    localizacao: '',
+    tipo: 'Paradidático',
+    anoPublicacao: '',
+    anoVigencia: ''
+  });
+
+  const normalizarIsbn = (valor) => String(valor || '').replace(/[^0-9Xx]/g, '').toUpperCase();
+
+  const resumoEstoqueEmprestimos = useMemo(() => {
+    const emprestimosAtivos = emprestimos.filter((emp) => String(emp?.status || '').toLowerCase() === 'ativo');
+
+    const ativosPorLivro = new Map();
+    emprestimosAtivos.forEach((emp) => {
+      const livroId = String(emp?.livroId || '');
+      if (!livroId) return;
+      ativosPorLivro.set(livroId, (ativosPorLivro.get(livroId) || 0) + 1);
+    });
+
+    let totalExemplares = 0;
+    let disponiveis = 0;
+
+    livros.forEach((livro) => {
+      if (livro?.baixa) return;
+      const quantidade = Math.max(Number(livro?.quantidade) || 0, 0);
+      totalExemplares += quantidade;
+
+      const ativos = ativosPorLivro.get(String(livro.id)) || 0;
+      disponiveis += Math.max(quantidade - ativos, 0);
+    });
+
+    return {
+      totalExemplares,
+      emprestados: emprestimosAtivos.length,
+      disponiveis
+    };
+  }, [livros, emprestimos]);
+
+  const leitoresFiltrados = useMemo(() => {
+    const termo = buscaLeitor.trim();
+    if (!termo) return [];
+
+    const termoLower = termo.toLowerCase();
+    const termoCpf = termo.replace(/\D/g, '');
+
+    return clientes.filter((c) => {
+      if (!c?.ativo) return false;
+
+      const nome = String(c?.nome || '').toLowerCase();
+      const cpf = String(c?.cpf || '').replace(/\D/g, '');
+
+      const nomeConfere = nome.includes(termoLower);
+      const cpfConfere = termoCpf.length > 0 && cpf.includes(termoCpf);
+
+      return nomeConfere || cpfConfere;
+    });
+  }, [buscaLeitor, clientes]);
+
+  const selecionarLivroParaEmprestimo = (livro) => {
+    if (!livro) return false;
+
+    const emprestimosAtivosDoLivro = emprestimos.filter(
+      (emp) => emp.livroId === livro.id && emp.status === 'ativo'
+    ).length;
+
+    const quantidadeDisponivel = (Number(livro.quantidade) || 1) - emprestimosAtivosDoLivro;
+
+    if (quantidadeDisponivel <= 0) {
+      alert(`❌ Livro indisponível!\n\nTodos os ${livro.quantidade} exemplar(es) estão emprestados.\nAguarde a devolução de algum exemplar.`);
+      return false;
+    }
+
+    setLivroSelecionado({ ...livro, quantidadeDisponivel });
+    setFormData((prev) => ({ ...prev, livroId: livro.id }));
+    setEtapaAtual(2);
+    setMostrarCadastroLivro(false);
+    return true;
+  };
+
   const handleOpen = () => {
     setIsbnBusca('');
     setLivroSelecionado(null);
     setEtapaAtual(1);
+    setMostrarCadastroLivro(false);
     setBuscaLeitor('');
     setMostrarCadastroLeitor(false);
     setNovoLeitor({
@@ -83,6 +174,18 @@ function EmprestimosPage() {
       email: '',
       telefone: '',
       endereco: ''
+    });
+    setNovoLivro({
+      titulo: '',
+      autor: '',
+      isbn: '',
+      editora: '',
+      categoria: '',
+      quantidade: 1,
+      localizacao: '',
+      tipo: 'Paradidático',
+      anoPublicacao: '',
+      anoVigencia: ''
     });
     setFormData({
       clienteId: '',
@@ -99,31 +202,81 @@ function EmprestimosPage() {
   };
 
   const buscarLivroPorISBN = () => {
-    if (!isbnBusca) {
+    const isbnNormalizado = normalizarIsbn(isbnBusca);
+
+    if (!isbnNormalizado) {
       alert('Digite o ISBN do livro');
       return;
     }
     
-    const livro = livros.find(l => l.isbn === isbnBusca);
+    const livro = livros.find((l) => normalizarIsbn(l.isbn) === isbnNormalizado);
     
     if (livro) {
-      // Calcular quantos exemplares estão disponíveis
-      const emprestimosAtivosDoLivro = emprestimos.filter(
-        emp => emp.livroId === livro.id && emp.status === 'ativo'
-      ).length;
-      
-      const quantidadeDisponivel = (livro.quantidade || 1) - emprestimosAtivosDoLivro;
-      
-      if (quantidadeDisponivel > 0) {
-        setLivroSelecionado({ ...livro, quantidadeDisponivel });
-        setFormData({ ...formData, livroId: livro.id });
-        setEtapaAtual(2); // Avançar para seleção de leitor
-      } else {
-        alert(`❌ Livro indisponível!\n\nTodos os ${livro.quantidade} exemplar(es) estão emprestados.\nAguarde a devolução de algum exemplar.`);
-      }
+      selecionarLivroParaEmprestimo(livro);
     } else {
-      alert('❌ Livro não encontrado com este ISBN!');
+      const confirmarCadastro = window.confirm(
+        `❌ Livro não encontrado com ISBN ${isbnNormalizado}.\n\nDeseja cadastrar um novo livro agora?`
+      );
+
+      if (confirmarCadastro) {
+        setNovoLivro((prev) => ({
+          ...prev,
+          isbn: isbnNormalizado
+        }));
+        setMostrarCadastroLivro(true);
+      }
     }
+  };
+
+  const handleCancelarCadastroLivro = () => {
+    setMostrarCadastroLivro(false);
+    setNovoLivro((prev) => ({
+      ...prev,
+      isbn: normalizarIsbn(isbnBusca)
+    }));
+  };
+
+  const handleCadastrarLivroEContinuar = () => {
+    const isbnNormalizado = normalizarIsbn(novoLivro.isbn || isbnBusca);
+
+    if (!novoLivro.titulo || !novoLivro.autor) {
+      alert('Título e autor são obrigatórios para cadastrar o livro.');
+      return;
+    }
+
+    if (!isbnNormalizado) {
+      alert('Informe um ISBN válido para continuar.');
+      return;
+    }
+
+    const livroExistente = livros.find((l) => normalizarIsbn(l.isbn) === isbnNormalizado);
+    if (livroExistente) {
+      const usarExistente = window.confirm(
+        `Já existe um livro cadastrado com esse ISBN:\n\n${livroExistente.titulo}\n\nDeseja usá-lo neste empréstimo?`
+      );
+
+      if (usarExistente) {
+        selecionarLivroParaEmprestimo(livroExistente);
+      }
+      return;
+    }
+
+    const numeroSequencial = (livros.length + 1).toString().padStart(6, '0');
+    const livroCadastrado = adicionarLivro({
+      ...novoLivro,
+      isbn: isbnNormalizado,
+      quantidade: Math.max(Number(novoLivro.quantidade) || 1, 1),
+      codigoIdentificacao: `LIV${numeroSequencial}`,
+      anoVigencia: novoLivro.tipo === 'Didático' ? novoLivro.anoVigencia : ''
+    });
+
+    if (!livroCadastrado) {
+      return;
+    }
+
+    setIsbnBusca(isbnNormalizado);
+    selecionarLivroParaEmprestimo(livroCadastrado);
+    alert('✅ Livro cadastrado e selecionado para o empréstimo!');
   };
 
   const handleSelecionarLeitor = (leitor) => {
@@ -150,11 +303,55 @@ function EmprestimosPage() {
       ativo: true,
       dataCadastro: new Date().toISOString()
     });
+
+    if (!leitorCadastrado) {
+      return;
+    }
     
     // Selecionar o leitor recém-cadastrado
     setFormData(prev => ({ ...prev, clienteId: leitorCadastrado.id }));
     setMostrarCadastroLeitor(false);
     alert('✅ Leitor cadastrado com sucesso!');
+  };
+
+  const perguntarCadastroLeitor = () => {
+    const termoBusca = String(buscaLeitor || '').trim();
+    if (!termoBusca) {
+      alert('Digite o nome, CPF ou matrícula do leitor para buscar.');
+      return;
+    }
+
+    const confirmarCadastro = window.confirm(
+      `Leitor não encontrado para "${termoBusca}".\n\nDeseja cadastrá-lo agora?`
+    );
+
+    if (!confirmarCadastro) {
+      return;
+    }
+
+    const termoSomenteDigitos = termoBusca.replace(/\D/g, '');
+    setNovoLeitor((prev) => ({
+      ...prev,
+      nome: termoSomenteDigitos.length >= 11 ? prev.nome : termoBusca,
+      cpf: termoSomenteDigitos.length >= 11 ? termoSomenteDigitos.slice(0, 11) : prev.cpf
+    }));
+    setMostrarCadastroLeitor(true);
+  };
+
+  const handleBuscarLeitor = () => {
+    if (!buscaLeitor.trim()) {
+      alert('Digite o nome, CPF ou matrícula do leitor para buscar.');
+      return;
+    }
+
+    if (leitoresFiltrados.length === 1) {
+      handleSelecionarLeitor(leitoresFiltrados[0]);
+      return;
+    }
+
+    if (leitoresFiltrados.length === 0) {
+      perguntarCadastroLeitor();
+    }
   };
 
   const handleSubmit = () => {
@@ -189,9 +386,37 @@ function EmprestimosPage() {
       });
     }
   };
+
+  const montarDadosTermoEmprestimo = (emprestimo) => {
+    const dados = emprestimo?.dadosTermoEmprestimo || {};
+    const livro = livros.find((item) => String(item?.id) === String(emprestimo?.livroId));
+    const leitor = clientes.find((item) => String(item?.id) === String(emprestimo?.clienteId));
+
+    return {
+      ...dados,
+      codigoEmprestimo: dados.codigoEmprestimo || emprestimo?.codigoEmprestimo,
+      dataEmprestimo: dados.dataEmprestimo || emprestimo?.dataEmprestimo,
+      dataDevolucao: dados.dataDevolucao || emprestimo?.dataDevolucao,
+      livroCodigo: dados.livroCodigo || livro?.codigoIdentificacao || 'N/A',
+      livroTitulo: dados.livroTitulo || emprestimo?.livroTitulo || livro?.titulo || 'N/A',
+      livroAutor: dados.livroAutor || livro?.autor || 'N/A',
+      livroISBN: dados.livroISBN || livro?.isbn || 'N/A',
+      livroEditora: dados.livroEditora || livro?.editora || 'N/A',
+      livroTipo: dados.livroTipo || livro?.tipo || 'N/A',
+      leitorCodigo: dados.leitorCodigo || leitor?.codigoIdentificacao || 'N/A',
+      leitorNome: dados.leitorNome || emprestimo?.clienteNome || leitor?.nome || 'N/A',
+      leitorCPF: dados.leitorCPF || leitor?.cpf || 'N/A',
+      leitorTelefone: dados.leitorTelefone || leitor?.telefone || 'N/A',
+      leitorEmail: dados.leitorEmail || leitor?.email || 'N/A',
+      leitorEndereco: dados.leitorEndereco || leitor?.endereco || 'N/A',
+      leitorMatricula: dados.leitorMatricula || leitor?.matricula || '',
+      leitorTurma: dados.leitorTurma || emprestimo?.turmaNome || leitor?.turma || leitor?.nomeTurma || 'N/A',
+      leitorSerie: dados.leitorSerie || emprestimo?.serieNome || leitor?.serie || leitor?.nomeSerie || 'N/A'
+    };
+  };
   
   const handleAbrirTermo = (emprestimo) => {
-    setTermoSelecionado(emprestimo.dadosTermoEmprestimo);
+    setTermoSelecionado(montarDadosTermoEmprestimo(emprestimo));
     setTipoTermo('preenchido');
     setTermoOpen(true);
   };
@@ -237,6 +462,48 @@ function EmprestimosPage() {
 
   return (
     <Layout title="Empréstimos">
+      <Grid container spacing={2} sx={{ mb: 2 }}>
+        <Grid item xs={12} md={3}>
+          <Card>
+            <CardContent>
+              <Typography variant="caption" color="text.secondary">Exemplares no acervo</Typography>
+              <Typography variant="h5" fontWeight={700}>{resumoEstoqueEmprestimos.totalExemplares}</Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={12} md={3}>
+          <Card>
+            <CardContent>
+              <Typography variant="caption" color="text.secondary">Empréstimos ativos</Typography>
+              <Typography variant="h5" fontWeight={700}>{resumoEstoqueEmprestimos.emprestados}</Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={12} md={3}>
+          <Card>
+            <CardContent>
+              <Typography variant="caption" color="text.secondary">Estoque disponível</Typography>
+              <Typography variant="h5" fontWeight={700} color="success.main">{resumoEstoqueEmprestimos.disponiveis}</Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={12} md={3}>
+          <Card>
+            <CardContent>
+              <Typography variant="caption" color="text.secondary">Acesso rápido</Typography>
+              <Button
+                sx={{ mt: 1 }}
+                fullWidth
+                variant="outlined"
+                onClick={() => navigate('/relatorios-livros')}
+              >
+                Ver estoque disponível
+              </Button>
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
+
       <Box sx={{ mb: 2, display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1 }}>
         <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
           <Button
@@ -354,43 +621,165 @@ function EmprestimosPage() {
             {/* ETAPA 1: BUSCAR LIVRO POR ISBN */}
             {etapaAtual === 1 && (
               <Box>
-                <Alert severity="info" sx={{ mb: 3 }}>
-                  Digite o ISBN do livro que será emprestado
-                </Alert>
-                
-                <Box sx={{ display: 'flex', gap: 2, mb: 3 }}>
-                  <TextField
-                    label="ISBN"
-                    fullWidth
-                    required
-                    value={isbnBusca}
-                    onChange={(e) => setIsbnBusca(e.target.value)}
-                    onKeyPress={(e) => {
-                      if (e.key === 'Enter') {
-                        buscarLivroPorISBN();
-                      }
-                    }}
-                    placeholder="Digite o ISBN e pressione Enter"
-                    autoFocus
-                    InputProps={{
-                      endAdornment: (
-                        <InputAdornment position="end">
-                          <IconButton onClick={buscarLivroPorISBN} edge="end">
-                            <Search />
-                          </IconButton>
-                        </InputAdornment>
-                      )
-                    }}
-                  />
-                  <Button
-                    variant="contained"
-                    startIcon={<Search />}
-                    onClick={buscarLivroPorISBN}
-                    sx={{ minWidth: 120 }}
-                  >
-                    Buscar
-                  </Button>
-                </Box>
+                {!mostrarCadastroLivro ? (
+                  <>
+                    <Alert severity="info" sx={{ mb: 3 }}>
+                      Digite o ISBN do livro que será emprestado
+                    </Alert>
+
+                    <Box sx={{ display: 'flex', gap: 2, mb: 3 }}>
+                      <TextField
+                        label="ISBN"
+                        fullWidth
+                        required
+                        value={isbnBusca}
+                        onChange={(e) => setIsbnBusca(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            buscarLivroPorISBN();
+                          }
+                        }}
+                        placeholder="Digite o ISBN e pressione Enter"
+                        autoFocus
+                        InputProps={{
+                          endAdornment: (
+                            <InputAdornment position="end">
+                              <IconButton onClick={buscarLivroPorISBN} edge="end">
+                                <Search />
+                              </IconButton>
+                            </InputAdornment>
+                          )
+                        }}
+                      />
+                      <Button
+                        variant="contained"
+                        startIcon={<Search />}
+                        onClick={buscarLivroPorISBN}
+                        sx={{ minWidth: 120 }}
+                      >
+                        Buscar
+                      </Button>
+                    </Box>
+                  </>
+                ) : (
+                  <>
+                    <Alert severity="warning" sx={{ mb: 2 }}>
+                      ISBN não encontrado. Cadastre o novo livro para continuar o empréstimo.
+                    </Alert>
+
+                    <Grid container spacing={2}>
+                      <Grid item xs={12}>
+                        <TextField
+                          label="ISBN"
+                          fullWidth
+                          required
+                          value={novoLivro.isbn}
+                          onChange={(e) => setNovoLivro((prev) => ({ ...prev, isbn: e.target.value }))}
+                        />
+                      </Grid>
+                      <Grid item xs={12}>
+                        <TextField
+                          label="Título"
+                          fullWidth
+                          required
+                          value={novoLivro.titulo}
+                          onChange={(e) => setNovoLivro((prev) => ({ ...prev, titulo: e.target.value }))}
+                        />
+                      </Grid>
+                      <Grid item xs={12}>
+                        <TextField
+                          label="Autor"
+                          fullWidth
+                          required
+                          value={novoLivro.autor}
+                          onChange={(e) => setNovoLivro((prev) => ({ ...prev, autor: e.target.value }))}
+                        />
+                      </Grid>
+                      <Grid item xs={12} sm={6}>
+                        <TextField
+                          label="Tipo de Livro"
+                          fullWidth
+                          select
+                          value={novoLivro.tipo}
+                          onChange={(e) => setNovoLivro((prev) => ({
+                            ...prev,
+                            tipo: e.target.value,
+                            anoVigencia: e.target.value === 'Didático' ? prev.anoVigencia : ''
+                          }))}
+                        >
+                          <MenuItem value="Didático">Didático</MenuItem>
+                          <MenuItem value="Paradidático">Paradidático</MenuItem>
+                          <MenuItem value="Livro do Professor">Livro do Professor</MenuItem>
+                        </TextField>
+                      </Grid>
+                      <Grid item xs={12} sm={6}>
+                        <TextField
+                          label="Quantidade"
+                          fullWidth
+                          type="number"
+                          value={novoLivro.quantidade}
+                          onChange={(e) => setNovoLivro((prev) => ({ ...prev, quantidade: e.target.value }))}
+                          inputProps={{ min: 1 }}
+                        />
+                      </Grid>
+                      {novoLivro.tipo === 'Didático' && (
+                        <Grid item xs={12} sm={6}>
+                          <TextField
+                            label="Ano de Vigência"
+                            fullWidth
+                            type="number"
+                            value={novoLivro.anoVigencia}
+                            onChange={(e) => setNovoLivro((prev) => ({ ...prev, anoVigencia: e.target.value }))}
+                            placeholder="Ex: 2026"
+                          />
+                        </Grid>
+                      )}
+                      <Grid item xs={12} sm={6}>
+                        <TextField
+                          label="Editora"
+                          fullWidth
+                          value={novoLivro.editora}
+                          onChange={(e) => setNovoLivro((prev) => ({ ...prev, editora: e.target.value }))}
+                        />
+                      </Grid>
+                      <Grid item xs={12} sm={6}>
+                        <TextField
+                          label="Categoria"
+                          fullWidth
+                          value={novoLivro.categoria}
+                          onChange={(e) => setNovoLivro((prev) => ({ ...prev, categoria: e.target.value }))}
+                        />
+                      </Grid>
+                      <Grid item xs={12} sm={6}>
+                        <TextField
+                          label="Ano de Publicação"
+                          fullWidth
+                          type="number"
+                          value={novoLivro.anoPublicacao}
+                          onChange={(e) => setNovoLivro((prev) => ({ ...prev, anoPublicacao: e.target.value }))}
+                        />
+                      </Grid>
+                    </Grid>
+
+                    <Box sx={{ mt: 2, display: 'flex', gap: 2 }}>
+                      <Button
+                        variant="outlined"
+                        onClick={handleCancelarCadastroLivro}
+                        fullWidth
+                      >
+                        Voltar para busca
+                      </Button>
+                      <Button
+                        variant="contained"
+                        startIcon={<Add />}
+                        onClick={handleCadastrarLivroEContinuar}
+                        fullWidth
+                      >
+                        Cadastrar e continuar
+                      </Button>
+                    </Box>
+                  </>
+                )}
               </Box>
             )}
 
@@ -441,12 +830,24 @@ function EmprestimosPage() {
                       fullWidth
                       value={buscaLeitor}
                       onChange={(e) => setBuscaLeitor(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          handleBuscarLeitor();
+                        }
+                      }}
                       placeholder="Digite o nome ou CPF do leitor"
                       sx={{ mb: 2 }}
                       InputProps={{
                         startAdornment: (
                           <InputAdornment position="start">
                             <Search />
+                          </InputAdornment>
+                        ),
+                        endAdornment: (
+                          <InputAdornment position="end">
+                            <IconButton onClick={handleBuscarLeitor} edge="end">
+                              <Search />
+                            </IconButton>
                           </InputAdornment>
                         )
                       }}
@@ -462,13 +863,7 @@ function EmprestimosPage() {
                     {/* Lista de leitores filtrados */}
                     {buscaLeitor && !formData.clienteId && (
                       <Box sx={{ mb: 2, maxHeight: 200, overflowY: 'auto' }}>
-                        {clientes
-                          .filter(c => 
-                            c.ativo && 
-                            (c.nome.toLowerCase().includes(buscaLeitor.toLowerCase()) ||
-                             c.cpf?.includes(buscaLeitor))
-                          )
-                          .map(cliente => (
+                        {leitoresFiltrados.map(cliente => (
                             <Card 
                               key={cliente.id} 
                               sx={{ 
@@ -496,6 +891,17 @@ function EmprestimosPage() {
                               </CardContent>
                             </Card>
                           ))}
+
+                        {leitoresFiltrados.length === 0 && (
+                          <Alert severity="warning" sx={{ mt: 1 }}>
+                            Leitor não encontrado. Deseja cadastrar agora?
+                            <Box sx={{ mt: 1 }}>
+                              <Button size="small" variant="contained" onClick={perguntarCadastroLeitor}>
+                                Cadastrar novo leitor
+                              </Button>
+                            </Box>
+                          </Alert>
+                        )}
                       </Box>
                     )}
 

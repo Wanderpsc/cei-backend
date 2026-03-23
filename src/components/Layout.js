@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, useLocation, Outlet } from 'react-router-dom';
 import { useData } from '../context/DataContext';
 import AvisoLicenca from './AvisoLicenca';
@@ -55,6 +55,8 @@ const mobileDrawerWidth = 200;
 export default function Layout({ children }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [anchorEl, setAnchorEl] = useState(null);
+  const [quickAccessBarHeight, setQuickAccessBarHeight] = useState(0);
+  const quickAccessBarRef = useRef(null);
   const { usuarioLogado, logout, instituicoes } = useData();
   const navigate = useNavigate();
   const location = useLocation();
@@ -186,6 +188,40 @@ export default function Layout({ children }) {
     window.addEventListener('keydown', handleShortcut);
     return () => window.removeEventListener('keydown', handleShortcut);
   }, [quickAccessItems, navigate]);
+
+  useEffect(() => {
+    if (!quickAccessItems.length) {
+      setQuickAccessBarHeight(0);
+      return undefined;
+    }
+
+    const quickBar = quickAccessBarRef.current;
+    if (!quickBar) {
+      return undefined;
+    }
+
+    const updateQuickAccessHeight = () => {
+      const currentHeight = Math.ceil(quickBar.getBoundingClientRect().height || 0);
+      setQuickAccessBarHeight(currentHeight);
+    };
+
+    updateQuickAccessHeight();
+
+    let resizeObserver;
+    if (typeof ResizeObserver !== 'undefined') {
+      resizeObserver = new ResizeObserver(updateQuickAccessHeight);
+      resizeObserver.observe(quickBar);
+    }
+
+    window.addEventListener('resize', updateQuickAccessHeight);
+
+    return () => {
+      window.removeEventListener('resize', updateQuickAccessHeight);
+      if (resizeObserver) {
+        resizeObserver.disconnect();
+      }
+    };
+  }, [quickAccessItems.length]);
 
   const drawer = (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -395,6 +431,7 @@ export default function Layout({ children }) {
       {/* Barra de Atalhos Rápidos - Padrão para todos os perfis */}
       {quickAccessItems.length > 0 && (
         <Box
+          ref={quickAccessBarRef}
           sx={{
             position: 'fixed',
             top: { xs: 56, sm: 64 },
@@ -414,7 +451,7 @@ export default function Layout({ children }) {
                   sx={{
                     position: 'relative',
                     width: { xs: 120, sm: 138 },
-                    height: { xs: 46, sm: 52 },
+                    minHeight: { xs: 46, sm: 52 },
                     boxShadow: location.pathname === card.path ? 4 : 1,
                     transition: 'all 0.2s',
                     border: location.pathname === card.path ? `2px solid ${card.color}` : 'none',
@@ -457,10 +494,12 @@ export default function Layout({ children }) {
                       fontWeight={location.pathname === card.path ? 700 : 600}
                       sx={{ 
                         fontSize: { xs: '0.67rem', sm: '0.72rem' },
-                        lineHeight: 1.15,
-                        whiteSpace: 'nowrap',
+                        lineHeight: 1.1,
+                        whiteSpace: 'normal',
+                        display: '-webkit-box',
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: 'vertical',
                         overflow: 'hidden',
-                        textOverflow: 'ellipsis',
                         maxWidth: { xs: 75, sm: 90 },
                         color: location.pathname === card.path ? card.color : 'inherit',
                       }}
@@ -546,7 +585,7 @@ export default function Layout({ children }) {
         <Toolbar />
         {/* Espaço adicional quando há barra de atalhos - altura para 2 linhas */}
         {quickAccessItems.length > 0 && (
-          <Box sx={{ height: { xs: 118, sm: 130 } }} />
+          <Box sx={{ height: quickAccessBarHeight > 0 ? `${quickAccessBarHeight + 8}px` : { xs: 118, sm: 130 } }} />
         )}
         <Box sx={{ flexGrow: 1 }}>
           {/* Aviso de Licença */}

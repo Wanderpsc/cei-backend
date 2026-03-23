@@ -153,6 +153,10 @@ export default function SeriesTurmasPage() {
   };
 
   const isAlunoCliente = (cliente) => {
+    if (cliente?.excluido) {
+      return false;
+    }
+
     const tipoNormalizado = normalizarTexto(cliente?.tipo);
     const categoriaNormalizada = normalizarTexto(cliente?.categoria);
 
