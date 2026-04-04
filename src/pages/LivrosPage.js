@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import BarcodeScannerDialog from '../components/BarcodeScannerDialog';
 import MobileBarcodeScanner from '../components/MobileBarcodeScanner';
@@ -36,11 +37,12 @@ import {
   FormControlLabel,
   FormLabel
 } from '@mui/material';
-import { Add, Edit, Delete, Search, PhotoCamera, Upload, Close, QrCodeScanner, GetApp, Description, PrintOutlined } from '@mui/icons-material';
+import { Add, Edit, Delete, Search, PhotoCamera, Upload, Close, QrCodeScanner, GetApp, Description, PrintOutlined, Label } from '@mui/icons-material';
 import { useData } from '../context/DataContext';
 import TermoEmprestimo from '../components/TermoEmprestimo';
 
 function LivrosPage() {
+  const navigate = useNavigate();
   const { livros, emprestimos, adicionarLivro, atualizarLivro, removerLivro, darBaixaLivro, usuarioLogado } = useData();
   const [open, setOpen] = useState(false);
   const [editando, setEditando] = useState(null);
@@ -341,6 +343,16 @@ function LivrosPage() {
         />
         <Button
           variant="outlined"
+          startIcon={<Label />}
+          onClick={() => navigate('/etiquetas')}
+          size="small"
+          color="secondary"
+          sx={{ display: { xs: 'none', sm: 'flex' } }}
+        >
+          Etiquetas
+        </Button>
+        <Button
+          variant="outlined"
           startIcon={<Description />}
           onClick={() => {
             setTipoTermoEmprestimo('branco');
@@ -430,6 +442,7 @@ function LivrosPage() {
                       alt={livro.titulo}
                       variant="rounded"
                       sx={{ width: 56, height: 56 }}
+                      imgProps={{ style: { objectFit: 'contain' } }}
                     >
                       {!livro.fotoUrl && livro.titulo.charAt(0)}
                     </Avatar>
@@ -607,6 +620,7 @@ function LivrosPage() {
                     height="200"
                     image={formData.fotoUrl}
                     alt="Foto do livro"
+                    sx={{ objectFit: 'contain' }}
                   />
                   <IconButton
                     sx={{ position: 'absolute', top: 8, right: 8, bgcolor: 'background.paper' }}

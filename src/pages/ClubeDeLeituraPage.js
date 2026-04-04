@@ -171,6 +171,7 @@ export default function ClubeDeLeituraPage() {
                   <Avatar
                     src={item.resumos[item.resumos.length - 1]?.foto}
                     sx={{ width: 100, height: 100, margin: '20px auto' }}
+                    imgProps={{ style: { objectFit: 'contain' } }}
                   >
                     <Person sx={{ fontSize: 50 }} />
                   </Avatar>
@@ -244,7 +245,7 @@ export default function ClubeDeLeituraPage() {
                   <TableCell>{new Date(r.data).toLocaleDateString('pt-BR')}</TableCell>
                   <TableCell>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Avatar src={r.foto} sx={{ width: 32, height: 32 }}>
+                      <Avatar src={r.foto} sx={{ width: 32, height: 32 }} imgProps={{ style: { objectFit: 'contain' } }}>
                         <Person />
                       </Avatar>
                       {getNomeClienteResumo(r)}
@@ -325,7 +326,7 @@ export default function ClubeDeLeituraPage() {
                   {fotoAluno ? 'Alterar Foto' : 'Tirar Foto do Leitor'}
                 </Button>
                 {fotoAluno && (
-                  <Avatar src={fotoAluno} sx={{ width: 100, height: 100, margin: '10px auto' }} />
+                  <Avatar src={fotoAluno} sx={{ width: 100, height: 100, margin: '10px auto' }} imgProps={{ style: { objectFit: 'contain' } }} />
                 )}
               </Box>
             </Grid>

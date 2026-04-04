@@ -26,6 +26,7 @@ import {
   Cloud
 } from '@mui/icons-material';
 import { useData } from '../context/DataContext';
+import { isCloudEnabled } from '../services/supabaseClient';
 
 export default function ConfiguracoesPage() {
   const { 
@@ -63,9 +64,13 @@ export default function ConfiguracoesPage() {
 
   const logoInputRef = useRef(null);
   const emblemaInputRef = useRef(null);
+  const instituicaoCarregadaRef = useRef(null);
 
-  // Carregar configurações salvas da instituição
+  // Carregar configurações salvas da instituição apenas uma vez por instituição
+  // (não re-executar quando instituicoes atualiza via sync para evitar reset do formulário)
+  // Porém, se a instituição ainda não tem mídia reidratada, não travar o ref
   useEffect(() => {
+    if (instituicaoCarregadaRef.current === instituicaoAtiva) return;
     const instituicao = instituicoes.find(i => i.id === instituicaoAtiva);
     if (instituicao) {
       setConfigs({
@@ -86,6 +91,14 @@ export default function ConfiguracoesPage() {
           twitter: ''
         }
       });
+      // Só travar o ref quando a mídia já estiver reidratada (logo presente)
+      // ou quando realmente não existe mídia salva
+      const mediaSalva = localStorage.getItem('cei_institution_media_v1');
+      const temMediaSalva = mediaSalva && mediaSalva !== '{}';
+      const midiaCarregada = !temMediaSalva || instituicao.logoEscola || instituicao.logoCabecalho;
+      if (midiaCarregada) {
+        instituicaoCarregadaRef.current = instituicaoAtiva;
+      }
     }
   }, [instituicaoAtiva, instituicoes]);
 
@@ -100,9 +113,9 @@ export default function ConfiguracoesPage() {
       const reader = new FileReader();
       reader.onloadend = () => {
         if (tipo === 'logo') {
-          setConfigs(prev => ({ ...prev, logoCabecalho: reader.result }));
+          setConfigs(prev => ({ ...prev, logoCabecalho: reader.result, logoEscola: reader.result }));
         } else if (tipo === 'emblema') {
-          setConfigs(prev => ({ ...prev, logoEscola: reader.result }));
+          setConfigs(prev => ({ ...prev, logoEscola: reader.result, logoCabecalho: reader.result }));
         }
         setErro('');
       };
@@ -134,7 +147,7 @@ export default function ConfiguracoesPage() {
         configRelatorios: {
           titulo: configs.tituloCabecalho,
           subtitulo: configs.subtituloCabecalho,
-          logoUrl: configs.logoCabecalho
+          logoUrl: configs.logoCabecalho || configs.logoEscola
         }
       };
 
@@ -178,6 +191,7 @@ export default function ConfiguracoesPage() {
         </Alert>
       )}
 
+{!isCloudEnabled && (
       <Alert
         severity="info"
         sx={{ mb: 3 }}
@@ -189,22 +203,23 @@ export default function ConfiguracoesPage() {
       >
         Acesso multi-dispositivo depende da configuracao da nuvem. Use a area "Nuvem" para verificar se os dados estao sincronizando entre aparelhos.
       </Alert>
+      )}
 
       <Grid container spacing={3}>
-        {/* Configurações de Cabeçalho */}
+        {/* Dados da Escola - Cabeçalho e Emblema unificados */}
         <Grid item xs={12}>
           <Card>
             <CardContent>
               <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <School color="primary" />
-                Cabeçalho dos Documentos
+                Dados da Escola
               </Typography>
               <Divider sx={{ mb: 3 }} />
 
               <Grid container spacing={2}>
                 <Grid item xs={12} md={8}>
                   <TextField
-                    label="Título Principal"
+                    label="Nome da Escola (Título Principal)"
                     fullWidth
                     value={configs.tituloCabecalho}
                     onChange={(e) => setConfigs({ ...configs, tituloCabecalho: e.target.value })}
@@ -213,150 +228,54 @@ export default function ConfiguracoesPage() {
                   />
 
                   <TextField
-                    label="Subtítulo"
+                    label="Subtítulo (Slogan / Lema)"
                     fullWidth
                     value={configs.subtituloCabecalho}
                     onChange={(e) => setConfigs({ ...configs, subtituloCabecalho: e.target.value })}
-                    placeholder="Endereço, cidade, etc."
+                    placeholder="Slogan da escola, lema, etc."
                     sx={{ mb: 2 }}
                   />
 
                   <TextField
-                    label="Cor do Cabeçalho"
+                    label="Descrição da Escola"
+                    fullWidth
+                    multiline
+                    rows={2}
+                    value={configs.descricaoLogo}
+                    onChange={(e) => setConfigs({ ...configs, descricaoLogo: e.target.value })}
+                    placeholder="Breve descrição sobre a escola"
+                    sx={{ mb: 2 }}
+                  />
+
+                  <TextField
+                    label="Cor Institucional"
                     type="color"
                     fullWidth
                     value={configs.corCabecalho}
                     onChange={(e) => setConfigs({ ...configs, corCabecalho: e.target.value })}
-                    sx={{ mb: 2 }}
                   />
                 </Grid>
 
                 <Grid item xs={12} md={4}>
                   <Typography variant="subtitle2" gutterBottom>
-                    Logo do Cabeçalho
+                    Emblema / Logo da Escola
                   </Typography>
                   
-                  {configs.logoCabecalho ? (
+                  {(configs.logoEscola || configs.logoCabecalho) ? (
                     <Box sx={{ textAlign: 'center' }}>
                       <Avatar
-                        src={configs.logoCabecalho}
-                        alt="Logo"
-                        sx={{ width: 120, height: 120, mx: 'auto', mb: 1 }}
-                        variant="square"
-                      />
-                      <Button
-                        size="small"
-                        color="error"
-                        startIcon={<Delete />}
-                        onClick={() => handleRemoverImagem('logo')}
-                      >
-                        Remover
-                      </Button>
-                    </Box>
-                  ) : (
-                    <Box
-                      sx={{
-                        border: '2px dashed #ccc',
-                        borderRadius: 1,
-                        p: 3,
-                        textAlign: 'center',
-                        cursor: 'pointer',
-                        '&:hover': { borderColor: 'primary.main' }
-                      }}
-                      onClick={() => logoInputRef.current?.click()}
-                    >
-                      <ImageIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 1 }} />
-                      <Typography variant="body2" color="text.secondary">
-                        Clique para adicionar logo
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        (máx. 2MB)
-                      </Typography>
-                    </Box>
-                  )}
-                  <input
-                    ref={logoInputRef}
-                    type="file"
-                    accept="image/*"
-                    style={{ display: 'none' }}
-                    onChange={(e) => handleImagemUpload(e, 'logo')}
-                  />
-                </Grid>
-              </Grid>
-
-              {/* Preview do Cabeçalho */}
-              <Paper 
-                elevation={0} 
-                sx={{ 
-                  mt: 3, 
-                  p: 2, 
-                  bgcolor: configs.corCabecalho, 
-                  color: 'white',
-                  textAlign: 'center'
-                }}
-              >
-                <Typography variant="caption" color="rgba(255,255,255,0.7)">
-                  Preview do Cabeçalho:
-                </Typography>
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 2 }}>
-                  {configs.logoCabecalho && (
-                    <Avatar
-                      src={configs.logoCabecalho}
-                      alt="Logo"
-                      sx={{ width: 50, height: 50 }}
-                      variant="square"
-                    />
-                  )}
-                  <Box>
-                    <Typography variant="h6">{configs.tituloCabecalho || 'Título Principal'}</Typography>
-                    <Typography variant="body2">{configs.subtituloCabecalho || 'Subtítulo'}</Typography>
-                  </Box>
-                </Box>
-              </Paper>
-            </CardContent>
-          </Card>
-        </Grid>
-
-        {/* Configurações de Emblema/Logo */}
-        <Grid item xs={12}>
-          <Card>
-            <CardContent>
-              <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <ImageIcon color="primary" />
-                Emblema/Logo da Escola
-              </Typography>
-              <Divider sx={{ mb: 3 }} />
-
-              <Grid container spacing={2}>
-                <Grid item xs={12} md={8}>
-                  <TextField
-                    label="Descrição do Logo"
-                    fullWidth
-                    multiline
-                    rows={3}
-                    value={configs.descricaoLogo}
-                    onChange={(e) => setConfigs({ ...configs, descricaoLogo: e.target.value })}
-                    placeholder="Breve descrição sobre o emblema da escola"
-                  />
-                </Grid>
-
-                <Grid item xs={12} md={4}>
-                  <Typography variant="subtitle2" gutterBottom>
-                    Emblema Principal
-                  </Typography>
-                  
-                  {configs.logoEscola ? (
-                    <Box sx={{ textAlign: 'center' }}>
-                      <Avatar
-                        src={configs.logoEscola}
+                        src={configs.logoEscola || configs.logoCabecalho}
                         alt="Emblema"
-                        sx={{ width: 150, height: 150, mx: 'auto', mb: 1 }}
+                        sx={{ width: 150, height: 150, mx: 'auto', mb: 1, border: '2px solid #eee' }}
+                        imgProps={{ style: { objectFit: 'contain' } }}
                       />
                       <Button
                         size="small"
                         color="error"
                         startIcon={<Delete />}
-                        onClick={() => handleRemoverImagem('emblema')}
+                        onClick={() => {
+                          setConfigs(prev => ({ ...prev, logoEscola: '', logoCabecalho: '' }));
+                        }}
                       >
                         Remover
                       </Button>
@@ -391,6 +310,37 @@ export default function ConfiguracoesPage() {
                   />
                 </Grid>
               </Grid>
+
+              {/* Preview do Cabeçalho */}
+              <Paper 
+                elevation={0} 
+                sx={{ 
+                  mt: 3, 
+                  p: 2, 
+                  bgcolor: configs.corCabecalho, 
+                  color: 'white',
+                  textAlign: 'center',
+                  borderRadius: 2
+                }}
+              >
+                <Typography variant="caption" color="rgba(255,255,255,0.7)">
+                  Preview do Cabeçalho nos Documentos:
+                </Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 2 }}>
+                  {(configs.logoEscola || configs.logoCabecalho) && (
+                    <Avatar
+                      src={configs.logoEscola || configs.logoCabecalho}
+                      alt="Logo"
+                      sx={{ width: 50, height: 50 }}
+                      imgProps={{ style: { objectFit: 'contain' } }}
+                    />
+                  )}
+                  <Box>
+                    <Typography variant="h6">{configs.tituloCabecalho || 'Nome da Escola'}</Typography>
+                    <Typography variant="body2">{configs.subtituloCabecalho || 'Subtítulo'}</Typography>
+                  </Box>
+                </Box>
+              </Paper>
             </CardContent>
           </Card>
         </Grid>
