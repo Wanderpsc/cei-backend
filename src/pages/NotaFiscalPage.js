@@ -40,26 +40,26 @@ import {
 import { imprimirEscopo } from '../utils/printUtils';
 
 const DEFAULT_PREFEITURA_CURIMATA = {
-  razaoSocial: 'PREFEITURA MUNICIPAL DE CURIMATÁ',
-  cnpj: '06.554.273/0001-64',
-  endereco: 'Praça Abdias Albuquerque, 427 - Centro',
-  cep: '64960-000',
-  municipio: 'Curimatá',
-  uf: 'PI',
-  telefone: '(89) 3574-1198',
-  email: 'prefeituradecurimata@gmail.com'
+  razaoSocial: '',
+  cnpj: '',
+  endereco: '',
+  cep: '',
+  municipio: '',
+  uf: '',
+  telefone: '',
+  email: ''
 };
 
 const DEFAULT_PRESTADOR = {
-  razaoSocial: 'Wander Pires Silva Coelho',
+  razaoSocial: '',
   nomeFantasia: 'CEI - Controle Escolar Inteligente',
   tipoDocumento: 'CPF',
-  documento: '036.236.556-35',
+  documento: '',
   inscricaoMunicipal: '',
   endereco: '',
   cep: '',
   municipio: '',
-  uf: 'PI',
+  uf: '',
   telefone: '',
   email: ''
 };

@@ -40,6 +40,7 @@ import GerenciarUsuariosPage from './pages/GerenciarUsuariosPage';
 import RelatorioUsuariosPage from './pages/RelatorioUsuariosPage';
 import ConfiguracoesPage from './pages/ConfiguracoesPage';
 import ConfiguracoesNuvemPage from './pages/ConfiguracoesNuvemPage';
+import EtiquetasPage from './pages/EtiquetasPage';
 
 const theme = createTheme({
   palette: {
@@ -73,7 +74,7 @@ const ROUTE_TITLES = {
   '/diagrama-sistema': 'Diagrama do Sistema',
   '/limpar-duplicatas': 'Limpar Duplicatas',
   '/clube-leitura': 'Clube de Leitura',
-  '/relatorios-livros': 'Relatórios de Livros',
+  '/relatorios-livros': 'Planilha de Livros',
   '/notas-fiscais': 'Notas Fiscais',
   '/gerenciar-usuarios': 'Gerenciar Usuários',
   '/relatorio-usuarios': 'Relatório de Usuários',
@@ -118,6 +119,14 @@ function PrivateRoute({ children }) {
     if (
       location.pathname === '/series-turmas' &&
       permissoesUsuario.includes('/clientes')
+    ) {
+      return true;
+    }
+
+    // Compatibilidade: quem tem acesso a livros pode acessar etiquetas e planilha de livros.
+    if (
+      (location.pathname === '/etiquetas' || location.pathname === '/relatorios-livros') &&
+      permissoesUsuario.includes('/livros')
     ) {
       return true;
     }
@@ -215,6 +224,7 @@ function AppRoutes() {
       <Route path="/relatorio-usuarios" element={<PrivateRoute><RelatorioUsuariosPage /></PrivateRoute>} />
       <Route path="/configuracoes" element={<PrivateRoute><ConfiguracoesPage /></PrivateRoute>} />
       <Route path="/configuracoes/nuvem" element={<PrivateRoute><ConfiguracoesNuvemPage /></PrivateRoute>} />
+      <Route path="/etiquetas" element={<PrivateRoute><EtiquetasPage /></PrivateRoute>} />
     </Routes>
   );
 }

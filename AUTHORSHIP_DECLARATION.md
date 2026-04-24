@@ -11,11 +11,11 @@
 ## IDENTIFICAÇÃO DO AUTOR E PROPRIETÁRIO
 
 **Nome Completo**: Wander Pires Silva Coelho  
-**CPF**: [SEU CPF]  
-**RG**: [SEU RG]  
-**Endereço**: [SEU ENDEREÇO COMPLETO]  
-**Telefone**: [SEU TELEFONE]  
-**E-mail**: [SEU E-MAIL PROFISSIONAL]
+**CPF**: [03623655635]  
+**RG**: [03623655635]  
+**Endereço**: [AVENIDA VALDECIR RODRIGUES DE ALBUQUERQUE, 819, CENTRO, CURIMATÁ, PIAUÍ, CEP 64.960-000]  
+**Telefone**: [(89)981398723]  
+**E-mail**: [wanderpsc@gmail.com]
 
 **Qualificação**: Desenvolvedor de Software e Programador  
 **Nacionalidade**: Brasileiro  

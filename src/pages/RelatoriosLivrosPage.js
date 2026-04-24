@@ -48,6 +48,14 @@ export default function RelatoriosLivrosPage() {
     return statusNormalizado === 'ativo' || statusNormalizado === 'emprestado';
   };
 
+  const calcularLivrosEmprestados = (livro) => {
+    if (livro.baixa) return 0;
+    const livroIdNormalizado = String(livro.id);
+    return emprestimos.filter((emp) =>
+      String(emp.livroId) === livroIdNormalizado && isEmprestimoAtivo(emp.status)
+    ).length;
+  };
+
   const calcularLivrosDisponiveis = (livro) => {
     if (livro.baixa) return 0;
 
@@ -79,13 +87,16 @@ export default function RelatoriosLivrosPage() {
   const totalDidaticos = livrosDidaticos.length;
   const totalParadidaticos = livrosParadidaticos.length;
   const totalBaixas = livrosComBaixa.length;
+  const totalEmprestados = emprestimos.filter(e => isEmprestimoAtivo(e.status)).length;
+  const totalExemplares = livros.reduce((sum, l) => sum + (Number(l.quantidade) || 0), 0);
+  const totalDisponiveis = totalExemplares - totalEmprestados;
 
   const handlePrint = () => {
     imprimirEscopo();
   };
 
   return (
-    <Layout title="Relatórios de Livros">
+    <Layout title="Planilha de Livros">
       <Box sx={{ mb: 3 }} className="print-actions no-print">
         <Button startIcon={<Print />} onClick={handlePrint} variant="outlined">
           Imprimir Relatório
@@ -94,7 +105,7 @@ export default function RelatoriosLivrosPage() {
 
       <Box className="print-scope">
         <Typography className="print-only" variant="h6" fontWeight="bold" sx={{ mb: 1 }}>
-          Relatórios de Livros
+          Planilha de Livros
         </Typography>
         <Typography className="print-only" variant="body2" sx={{ mb: 2 }}>
           Emitido em: {new Date().toLocaleString('pt-BR')}
@@ -102,13 +113,13 @@ export default function RelatoriosLivrosPage() {
 
       {/* Cards de Estatísticas */}
       <Grid container spacing={3} sx={{ mb: 3 }}>
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid item xs={6} sm={4} md={2}>
           <Card>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <Box>
                   <Typography color="textSecondary" gutterBottom variant="body2">
-                    Total de Livros
+                    Total de Títulos
                   </Typography>
                   <Typography variant="h4">{totalLivros}</Typography>
                 </Box>
@@ -118,7 +129,55 @@ export default function RelatoriosLivrosPage() {
           </Card>
         </Grid>
 
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid item xs={6} sm={4} md={2}>
+          <Card>
+            <CardContent>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <Box>
+                  <Typography color="textSecondary" gutterBottom variant="body2">
+                    Total Exemplares
+                  </Typography>
+                  <Typography variant="h4">{totalExemplares}</Typography>
+                </Box>
+                <LibraryBooks sx={{ fontSize: 40, color: 'secondary.main' }} />
+              </Box>
+            </CardContent>
+          </Card>
+        </Grid>
+
+        <Grid item xs={6} sm={4} md={2}>
+          <Card sx={{ bgcolor: '#e8f5e9' }}>
+            <CardContent>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <Box>
+                  <Typography color="textSecondary" gutterBottom variant="body2">
+                    Disponíveis
+                  </Typography>
+                  <Typography variant="h4" color="success.main">{totalDisponiveis}</Typography>
+                </Box>
+                <CheckCircle sx={{ fontSize: 40, color: 'success.main' }} />
+              </Box>
+            </CardContent>
+          </Card>
+        </Grid>
+
+        <Grid item xs={6} sm={4} md={2}>
+          <Card sx={{ bgcolor: '#fff3e0' }}>
+            <CardContent>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <Box>
+                  <Typography color="textSecondary" gutterBottom variant="body2">
+                    Emprestados
+                  </Typography>
+                  <Typography variant="h4" color="warning.main">{totalEmprestados}</Typography>
+                </Box>
+                <Warning sx={{ fontSize: 40, color: 'warning.main' }} />
+              </Box>
+            </CardContent>
+          </Card>
+        </Grid>
+
+        <Grid item xs={6} sm={4} md={2}>
           <Card>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -134,23 +193,7 @@ export default function RelatoriosLivrosPage() {
           </Card>
         </Grid>
 
-        <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent>
-              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <Box>
-                  <Typography color="textSecondary" gutterBottom variant="body2">
-                    Paradidáticos
-                  </Typography>
-                  <Typography variant="h4">{totalParadidaticos}</Typography>
-                </Box>
-                <MenuBook sx={{ fontSize: 40, color: 'success.main' }} />
-              </Box>
-            </CardContent>
-          </Card>
-        </Grid>
-
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid item xs={6} sm={4} md={2}>
           <Card>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -160,7 +203,7 @@ export default function RelatoriosLivrosPage() {
                   </Typography>
                   <Typography variant="h4">{totalBaixas}</Typography>
                 </Box>
-                <Warning sx={{ fontSize: 40, color: 'warning.main' }} />
+                <Warning sx={{ fontSize: 40, color: 'error.main' }} />
               </Box>
             </CardContent>
           </Card>
@@ -202,14 +245,15 @@ export default function RelatoriosLivrosPage() {
                   <TableCell>Ano Publicação</TableCell>
                   <TableCell>Ano Vigência</TableCell>
                   <TableCell>Quantidade</TableCell>
-                  <TableCell>Livros Disponíveis</TableCell>
+                  <TableCell>Emprestados</TableCell>
+                  <TableCell>Disponíveis</TableCell>
                   <TableCell>Status</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {livrosDidaticos.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={9} align="center">
+                    <TableCell colSpan={10} align="center">
                       <Typography color="text.secondary">
                         Nenhum livro didático cadastrado
                       </Typography>
@@ -231,7 +275,12 @@ export default function RelatoriosLivrosPage() {
                           {livro.anoVigencia || 'Não definido'}
                         </TableCell>
                         <TableCell>{livro.quantidade}</TableCell>
-                        <TableCell>{calcularLivrosDisponiveis(livro)}</TableCell>
+                        <TableCell>
+                          <Chip label={calcularLivrosEmprestados(livro)} size="small" color={calcularLivrosEmprestados(livro) > 0 ? 'warning' : 'default'} />
+                        </TableCell>
+                        <TableCell>
+                          <Chip label={calcularLivrosDisponiveis(livro)} size="small" color={calcularLivrosDisponiveis(livro) > 0 ? 'success' : 'error'} />
+                        </TableCell>
                         <TableCell>
                           {vencido ? (
                             <Chip label="Vencido" size="small" color="error" icon={<Warning />} />
@@ -262,14 +311,15 @@ export default function RelatoriosLivrosPage() {
                   <TableCell>Editora</TableCell>
                   <TableCell>Categoria</TableCell>
                   <TableCell>Quantidade</TableCell>
-                  <TableCell>Livros Disponíveis</TableCell>
+                  <TableCell>Emprestados</TableCell>
+                  <TableCell>Disponíveis</TableCell>
                   <TableCell>Localização</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {livrosParadidaticos.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} align="center">
+                    <TableCell colSpan={9} align="center">
                       <Typography color="text.secondary">
                         Nenhum livro paradidático cadastrado
                       </Typography>
@@ -286,7 +336,12 @@ export default function RelatoriosLivrosPage() {
                         <Chip label={livro.categoria} size="small" />
                       </TableCell>
                       <TableCell>{livro.quantidade}</TableCell>
-                      <TableCell>{calcularLivrosDisponiveis(livro)}</TableCell>
+                      <TableCell>
+                        <Chip label={calcularLivrosEmprestados(livro)} size="small" color={calcularLivrosEmprestados(livro) > 0 ? 'warning' : 'default'} />
+                      </TableCell>
+                      <TableCell>
+                        <Chip label={calcularLivrosDisponiveis(livro)} size="small" color={calcularLivrosDisponiveis(livro) > 0 ? 'success' : 'error'} />
+                      </TableCell>
                       <TableCell>{livro.localizacao}</TableCell>
                     </TableRow>
                   ))

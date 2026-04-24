@@ -629,12 +629,14 @@ function LeitoresPage() {
 
   const handleDelete = async (id) => {
     const idNormalizado = String(id);
+    const leitor = clientesVisiveis.find((c) => String(c.id) === idNormalizado);
+    const nomeLeitor = leitor?.nome || leitor?.nomeCompleto || 'este leitor';
 
     const emprestimoAtivo = possuiEmprestimoAtivo(id);
 
     if (emprestimoAtivo) {
       alert(
-        'Não é possível excluir este leitor!\n\n' +
+        `Não é possível excluir "${nomeLeitor}"!\n\n` +
         'O leitor possui livro(s) emprestado(s).\n' +
         'Primeiro realize a devolução de todos os livros emprestados.'
       );
@@ -643,7 +645,8 @@ function LeitoresPage() {
 
     if (possuiHistoricoEmprestimos(id)) {
       const confirmarExclusao = window.confirm(
-        'Este leitor possui histórico de empréstimos vinculado ao cadastro.\n\n' +
+        `Tem certeza que deseja excluir "${nomeLeitor}"?\n\n` +
+        'Este leitor possui histórico de empréstimos vinculado ao cadastro.\n' +
         'Ao excluir, o leitor sairá da listagem normal, mas o histórico da biblioteca será preservado.\n\n' +
         'Deseja continuar com a exclusão?'
       );
@@ -655,7 +658,7 @@ function LeitoresPage() {
       return;
     }
 
-    if (window.confirm('Deseja realmente remover este leitor?')) {
+    if (window.confirm(`Tem certeza que deseja excluir "${nomeLeitor}"?\n\nEsta ação não pode ser desfeita.`)) {
       await removerCliente(id);
     }
   };
@@ -996,20 +999,6 @@ function LeitoresPage() {
           color="secondary"
         >
           Termo em Branco
-        </Button>
-        <Button
-          variant="contained"
-          startIcon={<Add />}
-          onClick={() => handleOpen()}
-        >
-          Novo Leitor
-        </Button>
-        <Button
-          variant="outlined"
-          startIcon={<UploadFile />}
-          onClick={() => setImportOpen(true)}
-        >
-          Importar Alunos
         </Button>
         <Button
           variant="outlined"

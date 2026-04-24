@@ -1,8 +1,8 @@
-# 🏗️ ARQUITETURA DO SISTEMA CEI v3.6.0
+# 🏗️ ARQUITETURA DO SISTEMA CEI v3.7.1
 ## Controle Escolar Inteligente - Biblioteca
 
-**Última Atualização:** 14/02/2026  
-**Versão:** 3.6.0 - Diagrama Super Admin, Scanner Híbrido e Supabase
+**Última Atualização:** 25/03/2026  
+**Versão:** 3.7.1 - Exclusão Seletiva em Lote, Diagrama Super Admin, Scanner Híbrido e Supabase
 
 ---
 
@@ -30,6 +30,8 @@
 - ✅ Financeiro administrativo (recebimentos)
 - ✅ Emitir notas fiscais para escolas (venda de licenças)
 - ✅ Ativar/desativar instituições
+- ✅ Exclusão seletiva em lote com checkboxes individuais
+- ✅ Análise automática de registros (Teste vs Comprador)
 - ✅ Diagrama do sistema e documentação técnica
 - ✅ Visualizar consolidado de todas as escolas
 - ❌ NÃO gerencia livros, leitores ou empréstimos diretamente

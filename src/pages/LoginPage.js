@@ -228,8 +228,70 @@ export default function LoginPage() {
     return { ok: true };
   };
 
-  const processarLogin = (usuario, senhaUsuario) => {
+  const normalizarCadastroDemo = (dados) => {
+    return {
+      nomeResponsavel: String(dados?.nomeResponsavel || '').trim(),
+      telefoneCelular: aplicarMascaraTelefone(dados?.telefoneCelular || dados?.telefone || ''),
+      email: String(dados?.email || '').trim().toLowerCase(),
+      cidade: String(dados?.cidade || '').trim(),
+      estado: String(dados?.estado || '').trim().toUpperCase().slice(0, 2)
+    };
+  };
+
+  const obterDemoDeviceId = () => {
+    const existente = localStorage.getItem(DEMO_DEVICE_ID_KEY);
+    if (existente) return existente;
+
+    const novo = `demo-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
+    localStorage.setItem(DEMO_DEVICE_ID_KEY, novo);
+    return novo;
+  };
+
+  const registrarLeadDemoNoBackend = (dadosCadastroDemo, origemEvento = 'login_demo') => {
+    const dadosNormalizados = normalizarCadastroDemo(dadosCadastroDemo);
+    const validacao = validarCadastroDemoObrigatorio(dadosNormalizados);
+    if (!validacao.ok) {
+      return;
+    }
+
+    const dedupeKey = `cei_demo_lead_last_sent:${dadosNormalizados.email}`;
+    const ultimoEnvio = Number(localStorage.getItem(dedupeKey) || 0);
+    if (Number.isFinite(ultimoEnvio) && (Date.now() - ultimoEnvio) < (15 * 60 * 1000)) {
+      return;
+    }
+
+    const payload = {
+      ...dadosNormalizados,
+      capturadoEm: new Date().toISOString(),
+      origemEvento,
+      demoDeviceId: obterDemoDeviceId(),
+      origem: window.location.origin
+    };
+
+    fetch(`${API_URL}/api/demo-leads`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    })
+      .then(() => {
+        localStorage.setItem(dedupeKey, String(Date.now()));
+      })
+      .catch((error) => {
+        console.error('Erro ao registrar lead demo no backend:', error);
+      });
+  };
+
+  const processarLogin = (usuario, senhaUsuario, opcoes = {}) => {
+    const isDemoLogin = Boolean(opcoes?.isDemoLogin);
+    const dadosDemo = opcoes?.dadosDemo || null;
+
     if (fazerLogin(usuario, senhaUsuario)) {
+      if (isDemoLogin && dadosDemo) {
+        registrarLeadDemoNoBackend(dadosDemo, opcoes?.origemEvento || 'login_demo');
+      }
+
       try {
         fetch(`${API_URL}/api/notify-access`, {
           method: 'POST',
@@ -240,7 +302,9 @@ export default function LoginPage() {
             usuario,
             perfil: 'Autenticado',
             instituicao: 'Login CEI',
-            origem: window.location.origin
+            origem: window.location.origin,
+            isDemoLogin,
+            demoLead: isDemoLogin ? normalizarCadastroDemo(dadosDemo) : null
           })
         }).catch((error) => {
           console.error('Erro ao notificar acesso no backend:', error);
@@ -265,9 +329,10 @@ export default function LoginPage() {
     const loginNormalizado = String(login || '').trim().toLowerCase();
     const senhaNormalizada = String(senha || '').trim();
     const ehLoginDemo = loginNormalizado === CREDENCIAIS_DEMO.login && senhaNormalizada === CREDENCIAIS_DEMO.senha;
+    const dadosDemoNormalizados = normalizarCadastroDemo(cadastroDemo);
 
     if (ehLoginDemo) {
-      const validacao = validarCadastroDemoObrigatorio(cadastroDemo);
+      const validacao = validarCadastroDemoObrigatorio(dadosDemoNormalizados);
       if (!validacao.ok) {
         setErroCadastroDemo(validacao.mensagem);
         setDialogCadastroDemo(true);
@@ -275,7 +340,11 @@ export default function LoginPage() {
       }
     }
 
-    processarLogin(login, senha);
+    processarLogin(login, senha, {
+      isDemoLogin: ehLoginDemo,
+      dadosDemo: ehLoginDemo ? dadosDemoNormalizados : null,
+      origemEvento: 'login_demo'
+    });
   };
 
   const handleUsarCredenciaisDemo = () => {
@@ -283,24 +352,23 @@ export default function LoginPage() {
     setSenha(CREDENCIAIS_DEMO.senha);
     setErro('');
 
-    const validacao = validarCadastroDemoObrigatorio(cadastroDemo);
+    const dadosDemoNormalizados = normalizarCadastroDemo(cadastroDemo);
+    const validacao = validarCadastroDemoObrigatorio(dadosDemoNormalizados);
     if (!validacao.ok) {
       setErroCadastroDemo(validacao.mensagem);
       setDialogCadastroDemo(true);
       return;
     }
 
-    processarLogin(CREDENCIAIS_DEMO.login, CREDENCIAIS_DEMO.senha);
+    processarLogin(CREDENCIAIS_DEMO.login, CREDENCIAIS_DEMO.senha, {
+      isDemoLogin: true,
+      dadosDemo: dadosDemoNormalizados,
+      origemEvento: 'login_demo'
+    });
   };
 
   const handleConfirmarCadastroDemo = () => {
-    const dadosNormalizados = {
-      nomeResponsavel: String(cadastroDemo.nomeResponsavel || '').trim(),
-      telefoneCelular: aplicarMascaraTelefone(cadastroDemo.telefoneCelular),
-      email: String(cadastroDemo.email || '').trim().toLowerCase(),
-      cidade: String(cadastroDemo.cidade || '').trim(),
-      estado: String(cadastroDemo.estado || '').trim().toUpperCase().slice(0, 2)
-    };
+    const dadosNormalizados = normalizarCadastroDemo(cadastroDemo);
 
     const validacao = validarCadastroDemoObrigatorio(dadosNormalizados);
     if (!validacao.ok) {
@@ -322,7 +390,11 @@ export default function LoginPage() {
     setDialogCadastroDemo(false);
     setLogin(CREDENCIAIS_DEMO.login);
     setSenha(CREDENCIAIS_DEMO.senha);
-    processarLogin(CREDENCIAIS_DEMO.login, CREDENCIAIS_DEMO.senha);
+    processarLogin(CREDENCIAIS_DEMO.login, CREDENCIAIS_DEMO.senha, {
+      isDemoLogin: true,
+      dadosDemo: dadosNormalizados,
+      origemEvento: 'cadastro_demo'
+    });
   };
 
   const handleAbrirRecuperacao = () => {

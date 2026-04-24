@@ -223,7 +223,7 @@ export default function DiagramaSistemaPage() {
               CEI - Controle Escolar Inteligente
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              Versão 3.7.0 | Atualizado em: 13 de Março de 2026
+              Versão 3.7.1 | Atualizado em: 25 de Março de 2026
             </Typography>
             <Stack direction="row" spacing={1} justifyContent="center" sx={{ mt: 1, flexWrap: 'wrap', gap: 1 }}>
               <Chip label="☁️ Supabase Integrado" color="success" sx={{ fontWeight: 'bold' }} />
@@ -231,6 +231,7 @@ export default function DiagramaSistemaPage() {
               <Chip label="🏷️ Categoria de Leitores" color="secondary" sx={{ fontWeight: 'bold' }} />
               <Chip label="📊 Relatório de Leitores" color="info" sx={{ fontWeight: 'bold' }} />
               <Chip label="🔍 Análise de Registros" color="warning" sx={{ fontWeight: 'bold' }} />
+              <Chip label="☑️ Exclusão Seletiva em Lote" color="error" sx={{ fontWeight: 'bold' }} />
             </Stack>
             
             {/* Aviso de Autenticidade */}
@@ -268,7 +269,7 @@ export default function DiagramaSistemaPage() {
                 <Typography variant="body2" component="div" sx={{ lineHeight: 2 }}>
                   <strong>6.</strong> Módulos e Funcionalidades<br />
                   <strong>7.</strong> Informações Técnicas e Métricas<br />
-                  <strong>8.</strong> Inovações Tecnológicas v3.7.0<br />
+                  <strong>8.</strong> Inovações Tecnológicas v3.7.1<br />
                   <strong>9.</strong> Integração Supabase (Nuvem)<br />
                   <strong>10.</strong> Diagramas Visuais da Arquitetura<br />
                   <strong>11.</strong> Certificado de Autenticidade
@@ -851,10 +852,10 @@ export default function DiagramaSistemaPage() {
 
           <Divider sx={{ my: 4 }} />
 
-          {/* 8. INOVAÇÕES TECNOLÓGICAS - VERSÃO 3.7.0 */}
+          {/* 8. INOVAÇÕES TECNOLÓGICAS - VERSÃO 3.7.1 */}
           <Box className="page-break avoid-break" sx={{ mb: 4 }}>
             <Typography variant="h4" fontWeight="bold" gutterBottom sx={{ color: 'success.main' }}>
-              ⭐ 8. INOVAÇÕES TECNOLÓGICAS (Versão 3.7.0)
+              ⭐ 8. INOVAÇÕES TECNOLÓGICAS (Versão 3.7.1)
             </Typography>
 
             <Alert severity="success" sx={{ mb: 3 }}>
@@ -862,7 +863,7 @@ export default function DiagramaSistemaPage() {
                 🚀 Atualizações Recentes — Março 2026
               </Typography>
               <Typography variant="body2">
-                Novas funcionalidades: campo Categoria nos leitores (Estudante/Professor/Funcionário/Comunidade), relatório de Leitores Cadastrados com agrupamento por categoria e turma, exclusão em lote de leitores, acesso rápido em 2 linhas centralizadas, correção dos empréstimos didáticos em lote, análise automática de registros (Teste vs Comprador) e exclusão em lote de instituições na gestão SuperAdmin.
+                Novas funcionalidades: campo Categoria nos leitores (Estudante/Professor/Funcionário/Comunidade), relatório de Leitores Cadastrados com agrupamento por categoria e turma, exclusão em lote de leitores, acesso rápido em 2 linhas centralizadas, correção dos empréstimos didáticos em lote, análise automática de registros (Teste vs Comprador), exclusão em lote com checkboxes individuais para seleção/desseleção de instituições na gestão SuperAdmin.
               </Typography>
             </Alert>
 
@@ -1029,9 +1030,12 @@ export default function DiagramaSistemaPage() {
                         <li>Pagamento confirmado → comprador</li>
                         <li>Cadastro recente ≤7 dias → provável comprador</li>
                         <li>Exclusão em lote por critério (pendentes/testes/todos)</li>
+                        <li>☑️ Checkboxes individuais para seleção/desseleção</li>
+                        <li>Selecionar/desmarcar todos com estado indeterminado</li>
+                        <li>Exibição de nome, login, email, status e classificação</li>
                       </ul>
                     </Typography>
-                    <Chip label="NOVO v3.7.0" color="warning" size="small" sx={{ mt: 1 }} />
+                    <Chip label="ATUALIZADO v3.7.1" color="warning" size="small" sx={{ mt: 1 }} />
                   </CardContent>
                 </Card>
               </Grid>
@@ -1278,12 +1282,14 @@ FLUXO DE SINCRONIZAÇÃO:
 │  ✅ Ativar/bloquear licenças                                  │
 │  ✅ Visualizar diagrama do sistema                            │
 │  ✅ Dashboard de receitas                                     │
+│  ✅ Exclusão seletiva em lote (checkboxes)                    │
 └────────────────────────────────────────────────────────────────┘
          │
          ├────► 📊 Dashboard com métricas globais
          ├────► 🏫 Lista de todas as instituições
          ├────► 💰 Controle de pagamentos recebidos
-         └────► 📄 Emissão de NF-e para clientes
+         ├────► 📄 Emissão de NF-e para clientes
+         └────► ☑️ Exclusão em lote com seleção individual
 
 
 ┌────────────────────────────────────────────────────────────────┐
@@ -1711,9 +1717,9 @@ FLUXO DE SINCRONIZAÇÃO:
               <Grid item xs={12} md={6}>
                 <Typography variant="body2">
                   <strong>Sistema:</strong> CEI - Controle Escolar Inteligente<br />
-                  <strong>Versão:</strong> 3.6.0<br />
+                  <strong>Versão:</strong> 3.7.1<br />
                   <strong>Data de Criação:</strong> Janeiro de 2026<br />
-                  <strong>Última Atualização:</strong> 14 de Fevereiro de 2026<br />
+                  <strong>Última Atualização:</strong> 25 de Março de 2026<br />
                   <strong>Tipo:</strong> Software Proprietário (SaaS)<br />
                   <strong>Modalidade:</strong> Web Application + Cloud Database
                 </Typography>

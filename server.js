@@ -62,6 +62,7 @@ const SUPPORT_WHATSAPP = process.env.SUPPORT_WHATSAPP || '';
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
 const OWNER_WHATSAPP = (process.env.OWNER_WHATSAPP || '5589981398723').replace(/\D/g, '');
 const CALLMEBOT_API_KEY = process.env.CALLMEBOT_API_KEY || '';
+const DEMO_LEAD_DEDUP_WINDOW_MS = 60 * 60 * 1000;
 
 const hasSmtpConfig = !!(
   process.env.SMTP_HOST &&
@@ -289,6 +290,69 @@ async function enviarNotificacaoWhatsAppAcesso(payload) {
     `🧭 IP: ${ip || '-'}`,
     `🖥️ Agente: ${userAgent || '-'}`,
     `🕒 Data/Hora: ${new Date().toLocaleString('pt-BR')}`
+  ].join('\n');
+
+  return enviarWhatsAppCallMeBot(mensagem);
+}
+
+async function enviarEmailLeadDemo(payload) {
+  if (!emailTransporter) {
+    console.warn('⚠️ SMTP não configurado. E-mail de lead demo não enviado.');
+    return { success: false, skipped: true, reason: 'SMTP_NOT_CONFIGURED' };
+  }
+
+  const assunto = `CEI | Novo lead DEMO - ${payload.nomeResponsavel || 'Sem nome'}`;
+  const dataFormatada = new Date(payload.capturadoEm || Date.now()).toLocaleString('pt-BR');
+
+  const html = `
+    <p>Um novo lead da demonstração foi capturado.</p>
+    <h3>Dados do contato</h3>
+    <ul>
+      <li><strong>Nome:</strong> ${payload.nomeResponsavel || '-'}</li>
+      <li><strong>Telefone:</strong> ${payload.telefoneCelular || '-'}</li>
+      <li><strong>E-mail:</strong> ${payload.email || '-'}</li>
+      <li><strong>Cidade/UF:</strong> ${payload.cidade || '-'} / ${payload.estado || '-'}</li>
+      <li><strong>Origem:</strong> ${payload.origemEvento || '-'}</li>
+      <li><strong>Dispositivo demo:</strong> ${payload.demoDeviceId || '-'}</li>
+      <li><strong>Capturado em:</strong> ${dataFormatada}</li>
+      <li><strong>Frontend:</strong> ${payload.origem || '-'}</li>
+    </ul>
+    <p>Lead criado automaticamente pelo login DEMO do CEI.</p>
+  `;
+
+  const text = [
+    'Novo lead DEMO capturado no CEI.',
+    `Nome: ${payload.nomeResponsavel || '-'}`,
+    `Telefone: ${payload.telefoneCelular || '-'}`,
+    `E-mail: ${payload.email || '-'}`,
+    `Cidade/UF: ${payload.cidade || '-'} / ${payload.estado || '-'}`,
+    `Origem: ${payload.origemEvento || '-'}`,
+    `Dispositivo: ${payload.demoDeviceId || '-'}`,
+    `Capturado em: ${dataFormatada}`,
+    `Frontend: ${payload.origem || '-'}`
+  ].join('\n');
+
+  await emailTransporter.sendMail({
+    from: process.env.SMTP_FROM,
+    to: EMAIL_OWNER,
+    subject: assunto,
+    html,
+    text
+  });
+
+  return { success: true };
+}
+
+async function enviarNotificacaoWhatsAppLeadDemo(payload) {
+  const mensagem = [
+    '🧪 CEI | Novo lead DEMO',
+    `👤 ${payload.nomeResponsavel || '-'}`,
+    `📞 ${payload.telefoneCelular || '-'}`,
+    `📧 ${payload.email || '-'}`,
+    `📍 ${payload.cidade || '-'}-${payload.estado || '-'}`,
+    `🧭 Origem: ${payload.origemEvento || '-'}`,
+    `🆔 Device: ${payload.demoDeviceId || '-'}`,
+    `🕒 ${new Date(payload.capturadoEm || Date.now()).toLocaleString('pt-BR')}`
   ].join('\n');
 
   return enviarWhatsAppCallMeBot(mensagem);
@@ -1035,6 +1099,7 @@ app.post('/api/test-email', async (req, res) => {
 
 // Banco de dados em memória (temporário - substituir por banco real)
 const notificationsDB = [];
+const demoLeadsDB = [];
 const subjectsDB = [];
 const usersDB = [
   {
@@ -1265,6 +1330,149 @@ app.post('/api/notifications', async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Erro ao criar notificação'
+    });
+  }
+});
+
+app.post('/api/demo-leads', async (req, res) => {
+  try {
+    const body = req.body || {};
+    const nomeResponsavel = String(body.nomeResponsavel || '').trim();
+    const telefoneCelular = String(body.telefoneCelular || body.telefone || '').trim();
+    const email = String(body.email || '').trim().toLowerCase();
+    const cidade = String(body.cidade || '').trim();
+    const estado = String(body.estado || '').trim().toUpperCase().slice(0, 2);
+
+    if (!nomeResponsavel || !telefoneCelular || !email || !cidade || !estado) {
+      return res.status(400).json({
+        success: false,
+        error: 'Dados obrigatórios ausentes para lead demo.'
+      });
+    }
+
+    const capturadoEm = body.capturadoEm || new Date().toISOString();
+    const origemEvento = String(body.origemEvento || 'login_demo').trim();
+    const demoDeviceId = String(body.demoDeviceId || '').trim();
+    const origem = String(body.origem || req.headers.origin || '').trim();
+    const agora = Date.now();
+
+    const leadNormalizado = {
+      id: body.id || `demo-lead-${agora}`,
+      nomeResponsavel,
+      telefoneCelular,
+      email,
+      cidade,
+      estado,
+      capturadoEm,
+      origemEvento,
+      demoDeviceId,
+      origem,
+      atualizadoEm: new Date().toISOString(),
+      acessosDemo: 1
+    };
+
+    const indiceExistente = demoLeadsDB.findIndex((lead) => {
+      const mesmoEmail = String(lead.email || '').toLowerCase() === email;
+      const mesmoTelefone = String(lead.telefoneCelular || '').trim() === telefoneCelular;
+      const mesmoDispositivo = demoDeviceId && String(lead.demoDeviceId || '') === demoDeviceId;
+      const ultimaAtualizacao = new Date(lead.atualizadoEm || lead.capturadoEm || 0).getTime();
+      const dentroJanela = Number.isFinite(ultimaAtualizacao) && (agora - ultimaAtualizacao) <= DEMO_LEAD_DEDUP_WINDOW_MS;
+
+      return (mesmoEmail || mesmoTelefone || mesmoDispositivo) && dentroJanela;
+    });
+
+    let leadSalvo = null;
+    let atualizado = false;
+
+    if (indiceExistente >= 0) {
+      const existente = demoLeadsDB[indiceExistente];
+      const acessosDemo = Number(existente.acessosDemo || 0) + 1;
+
+      demoLeadsDB[indiceExistente] = {
+        ...existente,
+        ...leadNormalizado,
+        id: existente.id,
+        capturadoEm: existente.capturadoEm || capturadoEm,
+        acessosDemo
+      };
+
+      leadSalvo = demoLeadsDB[indiceExistente];
+      atualizado = true;
+    } else {
+      demoLeadsDB.push(leadNormalizado);
+      leadSalvo = leadNormalizado;
+    }
+
+    notificationsDB.push({
+      id: `notif-demo-${Date.now()}`,
+      tipo: 'demo_lead',
+      titulo: atualizado ? 'Lead DEMO atualizado' : 'Novo lead DEMO',
+      mensagem: `${leadSalvo.nomeResponsavel} | ${leadSalvo.email} | ${leadSalvo.telefoneCelular}`,
+      origem: leadSalvo.origemEvento,
+      createdAt: new Date().toISOString(),
+      leadId: leadSalvo.id
+    });
+
+    let emailResult = { success: false, skipped: true, reason: 'NOT_TRIGGERED' };
+    let whatsappResult = { success: false, skipped: true, reason: 'NOT_TRIGGERED' };
+
+    if (!atualizado) {
+      try {
+        emailResult = await enviarEmailLeadDemo(leadSalvo);
+      } catch (emailError) {
+        console.error('❌ Erro ao enviar e-mail de lead demo:', emailError.message);
+        emailResult = { success: false, error: emailError.message };
+      }
+
+      try {
+        whatsappResult = await enviarNotificacaoWhatsAppLeadDemo(leadSalvo);
+      } catch (whatsError) {
+        console.error('❌ Erro ao enviar WhatsApp de lead demo:', whatsError.message);
+        whatsappResult = { success: false, error: whatsError.message };
+      }
+    }
+
+    return res.json({
+      success: true,
+      lead: leadSalvo,
+      updated: atualizado,
+      notifications: {
+        email: emailResult,
+        whatsapp: whatsappResult
+      }
+    });
+  } catch (error) {
+    console.error('❌ Erro ao registrar lead demo:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Falha ao registrar lead demo.',
+      details: error.message
+    });
+  }
+});
+
+app.get('/api/demo-leads', async (req, res) => {
+  try {
+    const limit = Math.max(1, Math.min(Number(req.query?.limit || 200), 1000));
+    const leads = [...demoLeadsDB]
+      .sort((a, b) => {
+        const dataA = new Date(a.atualizadoEm || a.capturadoEm || 0).getTime();
+        const dataB = new Date(b.atualizadoEm || b.capturadoEm || 0).getTime();
+        return dataB - dataA;
+      })
+      .slice(0, limit);
+
+    return res.json({
+      success: true,
+      total: demoLeadsDB.length,
+      leads
+    });
+  } catch (error) {
+    console.error('❌ Erro ao listar leads demo:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Falha ao listar leads demo.',
+      details: error.message
     });
   }
 });

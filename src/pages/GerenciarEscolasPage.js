@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Layout from '../components/Layout';
 import {
   Box,
@@ -44,6 +44,7 @@ import { useData } from '../context/DataContext';
 import { imprimirEscopo } from '../utils/printUtils';
 
 export default function GerenciarEscolasPage() {
+  const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
   const { 
     instituicoes, 
     ativarInstituicao, 
@@ -67,6 +68,10 @@ export default function GerenciarEscolasPage() {
   const [analiseOpen, setAnaliseOpen] = useState(false);
   const [filtroExclusao, setFiltroExclusao] = useState('pendentes');
   const [usarExclusaoExataTeste, setUsarExclusaoExataTeste] = useState(false);
+  const [demoLeads, setDemoLeads] = useState([]);
+  const [carregandoDemoLeads, setCarregandoDemoLeads] = useState(false);
+  const [erroDemoLeads, setErroDemoLeads] = useState('');
+  const [idsExclusaoSelecionados, setIdsExclusaoSelecionados] = useState(new Set());
 
   // Estado para cadastro manual
   const [formCadastro, setFormCadastro] = useState({
@@ -384,31 +389,64 @@ export default function GerenciarEscolasPage() {
   const totalIndefinido = analise.filter(a => a.classificacao === 'indefinido').length;
 
   // ──────────────────── EXCLUIR EM LOTE ────────────────────
-  const getIdsParaExcluir = () => {
+  const getInstituicoesFiltradas = () => {
     const testesSelecionados = usarExclusaoExataTeste
       ? instituicoes.filter(isCadastroTesteExato)
       : analise.filter(a => a.classificacao === 'teste');
 
     if (filtroExclusao === 'pendentes') {
-      return instituicoes.filter(i => i.status === 'pendente').map(i => i.id);
+      return instituicoes.filter(i => i.status === 'pendente');
     }
     if (filtroExclusao === 'testes') {
-      return testesSelecionados.map(a => a.id);
+      return testesSelecionados;
     }
     if (filtroExclusao === 'testes_e_pendentes') {
-      return instituicoes
-        .filter((inst) => {
-          const ehTeste = usarExclusaoExataTeste
-            ? isCadastroTesteExato(inst)
-            : analise.some((a) => a.id === inst.id && a.classificacao === 'teste');
-          return ehTeste || inst.status === 'pendente';
-        })
-        .map((a) => a.id);
+      return instituicoes.filter((inst) => {
+        const ehTeste = usarExclusaoExataTeste
+          ? isCadastroTesteExato(inst)
+          : analise.some((a) => a.id === inst.id && a.classificacao === 'teste');
+        return ehTeste || inst.status === 'pendente';
+      });
     }
     if (filtroExclusao === 'todas') {
-      return instituicoes.map(i => i.id);
+      return [...instituicoes];
     }
     return [];
+  };
+
+  const getIdsParaExcluir = () => {
+    return Array.from(idsExclusaoSelecionados);
+  };
+
+  // Atualizar seleção quando filtro muda
+  const atualizarSelecaoPorFiltro = (novoFiltro) => {
+    setFiltroExclusao(novoFiltro);
+  };
+
+  // Recomputar lista filtrada e sincronizar seleção
+  const instituicoesFiltradas = getInstituicoesFiltradas();
+
+  // Efeito para resetar seleção quando filtro ou checkbox exata muda
+  React.useEffect(() => {
+    const filtradas = getInstituicoesFiltradas();
+    setIdsExclusaoSelecionados(new Set(filtradas.map(i => i.id)));
+  }, [filtroExclusao, usarExclusaoExataTeste, instituicoes.length]); // eslint-disable-line
+
+  const toggleExclusaoId = (id) => {
+    setIdsExclusaoSelecionados(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleTodosExclusao = (marcar) => {
+    if (marcar) {
+      setIdsExclusaoSelecionados(new Set(instituicoesFiltradas.map(i => i.id)));
+    } else {
+      setIdsExclusaoSelecionados(new Set());
+    }
   };
 
   const handleConfirmarExclusaoLote = () => {
@@ -455,6 +493,35 @@ export default function GerenciarEscolasPage() {
     if (!dataISO) return '-';
     return new Date(dataISO).toLocaleDateString('pt-BR');
   };
+
+  const formatarDataHora = (dataISO) => {
+    if (!dataISO) return '-';
+    const data = new Date(dataISO);
+    if (Number.isNaN(data.getTime())) return '-';
+    return data.toLocaleString('pt-BR');
+  };
+
+  const carregarDemoLeads = async () => {
+    setCarregandoDemoLeads(true);
+    setErroDemoLeads('');
+    try {
+      const response = await fetch(`${API_URL}/api/demo-leads?limit=200`);
+      const data = await response.json();
+      if (!response.ok || !data?.success) {
+        throw new Error(data?.error || 'Falha ao carregar leads demo.');
+      }
+
+      setDemoLeads(Array.isArray(data.leads) ? data.leads : []);
+    } catch (error) {
+      setErroDemoLeads(error.message || 'Falha ao carregar leads demo.');
+    } finally {
+      setCarregandoDemoLeads(false);
+    }
+  };
+
+  useEffect(() => {
+    carregarDemoLeads();
+  }, []);
 
   const calcularDiasRestantes = (dataExpiracao) => {
     if (!dataExpiracao) return null;
@@ -569,6 +636,79 @@ export default function GerenciarEscolasPage() {
           </Card>
         </Grid>
       </Grid>
+
+      <Card sx={{ mb: 3 }}>
+        <CardContent>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 1, flexWrap: 'wrap', mb: 1.5 }}>
+            <Typography variant="h6">Novos Clientes DEMO (Backend)</Typography>
+            <Button
+              variant="outlined"
+              size="small"
+              onClick={carregarDemoLeads}
+              disabled={carregandoDemoLeads}
+            >
+              {carregandoDemoLeads ? 'Atualizando...' : 'Atualizar Leads'}
+            </Button>
+          </Box>
+
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Lista de contatos capturados no login demo para retorno comercial.
+          </Typography>
+
+          {erroDemoLeads && (
+            <Alert severity="warning" sx={{ mb: 2 }}>
+              {erroDemoLeads}
+            </Alert>
+          )}
+
+          <TableContainer component={Paper} variant="outlined">
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>Atualizado em</TableCell>
+                  <TableCell>Responsável</TableCell>
+                  <TableCell>Contato</TableCell>
+                  <TableCell>Cidade/UF</TableCell>
+                  <TableCell>Origem</TableCell>
+                  <TableCell>Acessos DEMO</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {demoLeads.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6} align="center">
+                      <Typography color="text.secondary">
+                        {carregandoDemoLeads
+                          ? 'Carregando leads...'
+                          : 'Nenhum lead demo registrado no backend.'}
+                      </Typography>
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  demoLeads.map((lead) => (
+                    <TableRow key={lead.id} hover>
+                      <TableCell>{formatarDataHora(lead.atualizadoEm || lead.capturadoEm)}</TableCell>
+                      <TableCell>
+                        <Typography variant="body2" fontWeight="bold">{lead.nomeResponsavel || '-'}</Typography>
+                        <Typography variant="caption" color="text.secondary">{lead.demoDeviceId || '-'}</Typography>
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="body2">{lead.telefoneCelular || '-'}</Typography>
+                        <Typography variant="caption" color="text.secondary">{lead.email || '-'}</Typography>
+                      </TableCell>
+                      <TableCell>{`${lead.cidade || '-'} / ${lead.estado || '-'}`}</TableCell>
+                      <TableCell>
+                        <Chip size="small" label={lead.origemEvento || 'login_demo'} color="secondary" variant="outlined" />
+                      </TableCell>
+                      <TableCell>{Number(lead.acessosDemo || 0)}</TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </CardContent>
+      </Card>
 
       {/* Tabela de Instituições */}
       <TableContainer component={Paper}>
@@ -880,7 +1020,7 @@ export default function GerenciarEscolasPage() {
       </Dialog>
 
       {/* ── Dialog: Excluir em Lote ── */}
-      <Dialog open={excluirTodasOpen} onClose={() => setExcluirTodasOpen(false)} maxWidth="sm" fullWidth>
+      <Dialog open={excluirTodasOpen} onClose={() => setExcluirTodasOpen(false)} maxWidth="md" fullWidth>
         <DialogTitle>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <DeleteForever color="error" />
@@ -896,7 +1036,7 @@ export default function GerenciarEscolasPage() {
             fullWidth
             label="O que deseja excluir?"
             value={filtroExclusao}
-            onChange={(e) => setFiltroExclusao(e.target.value)}
+            onChange={(e) => atualizarSelecaoPorFiltro(e.target.value)}
           >
             <MenuItem value="pendentes">
               Apenas pendentes ({instituicoes.filter(i => i.status === 'pendente').length})
@@ -923,8 +1063,76 @@ export default function GerenciarEscolasPage() {
               label="Exclusão exata dos cadastros teste (somente registros marcados como teste/demo)"
             />
           )}
+
+          {/* Lista de instituições com checkboxes individuais */}
+          {instituicoesFiltradas.length > 0 && (
+            <Box sx={{ mt: 2, border: '1px solid #ddd', borderRadius: 1, maxHeight: 320, overflow: 'auto' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 2, py: 1, bgcolor: '#f5f5f5', borderBottom: '1px solid #ddd', position: 'sticky', top: 0, zIndex: 1 }}>
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={idsExclusaoSelecionados.size === instituicoesFiltradas.length && instituicoesFiltradas.length > 0}
+                      indeterminate={idsExclusaoSelecionados.size > 0 && idsExclusaoSelecionados.size < instituicoesFiltradas.length}
+                      onChange={(e) => toggleTodosExclusao(e.target.checked)}
+                      size="small"
+                    />
+                  }
+                  label={<Typography variant="body2" fontWeight="bold">Selecionar todas ({instituicoesFiltradas.length})</Typography>}
+                />
+                <Typography variant="caption" color="text.secondary">
+                  {idsExclusaoSelecionados.size} selecionada(s)
+                </Typography>
+              </Box>
+              {instituicoesFiltradas.map((inst) => {
+                const infoAnalise = analise.find(a => a.id === inst.id);
+                return (
+                  <Box
+                    key={inst.id}
+                    sx={{
+                      display: 'flex', alignItems: 'center', px: 2, py: 0.5,
+                      borderBottom: '1px solid #eee',
+                      bgcolor: idsExclusaoSelecionados.has(inst.id) ? '#fff3f3' : 'transparent',
+                      '&:hover': { bgcolor: '#f9f9f9' }
+                    }}
+                  >
+                    <Checkbox
+                      checked={idsExclusaoSelecionados.has(inst.id)}
+                      onChange={() => toggleExclusaoId(inst.id)}
+                      size="small"
+                    />
+                    <Box sx={{ flex: 1, ml: 1, minWidth: 0 }}>
+                      <Typography variant="body2" noWrap fontWeight={500}>
+                        {inst.nomeInstituicao || inst.nomeEscola || 'Sem nome'}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary" noWrap>
+                        {inst.loginAdmin && `Login: ${inst.loginAdmin}`}
+                        {inst.email && ` • ${inst.email}`}
+                        {inst.cidade && inst.estado && ` • ${inst.cidade}/${inst.estado}`}
+                      </Typography>
+                    </Box>
+                    <Chip
+                      label={inst.status?.toUpperCase() || 'N/A'}
+                      size="small"
+                      color={getStatusColor(inst.status)}
+                      sx={{ ml: 1, minWidth: 80 }}
+                    />
+                    {infoAnalise && (
+                      <Chip
+                        label={infoAnalise.classificacao === 'teste' ? 'TESTE' : infoAnalise.classificacao === 'comprador' ? 'COMPRADOR' : '?'}
+                        size="small"
+                        variant="outlined"
+                        color={infoAnalise.classificacao === 'teste' ? 'error' : infoAnalise.classificacao === 'comprador' ? 'success' : 'default'}
+                        sx={{ ml: 0.5, minWidth: 70 }}
+                      />
+                    )}
+                  </Box>
+                );
+              })}
+            </Box>
+          )}
+
           <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
-            Serão excluídas: <strong>{getIdsParaExcluir().length} instituição(ões)</strong>
+            Serão excluídas: <strong>{idsExclusaoSelecionados.size} instituição(ões)</strong>
           </Typography>
         </DialogContent>
         <DialogActions>
@@ -934,9 +1142,9 @@ export default function GerenciarEscolasPage() {
             color="error"
             startIcon={<DeleteForever />}
             onClick={handleConfirmarExclusaoLote}
-            disabled={getIdsParaExcluir().length === 0}
+            disabled={idsExclusaoSelecionados.size === 0}
           >
-            Excluir {getIdsParaExcluir().length} Instituição(ões)
+            Excluir {idsExclusaoSelecionados.size} Instituição(ões)
           </Button>
         </DialogActions>
       </Dialog>

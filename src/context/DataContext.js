@@ -6,6 +6,7 @@ import { syncFromCloud, syncToCloud, deleteFromCloud } from '../services/syncSer
 
 // Versão do sistema - IMPORTANTE: Incrementar a cada atualização significativa
 const SYSTEM_VERSION = '3.5.2';
+const DATA_KEY = 'cei_data';
 const DATA_VERSION_KEY = 'cei_data_version';
 const LAST_UPDATE_KEY = 'cei_last_update';
 const GLOBAL_IDS_MIGRATION_KEY = 'cei_global_ids_migrated_v1';
@@ -17,30 +18,43 @@ const STORAGE_PRESTADOR = 'cei_nf_prestador_config';
 const STORAGE_PREFEITURA = 'cei_nf_prefeitura_config';
 const DEMO_DEVICE_ID_KEY = 'cei_demo_device_id';
 const DEMO_CONTACT_KEY = 'cei_demo_contact';
+const DELETED_DEMO_IDS_KEY = 'cei_deleted_demo_ids';
 const MAX_LOG_ATIVIDADES = 3000;
-const MAX_BACKUP_SNAPSHOTS = 8;
+const MAX_BACKUP_SNAPSHOTS = 3;
+const INSTITUTION_MEDIA_STORAGE_KEY = 'cei_institution_media_v1';
+const INSTITUTION_MEDIA_FIELDS = ['logoCabecalho', 'logoEscola'];
+const EMERGENCY_DATA_SAVED_AT_KEY = 'cei_data_emergency_saved_at';
+
+// Utilitário para parse seguro de JSON (evita crash silencioso em persistência)
+const parseJson = (raw, fallback) => {
+  try {
+    return raw ? JSON.parse(raw) : fallback;
+  } catch {
+    return fallback;
+  }
+};
 
 const DEFAULT_PREFEITURA_CURIMATA = {
-  razaoSocial: 'PREFEITURA MUNICIPAL DE CURIMATÁ',
-  cnpj: '06.554.273/0001-64',
-  endereco: 'Praça Abdias Albuquerque, 427 - Centro',
-  cep: '64960-000',
-  municipio: 'Curimatá',
-  uf: 'PI',
-  telefone: '(89) 3574-1198',
-  email: 'prefeituradecurimata@gmail.com'
+  razaoSocial: '',
+  cnpj: '',
+  endereco: '',
+  cep: '',
+  municipio: '',
+  uf: '',
+  telefone: '',
+  email: ''
 };
 
 const DEFAULT_PRESTADOR = {
-  razaoSocial: 'Wander Pires Silva Coelho',
+  razaoSocial: '',
   nomeFantasia: 'CEI - Controle Escolar Inteligente',
   tipoDocumento: 'CPF',
-  documento: '036.236.556-35',
+  documento: '',
   inscricaoMunicipal: '',
   endereco: '',
   cep: '',
   municipio: '',
-  uf: 'PI',
+  uf: '',
   telefone: '',
   email: ''
 };
@@ -127,6 +141,108 @@ export const DataProvider = ({ children }) => {
     }
   };
 
+  const isEmbeddedStorageMedia = (value) => {
+    return typeof value === 'string' && value.trim().startsWith('data:');
+  };
+
+  const sanitizeInstitutionForStorage = (institution = {}) => {
+    const sanitizedInstitution = { ...institution };
+    const media = {};
+
+    INSTITUTION_MEDIA_FIELDS.forEach((field) => {
+      const currentValue = institution?.[field];
+      if (!isEmbeddedStorageMedia(currentValue)) {
+        return;
+      }
+
+      media[field] = currentValue;
+      sanitizedInstitution[field] = '';
+    });
+
+    if (
+      media.logoCabecalho &&
+      sanitizedInstitution.configRelatorios?.logoUrl === media.logoCabecalho
+    ) {
+      sanitizedInstitution.configRelatorios = {
+        ...sanitizedInstitution.configRelatorios,
+        logoUrl: ''
+      };
+    }
+
+    return {
+      sanitizedInstitution,
+      media: Object.keys(media).length > 0 ? media : null
+    };
+  };
+
+  const extractInstitutionMediaSnapshot = (institutionList = []) => {
+    const mediaByInstitution = {};
+
+    const sanitizedInstitutions = (Array.isArray(institutionList) ? institutionList : []).map((institution) => {
+      const { sanitizedInstitution, media } = sanitizeInstitutionForStorage(institution);
+
+      if (media && institution?.id != null) {
+        mediaByInstitution[String(institution.id)] = media;
+      }
+
+      return sanitizedInstitution;
+    });
+
+    return {
+      sanitizedInstitutions,
+      mediaByInstitution
+    };
+  };
+
+  const persistInstitutionMediaSnapshot = (mediaByInstitution = {}) => {
+    const hasMedia = Object.values(mediaByInstitution).some((media) => media && Object.keys(media).length > 0);
+
+    if (!hasMedia) {
+      localStorage.removeItem(INSTITUTION_MEDIA_STORAGE_KEY);
+      return;
+    }
+
+    localStorage.setItem(INSTITUTION_MEDIA_STORAGE_KEY, JSON.stringify(mediaByInstitution));
+  };
+
+  const rehydrateInstitutionMedia = (institutionList = []) => {
+    try {
+      const rawMedia = localStorage.getItem(INSTITUTION_MEDIA_STORAGE_KEY);
+      if (!rawMedia) {
+        return institutionList;
+      }
+
+      const mediaByInstitution = JSON.parse(rawMedia);
+      if (!mediaByInstitution || typeof mediaByInstitution !== 'object') {
+        return institutionList;
+      }
+
+      return (Array.isArray(institutionList) ? institutionList : []).map((institution) => {
+        const media = mediaByInstitution[String(institution?.id)] || null;
+        if (!media) {
+          return institution;
+        }
+
+        const institutionWithMedia = {
+          ...institution,
+          ...media
+        };
+
+        if (media.logoCabecalho) {
+          institutionWithMedia.configRelatorios = {
+            ...(institution.configRelatorios || {}),
+            logoUrl: media.logoCabecalho
+          };
+        }
+
+        return institutionWithMedia;
+      });
+    } catch (error) {
+      console.warn('⚠️ [SAVE] Não foi possível restaurar mídias institucionais do localStorage:', error);
+      return institutionList;
+    }
+  };
+
   const validarSenhaForte = (senha) => {
     if (!senha || senha.length < 8) return 'A senha deve ter no mínimo 8 caracteres.';
     if (!/[A-Z]/.test(senha)) return 'A senha deve conter pelo menos 1 letra maiúscula.';
@@ -158,28 +274,54 @@ export const DataProvider = ({ children }) => {
   const instituicoesPadrao = [
     {
       id: 1,
-      nomeInstituicao: 'CETI Desembargador Amaral',
-      cnpj: '00.000.000/0001-00',
-      email: 'contato@cetidesamaral.edu.br',
-      telefone: '(86) 3221-0000',
-      endereco: 'Rua exemplo, 123',
-      cidade: 'Teresina',
-      estado: 'PI',
-      cep: '64000-000',
-      nomeResponsavel: 'Wander Pires Silva Coelho',
-      cargoResponsavel: 'Diretor',
-      emailResponsavel: 'wander@cetidesamaral.edu.br',
-      telefoneResponsavel: '(86) 99999-0000',
-      loginAdmin: 'cetidesamaral',
-      senhaAdmin: 'Ceti@2026',
+      nomeInstituicao: 'Minha Escola',
+      cnpj: '',
+      email: '',
+      telefone: '',
+      endereco: '',
+      cidade: '',
+      estado: '',
+      cep: '',
+      nomeResponsavel: '',
+      cargoResponsavel: '',
+      emailResponsavel: '',
+      telefoneResponsavel: '',
+      loginAdmin: 'admin',
+      senhaAdmin: 'Admin@2026',
       plano: '1 Ano (365 dias)',
       diasLicenca: 365,
       valorMensal: 970.00,
       status: 'ativo',
       dataCadastro: new Date('2024-01-01T00:00:00').toISOString(),
       dataAtivacao: new Date('2024-01-01T00:00:00').toISOString(),
-      dataExpiracao: new Date('2027-01-01T23:59:59').toISOString(), // Válido até 2027
-      licenca: 'CETI-2024-AMAR-AL01',
+      dataExpiracao: new Date('2027-01-01T23:59:59').toISOString(),
+      licenca: 'CEI-2024-LICENCA-01',
+      statusFinanceiro: 'em_dia'
+    },
+    {
+      id: 2,
+      nomeInstituicao: 'CETI Desembargador Amaral',
+      cnpj: '',
+      email: '',
+      telefone: '',
+      endereco: '',
+      cidade: '',
+      estado: '',
+      cep: '',
+      nomeResponsavel: '',
+      cargoResponsavel: '',
+      emailResponsavel: '',
+      telefoneResponsavel: '',
+      loginAdmin: 'cetidesamaral',
+      senhaAdmin: 'Ceti@2727',
+      plano: '1 Ano (365 dias)',
+      diasLicenca: 365,
+      valorMensal: 970.00,
+      status: 'ativo',
+      dataCadastro: new Date('2026-01-01T00:00:00').toISOString(),
+      dataAtivacao: new Date('2026-01-01T00:00:00').toISOString(),
+      dataExpiracao: new Date('2027-01-01T23:59:59').toISOString(),
+      licenca: 'CEI-2026-CETI-DESAMARAL',
       statusFinanceiro: 'em_dia'
     },
     {
@@ -228,29 +370,43 @@ export const DataProvider = ({ children }) => {
     },
     {
       id: 2,
-      nome: 'Wander Pires Silva Coelho',
-      login: 'cetidesamaral',
-      senha: 'Ceti@2026',
+      nome: 'Administrador da Escola',
+      login: 'admin',
+      senha: 'Admin@2026',
       perfil: 'Admin',
       tipo: 'master', // Usuário master da instituição
       permissoes: permissoesPadraoEscola,
-      instituicaoId: 1, // CETI Desembargador Amaral
-      email: 'wander@cetidesamaral.edu.br',
-      cargo: 'Diretor',
+      instituicaoId: 2,
+      email: '',
+      cargo: 'Diretor(a)',
       status: 'ativo',
       dataCriacao: new Date('2024-01-01').toISOString()
     },
     {
+      id: 4,
+      nome: 'Administrador CETI Desembargador Amaral',
+      login: 'cetidesamaral',
+      senha: 'Ceti@2727',
+      perfil: 'Admin',
+      tipo: 'master',
+      permissoes: permissoesPadraoEscola,
+      instituicaoId: 2,
+      email: '',
+      cargo: 'Diretor(a)',
+      status: 'ativo',
+      dataCriacao: new Date('2026-01-01').toISOString()
+    },
+    {
       id: 3,
-      nome: 'Michaela - Biblioteca CETI',
-      login: 'michaela@ceti.com',
-      senha: 'Biblio@2027',
+      nome: 'Bibliotecário(a)',
+      login: 'biblioteca',
+      senha: 'Biblio@2026',
       perfil: 'Bibliotecário',
       tipo: 'operacional',
       permissoes: permissoesPadraoEscola,
-      instituicaoId: 1,
-      email: 'michaela@ceti.com',
-      cargo: 'Bibliotecária',
+      instituicaoId: 2,
+      email: '',
+      cargo: 'Bibliotecário(a)',
       status: 'ativo',
       dataCriacao: new Date().toISOString()
     },
@@ -1932,18 +2088,12 @@ export const DataProvider = ({ children }) => {
         return;
       }
 
-      const localSoftDeleted = Boolean(localItem?.excluido);
-      const cloudSoftDeleted = Boolean(cloudItem?.excluido);
-
-      // Once logically deleted, prefer the deleted record to avoid resurrection
-      // due to timestamp drift between local device and cloud.
-      if (localSoftDeleted !== cloudSoftDeleted) {
-        mergedMap.set(mergeKey, localSoftDeleted ? localItem : cloudItem);
-        return;
-      }
-
       const localTs = getItemTimestamp(localItem);
       const cloudTs = getItemTimestamp(cloudItem);
+
+      // Use timestamp to decide between deleted and active versions.
+      // If timestamps are equal or the active version is newer, keep the active version
+      // to prevent stale cloud deletions from re-deleting restored local readers.
       mergedMap.set(mergeKey, cloudTs > localTs ? cloudItem : localItem);
     });
 
@@ -1951,7 +2101,7 @@ export const DataProvider = ({ children }) => {
   };
 
   const replaceInstitutionSlice = (allItems = [], institutionItems = [], targetInstitutionId) => {
-    const otherItems = allItems.filter((item) => !belongsToInstitution(item, targetInstitutionId));
+    const otherItems = allItems.filter((item) => !belongsToInstitution(item, targetInstitutionId, { includeLegacyWithoutInstitution: true }));
     return [...otherItems, ...institutionItems];
   };
 
@@ -2028,6 +2178,26 @@ export const DataProvider = ({ children }) => {
     mergedData.turmasAcademicas = Array.isArray(mergedAcademicData.turmasAcademicas)
       ? mergedAcademicData.turmasAcademicas
       : (localSlices.turmasAcademicas || []);
+
+    // Guard: prevent cloud sync from reducing active reader count
+    const localActiveReaders = (localSlices.clientes || []).filter((c) => c && !c.excluido);
+    const mergedActiveReaders = (mergedData.clientes || []).filter((c) => c && !c.excluido);
+    if (mergedActiveReaders.length < localActiveReaders.length) {
+      console.warn(
+        `⚠️ [SYNC] Merge reduziria leitores ativos de ${localActiveReaders.length} para ${mergedActiveReaders.length}. Restaurando leitores perdidos.`
+      );
+      const mergedActiveIds = new Set(
+        mergedActiveReaders.map((c) => getMergeKeyById(c?.id)).filter(Boolean)
+      );
+      const lostReaders = localActiveReaders.filter(
+        (c) => !mergedActiveIds.has(getMergeKeyById(c?.id))
+      );
+      if (lostReaders.length > 0) {
+        mergedData.clientes = [...(mergedData.clientes || []), ...lostReaders];
+        mergedData.leitores = mergedData.clientes;
+        console.warn(`⚠️ [SYNC] ${lostReaders.length} leitores ativos restaurados no merge`);
+      }
+    }
 
     setInstituicoes((prev) => {
       const normalizedTargetInstitutionId = normalizeInstitutionId(institutionId);
@@ -2257,6 +2427,16 @@ export const DataProvider = ({ children }) => {
         const hasSeriesPayload = Object.prototype.hasOwnProperty.call(dadosSincronizados, 'seriesAcademicas');
         const hasTurmasPayload = Object.prototype.hasOwnProperty.call(dadosSincronizados, 'turmasAcademicas');
 
+        // Guard: prevent server sync from reducing active reader count
+        const currentActiveCount = clientesRef.current.filter((c) => c && !c.excluido).length;
+        const newActiveCount = (dadosNormalizados.clientes || []).filter((c) => c && !c.excluido).length;
+        if (newActiveCount < currentActiveCount) {
+          console.warn(
+            `⚠️ [SERVER-SYNC] Sincronização reduziria leitores ativos de ${currentActiveCount} para ${newActiveCount}. Mantendo leitores atuais.`
+          );
+          dadosNormalizados.clientes = clientesRef.current;
+        }
+
         setInstituicoes(dadosNormalizados.instituicoes || []);
         setLivros(dadosNormalizados.livros || []);
         setPatrimonio(dadosNormalizados.patrimonio || []);
@@ -2376,6 +2556,52 @@ export const DataProvider = ({ children }) => {
       
       // PASSO 2: Carregar dados (agora já migrados se necessário)
       let dadosSalvos = localStorage.getItem('cei_data');
+
+      // Se o snapshot principal não foi atualizado (ex.: falha de quota),
+      // promover automaticamente o backup de emergência quando ele trouxer
+      // mais leitores/alunos e for mais recente.
+      try {
+        const rawEmergencySnapshot = localStorage.getItem('cei_data_emergency');
+        const emergencySavedAtRaw = localStorage.getItem(EMERGENCY_DATA_SAVED_AT_KEY);
+        const currentSnapshot = parseDataSnapshot(dadosSalvos);
+        const emergencySnapshot = parseDataSnapshot(rawEmergencySnapshot);
+
+        if (emergencySnapshot) {
+          const fallbackInstitutionId = resolveInstitutionId(
+            localStorage.getItem('cei_instituicao_ativa'),
+            inferFallbackInstitutionId(currentSnapshot || emergencySnapshot)
+          );
+          const targetInstitutionId = resolveInstitutionId(instituicaoAtiva, fallbackInstitutionId);
+
+          const currentNormalized = normalizeAllInstitutionData(currentSnapshot || {}, fallbackInstitutionId);
+          const emergencyNormalized = normalizeAllInstitutionData(emergencySnapshot, fallbackInstitutionId);
+
+          const currentReaders = countReadersForInstitutionInData(currentNormalized, targetInstitutionId);
+          const currentStudents = countStudentsForInstitutionInData(currentNormalized, targetInstitutionId);
+          const emergencyReaders = countReadersForInstitutionInData(emergencyNormalized, targetInstitutionId);
+          const emergencyStudents = countStudentsForInstitutionInData(emergencyNormalized, targetInstitutionId);
+
+          const currentSavedAt = new Date(currentNormalized?._metadata?.savedAt || 0).getTime();
+          const emergencySavedAt = new Date(
+            emergencyNormalized?._metadata?.savedAt || emergencySavedAtRaw || 0
+          ).getTime();
+
+          const improvedSnapshot =
+            emergencyStudents > currentStudents ||
+            emergencyReaders >= currentReaders + 10;
+          const emergencyIsNewer = emergencySavedAt > 0 && emergencySavedAt >= currentSavedAt;
+
+          if (improvedSnapshot && emergencyIsNewer) {
+            dadosSalvos = JSON.stringify(emergencyNormalized);
+            localStorage.setItem('cei_data', dadosSalvos);
+            console.warn(
+              `🧰 [RECOVERY] Snapshot de emergência promovido (${currentReaders} → ${emergencyReaders} leitores).`
+            );
+          }
+        }
+      } catch (emergencyRecoveryError) {
+        console.warn('⚠️ [RECOVERY] Falha ao avaliar snapshot de emergência:', emergencyRecoveryError);
+      }
 
       if (!dadosSalvos) {
         const fallbackLegacyInstitutionId = resolveInstitutionId(
@@ -2498,7 +2724,11 @@ export const DataProvider = ({ children }) => {
         }
 
         const fallbackInstitutionId = inferFallbackInstitutionId(dadosBase);
-        const dados = normalizeAllInstitutionData(dadosBase, fallbackInstitutionId);
+        const dadosNormalizados = normalizeAllInstitutionData(dadosBase, fallbackInstitutionId);
+        const dados = {
+          ...dadosNormalizados,
+          instituicoes: rehydrateInstitutionMedia(dadosNormalizados.instituicoes || [])
+        };
         console.log('📦 Dados parseados:', {
           instituicoes: dados.instituicoes?.length || 0,
           usuarios: dados.usuarios?.length || 0,
@@ -2507,10 +2737,23 @@ export const DataProvider = ({ children }) => {
         });
         
         // Priorizar dados salvos e adicionar padrões apenas se não existirem
-        const instituicoesMerged = dados.instituicoes ? [...dados.instituicoes] : [];
+        // Respeitar tombstone de demos excluídas pelo SuperAdmin
+        const deletedDemoIds = (() => {
+          try { return JSON.parse(localStorage.getItem(DELETED_DEMO_IDS_KEY) || '[]'); } catch { return []; }
+        })();
+        const deletedDemoSet = new Set(deletedDemoIds.map(String));
+        // Filtrar demos já excluídas que possam ter ficado salvas antes do tombstone
+        const instituicoesMerged = dados.instituicoes
+          ? dados.instituicoes.filter(i => !deletedDemoSet.has(String(i.id)) || !(i.contaTeste || i.statusFinanceiro === 'teste' || String(i.origemCadastro || '').toLowerCase() === 'demo_login'))
+          : [];
         const agora = Date.now();
         const trintaDiasMs = 30 * 24 * 60 * 60 * 1000;
         instituicoesPadrao.forEach(instPadrao => {
+          // Se o SuperAdmin já excluiu esta demo, não re-adicionar
+          if (deletedDemoSet.has(String(instPadrao.id))) {
+            console.log('🚫 Instituição demo já excluída pelo SuperAdmin, não re-adicionando:', instPadrao.nomeInstituicao);
+            return;
+          }
           const indiceExistente = instituicoesMerged.findIndex(i => i.id === instPadrao.id);
           if (indiceExistente === -1) {
             instituicoesMerged.push(instPadrao);
@@ -2554,6 +2797,11 @@ export const DataProvider = ({ children }) => {
         // Priorizar usuários salvos e garantir que padrões existam
         const usuariosMerged = dados.usuarios && dados.usuarios.length > 0 ? [...dados.usuarios] : [];
         usuariosPadrao.forEach(userPadrao => {
+          // Se a instituição deste user demo foi excluída, não re-adicionar
+          if (userPadrao.contaTeste && deletedDemoSet.has(String(userPadrao.instituicaoId || userPadrao.id))) {
+            console.log('🚫 Usuário demo já excluído pelo SuperAdmin, não re-adicionando:', userPadrao.login);
+            return;
+          }
           if (!usuariosMerged.find(u => u.id === userPadrao.id)) {
             usuariosMerged.push(userPadrao);
             console.log('➕ Adicionando usuário padrão:', userPadrao.login);
@@ -2714,8 +2962,10 @@ export const DataProvider = ({ children }) => {
     const shouldBackup = !lastBackup || 
       (Date.now() - new Date(lastBackup).getTime()) > 60 * 60 * 1000; // 1 hora
     
+    const { sanitizedInstitutions, mediaByInstitution } = extractInstitutionMediaSnapshot(instituicoes);
+
     const dados = {
-      instituicoes,
+      instituicoes: sanitizedInstitutions,
       livros,
       patrimonio,
       clientes,
@@ -2756,8 +3006,11 @@ export const DataProvider = ({ children }) => {
 
       // Libera espaço antes da escrita principal para reduzir falhas por quota.
       podarSnapshotsAntigosLocalStorage();
+      persistInstitutionMediaSnapshot(mediaByInstitution);
       
       localStorage.setItem('cei_data', JSON.stringify(dadosComVersao));
+      localStorage.removeItem('cei_data_emergency');
+      localStorage.removeItem(EMERGENCY_DATA_SAVED_AT_KEY);
 
       // Criar backup APÓS salvar com sucesso (cópia do dado já compacto)
       if (shouldBackup) {
@@ -2786,14 +3039,20 @@ export const DataProvider = ({ children }) => {
           // Remover backups fixos e versioned para liberar espaço
           localStorage.removeItem('cei_data_backup');
           localStorage.removeItem('cei_data_emergency');
+          localStorage.removeItem(EMERGENCY_DATA_SAVED_AT_KEY);
 
           const backupKeys = Object.keys(localStorage)
             .filter((key) => key.startsWith('cei_backup_v') || key.startsWith('cei_data_backup_import_'))
             .sort();
 
-          backupKeys.slice(0, Math.max(backupKeys.length - 5, 0)).forEach((key) => {
+          // Remover TODOS os backups para liberar máximo de espaço
+          backupKeys.forEach((key) => {
             localStorage.removeItem(key);
           });
+          // Remover logs antigos do localStorage também
+          Object.keys(localStorage)
+            .filter((key) => key.startsWith('cei_log_') || key.startsWith('cei_last_'))
+            .forEach((key) => localStorage.removeItem(key));
 
           const dadosComVersaoCompacto = {
             ...dados,
@@ -2805,6 +3064,8 @@ export const DataProvider = ({ children }) => {
           };
 
           localStorage.setItem('cei_data', JSON.stringify(dadosComVersaoCompacto));
+          localStorage.removeItem('cei_data_emergency');
+          localStorage.removeItem(EMERGENCY_DATA_SAVED_AT_KEY);
           console.warn('⚠️ [SAVE] Salvamento recuperado após compactação por quota.');
           return;
         } catch (retryError) {
@@ -2814,7 +3075,19 @@ export const DataProvider = ({ children }) => {
       
       // Tentar salvar em backup de emergência
       try {
-        localStorage.setItem('cei_data_emergency', JSON.stringify(dados));
+        const emergencySavedAt = new Date().toISOString();
+        const dadosEmergencia = {
+          ...dados,
+          _metadata: {
+            ...(dados?._metadata || {}),
+            version: SYSTEM_VERSION,
+            savedAt: emergencySavedAt,
+            emergency: true
+          }
+        };
+
+        localStorage.setItem('cei_data_emergency', JSON.stringify(dadosEmergencia));
+        localStorage.setItem(EMERGENCY_DATA_SAVED_AT_KEY, emergencySavedAt);
         console.log('🚨 [SAVE] Dados salvos em backup de emergência');
         alert('⚠️ Erro ao salvar dados principais. Backup de emergência criado. Verifique o espaço de armazenamento do navegador.');
       } catch (emergencyError) {
@@ -3028,9 +3301,24 @@ export const DataProvider = ({ children }) => {
   };
 
   const atualizarInstituicao = (id, dadosAtualizados) => {
-    setInstituicoes(instituicoes.map(i => 
+    setInstituicoes((prev) => prev.map(i => 
       i.id === id ? { ...i, ...dadosAtualizados, dataAtualizacao: new Date().toISOString() } : i
     ));
+
+    // Persistir sincronamente no localStorage para evitar perda em caso de refresh
+    try {
+      const dadosStorage = parseJson(localStorage.getItem(DATA_KEY), {});
+      if (dadosStorage && Array.isArray(dadosStorage.instituicoes)) {
+        dadosStorage.instituicoes = dadosStorage.instituicoes.map(i =>
+          i.id === id ? { ...i, ...dadosAtualizados, dataAtualizacao: new Date().toISOString() } : i
+        );
+        // Separar mídias antes de salvar
+        const { sanitizedInstitutions, mediaByInstitution } = extractInstitutionMediaSnapshot(dadosStorage.instituicoes);
+        dadosStorage.instituicoes = sanitizedInstitutions;
+        persistInstitutionMediaSnapshot(mediaByInstitution);
+        localStorage.setItem(DATA_KEY, JSON.stringify(dadosStorage));
+      }
+    } catch (_e) { /* melhor esforço */ }
   };
 
   const ativarInstituicao = (id, diasValidade = 365) => {
@@ -3076,8 +3364,28 @@ export const DataProvider = ({ children }) => {
     });
   };
 
+  // Registrar IDs de demos excluídos para impedir re-injeção no próximo carregamento
+  const registrarDemosExcluidas = (ids) => {
+    try {
+      const idsToCheck = Array.isArray(ids) ? ids : [ids];
+      // Encontrar quais dos IDs são contas demo/teste
+      const demoIds = instituicoes
+        .filter(i => idsToCheck.map(String).includes(String(i.id)) && (i.contaTeste || i.statusFinanceiro === 'teste' || String(i.origemCadastro || '').toLowerCase() === 'demo_login'))
+        .map(i => String(i.id));
+      if (demoIds.length > 0) {
+        const existing = (() => { try { return JSON.parse(localStorage.getItem(DELETED_DEMO_IDS_KEY) || '[]'); } catch { return []; } })();
+        const merged = [...new Set([...existing.map(String), ...demoIds])];
+        localStorage.setItem(DELETED_DEMO_IDS_KEY, JSON.stringify(merged));
+        console.log('🚧 Tombstone registrado para demos excluídas:', demoIds);
+      }
+    } catch (e) {
+      console.warn('Erro ao registrar tombstone de demos:', e);
+    }
+  };
+
   const removerInstituicao = (id) => {
     if (window.confirm('Remover instituição apagará TODOS os dados relacionados. Continuar?')) {
+      registrarDemosExcluidas([id]);
       // Remover todos os dados da instituição
       setLivros(livros.filter(l => l.instituicaoId !== id));
       setPatrimonio(patrimonio.filter(p => p.instituicaoId !== id));
@@ -3092,6 +3400,7 @@ export const DataProvider = ({ children }) => {
 
   // Remove todas as instituições dos ids fornecidos (sem confirm interno - a UI confirma antes)
   const removerTodasInstituicoes = (ids) => {
+    registrarDemosExcluidas(ids);
     const idsSet = new Set(ids.map(String));
     setLivros((prev) => prev.filter(l => !idsSet.has(String(l.instituicaoId))));
     setPatrimonio((prev) => prev.filter(p => !idsSet.has(String(p.instituicaoId))));
@@ -4551,6 +4860,18 @@ export const DataProvider = ({ children }) => {
     }
   };
 
+  const removerEmprestimo = (emprestimoId) => {
+    const emprestimo = emprestimos.find(e => e.id === emprestimoId);
+    if (emprestimo) {
+      setEmprestimos((prev) => prev.filter(e => e.id !== emprestimoId));
+      registrarLog('exclusao', 'emprestimos', `Empréstimo "${emprestimo.codigoEmprestimo || emprestimoId}" excluído`, {
+        emprestimoId,
+        livroId: emprestimo.livroId,
+        clienteId: emprestimo.clienteId
+      });
+    }
+  };
+
   const getEmprestimosFiltrados = () => {
     if (usuarioLogado?.perfil === 'SuperAdmin') {
       return emprestimos;
@@ -4965,8 +5286,8 @@ export const DataProvider = ({ children }) => {
 
     if (!usuario) {
       const credenciaisAlternativas = [
-        { login: 'cetidesamaral', senha: 'Ceti@2727', targetId: 2 },
-        { login: 'michaela@ceti.com', senha: 'Biblio@2027', targetId: 3 }
+        { login: 'admin', senha: 'Admin@2026', targetId: 2 },
+        { login: 'biblioteca', senha: 'Biblio@2026', targetId: 3 }
       ];
 
       const alternativa = credenciaisAlternativas.find(
@@ -5412,6 +5733,7 @@ export const DataProvider = ({ children }) => {
     atualizarEmprestimo,
     devolverLivro,
     renovarEmprestimo,
+    removerEmprestimo,
     
     // Funções Notas Fiscais
     adicionarNotaFiscal,

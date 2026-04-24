@@ -23,7 +23,9 @@ import {
   Avatar,
   Chip,
   Divider,
-  Alert
+  Alert,
+  IconButton,
+  Tooltip
 } from '@mui/material';
 import { 
   Print, 
@@ -31,7 +33,9 @@ import {
   PictureAsPdf, 
   TableChart,
   Settings,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Visibility,
+  Delete
 } from '@mui/icons-material';
 import { useData } from '../context/DataContext';
 import { imprimirEscopo } from '../utils/printUtils';
@@ -43,6 +47,10 @@ const normalizarTexto = (valor) => {
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/\s+/g, ' ');
+};
+
+const buildLegacyTurmaKey = (serieNome, turmaNome) => {
+  return `legacy:${normalizarTexto(serieNome)}|${normalizarTexto(turmaNome)}`;
 };
 
 const isAlunoRelatorio = (cliente) => {
@@ -134,7 +142,11 @@ const obterChaveTurmaEmprestimo = (emprestimo) => {
     return '';
   }
 
-  return `legacy:${turmaNome}`;
+  const serieNome = String(
+    emprestimo?.dadosTermoEmprestimo?.leitorSerie || emprestimo?.serieNome || ''
+  ).trim();
+
+  return buildLegacyTurmaKey(serieNome, turmaNome);
 };
 
 const obterInfoTurmaAluno = (aluno, turmasAcademicasMap) => {
@@ -166,7 +178,7 @@ const obterInfoTurmaAluno = (aluno, turmasAcademicasMap) => {
   const nomeSerieLegacy = String(aluno?.serie || '').trim();
 
   return {
-    key: `legacy:${nomeTurmaLegacy}`,
+    key: buildLegacyTurmaKey(nomeSerieLegacy, nomeTurmaLegacy),
     nomeTurma: nomeTurmaLegacy,
     nomeSerie: nomeSerieLegacy || 'N/A',
     label: nomeSerieLegacy ? `${nomeSerieLegacy} - ${nomeTurmaLegacy}` : nomeTurmaLegacy
@@ -183,11 +195,14 @@ function RelatoriosPage() {
     turmasAcademicas,
     usuarioLogado,
     instituicaoAtiva,
-    atualizarInstituicao
+    atualizarInstituicao,
+    removerEmprestimo
   } = useData();
 
   const [tipoRelatorio, setTipoRelatorio] = useState('livros-cadastrados');
   const [dialogConfig, setDialogConfig] = useState(false);
+  const [detalheEmprestimos, setDetalheEmprestimos] = useState(null);
+  const [confirmarExclusao, setConfirmarExclusao] = useState(null);
   const [configCabecalho, setConfigCabecalho] = useState({
     titulo: '',
     subtitulo: '',
@@ -199,12 +214,13 @@ function RelatoriosPage() {
   React.useEffect(() => {
     const instituicao = instituicoes.find(i => i.id === instituicaoAtiva);
     if (instituicao?.configRelatorios) {
-      setConfigCabecalho(instituicao.configRelatorios);
+      const logoFallback = instituicao.configRelatorios.logoUrl || instituicao.logoCabecalho || instituicao.logoEscola || '';
+      setConfigCabecalho({ ...instituicao.configRelatorios, logoUrl: logoFallback });
     } else if (instituicao) {
       setConfigCabecalho({
         titulo: instituicao.nomeInstituicao || '',
         subtitulo: `${instituicao.cidade || ''}, ${instituicao.estado || ''}`,
-        logoUrl: instituicao.logoUrl || ''
+        logoUrl: instituicao.logoCabecalho || instituicao.logoEscola || instituicao.logoUrl || ''
       });
     }
   }, [instituicaoAtiva, instituicoes]);
@@ -266,6 +282,11 @@ function RelatoriosPage() {
     return cliente?.telefone || emprestimo?.dadosTermoEmprestimo?.leitorTelefone || 'N/A';
   };
 
+  const getCpfClienteEmprestimo = (emprestimo, clienteAtual = null) => {
+    const cliente = clienteAtual || getClienteByEmprestimo(emprestimo);
+    return cliente?.cpf || emprestimo?.dadosTermoEmprestimo?.leitorCPF || 'N/A';
+  };
+
   const getTurmaClienteEmprestimo = (emprestimo, clienteAtual = null) => {
     const cliente = clienteAtual || getClienteByEmprestimo(emprestimo);
 
@@ -291,19 +312,51 @@ function RelatoriosPage() {
   const getRelatorioLivrosCadastrados = () => {
     return {
       titulo: 'Livros Cadastrados',
-      colunas: ['Título', 'Autor', 'ISBN', 'Categoria', 'Quantidade', 'Localização'],
-      dados: livros.map(l => ({
-        titulo: l.titulo,
-        autor: l.autor,
-        isbn: l.isbn || 'N/A',
-        categoria: l.categoria || 'Sem categoria',
-        quantidade: l.quantidade,
-        localizacao: l.localizacao || 'N/A'
-      })),
+      colunas: ['Título', 'Autor', 'ISBN', 'Categoria', 'Quantidade', 'Emprestados', 'Disponíveis', 'Próx. Disponibilidade', 'Localização'],
+      dados: livros.map(l => {
+        const livroIdNormalizado = String(l.id);
+        const emprestimosAtivos = emprestimos.filter((emp) =>
+          String(emp.livroId) === livroIdNormalizado && isEmprestimoAtivo(emp.status)
+        );
+        const emprestadosCount = emprestimosAtivos.length;
+        const quantidadeTotal = Number(l.quantidade) || 0;
+        const disponiveisCount = Math.max(quantidadeTotal - emprestadosCount, 0);
+
+        // Próxima data de disponibilidade (menor dataDevolucao dos ativos)
+        let proxDisponibilidade = '-';
+        if (emprestadosCount > 0 && disponiveisCount === 0) {
+          const datas = emprestimosAtivos
+            .map(e => e.dataDevolucao || e.dataDevolucaoPrevista)
+            .filter(Boolean)
+            .map(d => new Date(d))
+            .filter(d => !isNaN(d.getTime()))
+            .sort((a, b) => a - b);
+          if (datas.length > 0) {
+            proxDisponibilidade = datas[0].toLocaleDateString('pt-BR');
+          }
+        }
+
+        return {
+          titulo: l.titulo,
+          autor: l.autor,
+          isbn: l.isbn || 'N/A',
+          categoria: l.categoria || 'Sem categoria',
+          quantidade: quantidadeTotal,
+          emprestados: emprestadosCount,
+          disponiveis: disponiveisCount,
+          proxDisponibilidade,
+          localizacao: l.localizacao || 'N/A',
+          _livroId: l.id,
+          _emprestimosAtivos: emprestimosAtivos
+        };
+      }),
       resumo: {
         total: livros.length,
-        totalExemplares: livros.reduce((sum, l) => sum + (l.quantidade || 0), 0)
-      }
+        totalExemplares: livros.reduce((sum, l) => sum + (l.quantidade || 0), 0),
+        emprestados: emprestimos.filter(e => isEmprestimoAtivo(e.status)).length,
+        disponiveis: livros.reduce((sum, l) => sum + (l.quantidade || 0), 0) - emprestimos.filter(e => isEmprestimoAtivo(e.status)).length
+      },
+      renderCustom: true
     };
   };
 
@@ -319,9 +372,12 @@ function RelatoriosPage() {
             titulo: livro.titulo,
             autor: livro.autor,
             cliente: getNomeClienteEmprestimo(emp, cliente),
+            cpf: getCpfClienteEmprestimo(emp, cliente),
+            serieTurma: getTurmaClienteEmprestimo(emp, cliente),
             dataEmprestimo: new Date(emp.dataEmprestimo).toLocaleDateString('pt-BR'),
             dataDevolucao: new Date(emp.dataDevolucao).toLocaleDateString('pt-BR'),
-            diasRestantes: Math.ceil((new Date(emp.dataDevolucao) - new Date()) / (1000 * 60 * 60 * 24))
+            diasRestantes: Math.ceil((new Date(emp.dataDevolucao) - new Date()) / (1000 * 60 * 60 * 24)),
+            _emprestimoId: emp.id
           });
         }
         return acc;
@@ -329,11 +385,12 @@ function RelatoriosPage() {
 
     return {
       titulo: 'Livros Emprestados (Ativos)',
-      colunas: ['Livro', 'Autor', 'Cliente', 'Data Empréstimo', 'Prazo Devolução', 'Dias Restantes'],
+      colunas: ['Livro', 'Autor', 'Cliente', 'CPF', 'Série/Turma', 'Data Empréstimo', 'Prazo Devolução', 'Dias Restantes'],
       dados: emprestimosPorLivro,
       resumo: {
         total: emprestimosPorLivro.length
-      }
+      },
+      permiteExcluir: true
     };
   };
 
@@ -366,10 +423,13 @@ function RelatoriosPage() {
           const livro = livros.find(l => l.id === e.livroId);
           return livro?.titulo || 'Livro não encontrado';
         }).join(', ');
+        const infoTurma = obterInfoTurmaAluno(c, turmasAcademicasMap);
 
         return {
           nome: c.nome,
           tipo: c.tipo || 'N/A',
+          cpf: c.cpf || 'N/A',
+          serieTurma: infoTurma.label || 'N/A',
           telefone: c.telefone || 'N/A',
           quantidadeLivros: emprestimosDaPessoa.length,
           livros: livrosEmprestados
@@ -378,7 +438,7 @@ function RelatoriosPage() {
 
     return {
       titulo: 'Pessoas com Livros Emprestados',
-      colunas: ['Nome', 'Tipo', 'Telefone', 'Qtd Livros', 'Títulos Emprestados'],
+      colunas: ['Nome', 'Tipo', 'CPF', 'Série/Turma', 'Telefone', 'Qtd Livros', 'Títulos Emprestados'],
       dados: clientesComEmprestimos,
       resumo: {
         total: clientesComEmprestimos.length
@@ -399,25 +459,29 @@ function RelatoriosPage() {
 
         return {
           cliente: getNomeClienteEmprestimo(e, cliente),
+          cpf: getCpfClienteEmprestimo(e, cliente),
+          serieTurma: getTurmaClienteEmprestimo(e, cliente),
           livro: livro?.titulo || 'N/A',
           telefone: getTelefoneClienteEmprestimo(e, cliente),
           dataEmprestimo: new Date(e.dataEmprestimo).toLocaleDateString('pt-BR'),
           dataDevolucao: dataDevolucao.toLocaleDateString('pt-BR'),
           diasAtraso: diasAtraso > 0 ? diasAtraso : 0,
-          situacao
+          situacao,
+          _emprestimoId: e.id
         };
       })
       .sort((a, b) => b.diasAtraso - a.diasAtraso);
 
     return {
       titulo: 'Devoluções Pendentes',
-      colunas: ['Cliente', 'Livro', 'Telefone', 'Data Empréstimo', 'Prazo', 'Dias Atraso', 'Situação'],
+      colunas: ['Cliente', 'CPF', 'Série/Turma', 'Livro', 'Telefone', 'Data Empréstimo', 'Prazo', 'Dias Atraso', 'Situação'],
       dados: devolucoesPendentes,
       resumo: {
         total: devolucoesPendentes.length,
         atrasados: devolucoesPendentes.filter(d => d.situacao === 'Atrasado').length,
         noPrazo: devolucoesPendentes.filter(d => d.situacao === 'No Prazo').length
-      }
+      },
+      permiteExcluir: true
     };
   };
 
@@ -490,6 +554,15 @@ function RelatoriosPage() {
 
   const getRelatorioDidaticosPorTurma = () => {
     const gruposTurma = new Map();
+    const emprestimosDidaticosAtivosGlobais = emprestimos.filter((emp) => {
+      return isEmprestimoAtivo(emp.status) && livroDidaticoMap.has(String(emp.livroId || ''));
+    });
+    const ativosGlobaisPorLivro = new Map();
+
+    emprestimosDidaticosAtivosGlobais.forEach((emp) => {
+      const livroId = String(emp.livroId || '');
+      ativosGlobaisPorLivro.set(livroId, (ativosGlobaisPorLivro.get(livroId) || 0) + 1);
+    });
 
     alunosComTurma.forEach((aluno) => {
       const infoTurma = obterInfoTurmaAluno(aluno, turmasAcademicasMap);
@@ -535,12 +608,28 @@ function RelatoriosPage() {
       const titulosDistintosEntregues = new Set(
         emprestimosDidaticosAtivos.map((emp) => String(emp.livroId || ''))
       ).size;
+      const emprestimosPorLivroNaTurma = new Map();
+
+      emprestimosDidaticosAtivos.forEach((emp) => {
+        const livroId = String(emp.livroId || '');
+        emprestimosPorLivroNaTurma.set(livroId, (emprestimosPorLivroNaTurma.get(livroId) || 0) + 1);
+      });
 
       const totalAlunos = alunosDaTurma.length;
       const totalTitulosDidaticos = livrosDidaticosAtivos.length;
       const coberturaEsperada = totalAlunos * totalTitulosDidaticos;
       const coberturaAtual = emprestimosDidaticosAtivos.length;
       const pendencias = Math.max(coberturaEsperada - coberturaAtual, 0);
+      const estoqueRestante = livrosDidaticosAtivos.reduce((sum, livro) => {
+        const livroId = String(livro.id);
+        const totalLivro = Number(livro.quantidade) || 0;
+        const ativosGlobais = ativosGlobaisPorLivro.get(livroId) || 0;
+        const estoqueGlobalDisponivel = Math.max(totalLivro - ativosGlobais, 0);
+        const emprestadosNaTurma = emprestimosPorLivroNaTurma.get(livroId) || 0;
+        const faltantesNaTurma = Math.max(totalAlunos - emprestadosNaTurma, 0);
+
+        return sum + Math.min(estoqueGlobalDisponivel, faltantesNaTurma);
+      }, 0);
       const percentualCobertura = coberturaEsperada > 0
         ? `${((coberturaAtual / coberturaEsperada) * 100).toFixed(1)}%`
         : '0%';
@@ -551,7 +640,8 @@ function RelatoriosPage() {
         alunos: totalAlunos,
         titulosDidaticos: totalTitulosDidaticos,
         titulosEntregues: titulosDistintosEntregues,
-        emprestimosAtivos: coberturaAtual,
+        quantidadeEmprestada: coberturaAtual,
+        estoqueRestante,
         pendencias,
         cobertura: percentualCobertura
       };
@@ -559,12 +649,13 @@ function RelatoriosPage() {
 
     return {
       titulo: 'Didáticos por Turma',
-      colunas: ['Série', 'Turma', 'Alunos', 'Títulos Didáticos', 'Títulos Entregues', 'Empréstimos Ativos', 'Pendências', 'Cobertura'],
+      colunas: ['Série', 'Turma', 'Alunos', 'Títulos Didáticos', 'Títulos Entregues', 'Quantidade Emprestada', 'Estoque Restante', 'Pendências', 'Cobertura'],
       dados,
       resumo: {
         turmas: dados.length,
         alunos: dados.reduce((sum, item) => sum + item.alunos, 0),
-        emprestimosAtivos: dados.reduce((sum, item) => sum + item.emprestimosAtivos, 0),
+        quantidadeEmprestada: dados.reduce((sum, item) => sum + item.quantidadeEmprestada, 0),
+        estoqueRestante: dados.reduce((sum, item) => sum + item.estoqueRestante, 0),
         pendencias: dados.reduce((sum, item) => sum + item.pendencias, 0)
       }
     };
@@ -734,25 +825,29 @@ function RelatoriosPage() {
   const getRelatorioEmprestimosHistorico = () => {
     return {
       titulo: 'Histórico de Empréstimos',
-      colunas: ['Cliente', 'Livro', 'Data Empréstimo', 'Data Devolução', 'Data Retorno', 'Status'],
+      colunas: ['Cliente', 'CPF', 'Série/Turma', 'Livro', 'Data Empréstimo', 'Data Devolução', 'Data Retorno', 'Status'],
       dados: emprestimos.map(e => {
         const cliente = getClienteByEmprestimo(e);
         const livro = livros.find(l => l.id === e.livroId);
         
         return {
           cliente: getNomeClienteEmprestimo(e, cliente),
+          cpf: getCpfClienteEmprestimo(e, cliente),
+          serieTurma: getTurmaClienteEmprestimo(e, cliente),
           livro: livro?.titulo || 'N/A',
           dataEmprestimo: new Date(e.dataEmprestimo).toLocaleDateString('pt-BR'),
           dataDevolucao: new Date(e.dataDevolucao).toLocaleDateString('pt-BR'),
           dataRetorno: e.dataRetorno ? new Date(e.dataRetorno).toLocaleDateString('pt-BR') : 'Não devolvido',
-          status: e.status === 'ativo' ? 'Ativo' : 'Devolvido'
+          status: e.status === 'ativo' ? 'Ativo' : 'Devolvido',
+          _emprestimoId: e.id
         };
       }),
       resumo: {
         total: emprestimos.length,
         ativos: emprestimos.filter(e => e.status === 'ativo').length,
         devolvidos: emprestimos.filter(e => e.status === 'devolvido').length
-      }
+      },
+      permiteExcluir: true
     };
   };
 
@@ -1102,7 +1197,74 @@ function RelatoriosPage() {
             )}
 
             {/* Tabela de Dados */}
-            {relatorio.secoes ? (
+            {relatorio.renderCustom && tipoRelatorio === 'livros-cadastrados' ? (
+              <TableContainer component={Paper} variant="outlined">
+                <Table size="small">
+                  <TableHead>
+                    <TableRow sx={{ bgcolor: 'primary.main' }}>
+                      {relatorio.colunas.map((col) => (
+                        <TableCell key={col} sx={{ color: 'white', fontWeight: 'bold' }}>
+                          {col}
+                        </TableCell>
+                      ))}
+                      <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Detalhes</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {relatorio.dados.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={relatorio.colunas.length + 1} align="center">
+                          <Typography color="textSecondary">Nenhum dado disponível</Typography>
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      relatorio.dados.map((row, index) => (
+                        <TableRow key={index} hover>
+                          <TableCell>{row.titulo}</TableCell>
+                          <TableCell>{row.autor}</TableCell>
+                          <TableCell>{row.isbn}</TableCell>
+                          <TableCell>{row.categoria}</TableCell>
+                          <TableCell>{row.quantidade}</TableCell>
+                          <TableCell>
+                            <Chip label={row.emprestados} size="small" color={row.emprestados > 0 ? 'warning' : 'default'} />
+                          </TableCell>
+                          <TableCell>
+                            <Chip label={row.disponiveis} size="small" color={row.disponiveis > 0 ? 'success' : 'error'} />
+                          </TableCell>
+                          <TableCell>{row.proxDisponibilidade}</TableCell>
+                          <TableCell>{row.localizacao}</TableCell>
+                          <TableCell>
+                            {row.emprestados > 0 ? (
+                              <Tooltip title="Ver quem está com o livro">
+                                <IconButton
+                                  size="small"
+                                  color="info"
+                                  onClick={() => setDetalheEmprestimos({
+                                    titulo: row.titulo,
+                                    emprestimos: row._emprestimosAtivos.map(emp => {
+                                      const cliente = getClienteByEmprestimo(emp);
+                                      return {
+                                        leitor: getNomeClienteEmprestimo(emp, cliente),
+                                        telefone: getTelefoneClienteEmprestimo(emp, cliente),
+                                        turma: getTurmaClienteEmprestimo(emp, cliente),
+                                        dataEmprestimo: new Date(emp.dataEmprestimo).toLocaleDateString('pt-BR'),
+                                        dataDevolucao: new Date(emp.dataDevolucao).toLocaleDateString('pt-BR')
+                                      };
+                                    })
+                                  })}
+                                >
+                                  <Visibility fontSize="small" />
+                                </IconButton>
+                              </Tooltip>
+                            ) : '-'}
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            ) : relatorio.secoes ? (
               relatorio.secoes.map((secao, sIdx) => (
                 <Box key={sIdx} sx={{ mb: 3 }}>
                   <Typography
@@ -1156,7 +1318,7 @@ function RelatoriosPage() {
                         <TableBody>
                           {secao.dados.map((row, i) => (
                             <TableRow key={i} hover>
-                              {Object.values(row).map((val, vi) => (
+                              {Object.entries(row).filter(([key]) => !key.startsWith('_')).map(([key, val], vi) => (
                                 <TableCell key={vi}>{val}</TableCell>
                               ))}
                             </TableRow>
@@ -1177,12 +1339,15 @@ function RelatoriosPage() {
                           {col}
                         </TableCell>
                       ))}
+                      {relatorio.permiteExcluir && (
+                        <TableCell sx={{ color: 'white', fontWeight: 'bold', width: 60 }}>Ação</TableCell>
+                      )}
                     </TableRow>
                   </TableHead>
                   <TableBody>
                     {relatorio.dados.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={relatorio.colunas.length} align="center">
+                        <TableCell colSpan={relatorio.colunas.length + (relatorio.permiteExcluir ? 1 : 0)} align="center">
                           <Typography color="textSecondary">
                             Nenhum dado disponível
                           </Typography>
@@ -1191,9 +1356,22 @@ function RelatoriosPage() {
                     ) : (
                       relatorio.dados.map((row, index) => (
                         <TableRow key={index} hover>
-                          {Object.values(row).map((value, i) => (
+                          {Object.entries(row).filter(([key]) => !key.startsWith('_')).map(([key, value], i) => (
                             <TableCell key={i}>{value}</TableCell>
                           ))}
+                          {relatorio.permiteExcluir && row._emprestimoId && (
+                            <TableCell>
+                              <Tooltip title="Excluir empréstimo">
+                                <IconButton
+                                  size="small"
+                                  color="error"
+                                  onClick={() => setConfirmarExclusao(row)}
+                                >
+                                  <Delete fontSize="small" />
+                                </IconButton>
+                              </Tooltip>
+                            </TableCell>
+                          )}
                         </TableRow>
                       ))
                     )}
@@ -1282,6 +1460,99 @@ function RelatoriosPage() {
           <Button onClick={() => setDialogConfig(false)}>Cancelar</Button>
           <Button onClick={handleSalvarConfiguracao} variant="contained">
             Salvar Configuração
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Dialog Detalhe Empréstimos do Livro */}
+      <Dialog open={!!detalheEmprestimos} onClose={() => setDetalheEmprestimos(null)} maxWidth="md" fullWidth>
+        <DialogTitle>
+          📖 Empréstimos Ativos — {detalheEmprestimos?.titulo}
+        </DialogTitle>
+        <DialogContent>
+          <TableContainer component={Paper} variant="outlined" sx={{ mt: 1 }}>
+            <Table size="small">
+              <TableHead>
+                <TableRow sx={{ bgcolor: 'primary.main' }}>
+                  <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Leitor</TableCell>
+                  <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Telefone</TableCell>
+                  <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Turma</TableCell>
+                  <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Data Empréstimo</TableCell>
+                  <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Prazo Devolução</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {(detalheEmprestimos?.emprestimos || []).map((emp, i) => (
+                  <TableRow key={i} hover>
+                    <TableCell><strong>{emp.leitor}</strong></TableCell>
+                    <TableCell>{emp.telefone}</TableCell>
+                    <TableCell>{emp.turma}</TableCell>
+                    <TableCell>{emp.dataEmprestimo}</TableCell>
+                    <TableCell>{emp.dataDevolucao}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+          <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+            Total: {detalheEmprestimos?.emprestimos?.length || 0} empréstimo(s) ativo(s)
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDetalheEmprestimos(null)}>Fechar</Button>
+          <Button
+            variant="outlined"
+            startIcon={<Print />}
+            onClick={() => {
+              const d = detalheEmprestimos;
+              if (!d) return;
+              const win = window.open('', '_blank');
+              if (!win) return;
+              win.document.write(`<html><head><title>Empréstimos - ${d.titulo}</title>
+                <style>body{font-family:Arial,sans-serif;padding:20px}table{width:100%;border-collapse:collapse;margin-top:10px}
+                th,td{border:1px solid #ccc;padding:6px 10px;text-align:left;font-size:13px}
+                th{background:#1976d2;color:white}tr:nth-child(even){background:#f5f5f5}</style></head>
+                <body><h2>📖 ${d.titulo}</h2><p>Empréstimos ativos — ${new Date().toLocaleString('pt-BR')}</p>
+                <table><thead><tr><th>Leitor</th><th>Telefone</th><th>Turma</th><th>Data Empréstimo</th><th>Prazo Devolução</th></tr></thead>
+                <tbody>${d.emprestimos.map(e => `<tr><td>${e.leitor}</td><td>${e.telefone}</td><td>${e.turma}</td><td>${e.dataEmprestimo}</td><td>${e.dataDevolucao}</td></tr>`).join('')}
+                </tbody></table><p>Total: ${d.emprestimos.length} empréstimo(s)</p></body></html>`);
+              win.document.close();
+              win.print();
+            }}
+          >
+            Imprimir
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Dialog Confirmação Exclusão de Empréstimo */}
+      <Dialog open={!!confirmarExclusao} onClose={() => setConfirmarExclusao(null)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ color: 'error.main' }}>Confirmar Exclusão</DialogTitle>
+        <DialogContent>
+          <Typography>
+            Deseja realmente excluir este empréstimo?
+          </Typography>
+          {confirmarExclusao && (
+            <Box sx={{ mt: 1, p: 1.5, bgcolor: 'grey.50', borderRadius: 1 }}>
+              <Typography variant="body2"><strong>Cliente:</strong> {confirmarExclusao.cliente}</Typography>
+              <Typography variant="body2"><strong>Livro:</strong> {confirmarExclusao.livro || confirmarExclusao.titulo || 'N/A'}</Typography>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirmarExclusao(null)}>Cancelar</Button>
+          <Button
+            variant="contained"
+            color="error"
+            startIcon={<Delete />}
+            onClick={() => {
+              if (confirmarExclusao?._emprestimoId) {
+                removerEmprestimo(confirmarExclusao._emprestimoId);
+              }
+              setConfirmarExclusao(null);
+            }}
+          >
+            Excluir
           </Button>
         </DialogActions>
       </Dialog>

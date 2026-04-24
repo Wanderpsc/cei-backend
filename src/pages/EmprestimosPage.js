@@ -25,7 +25,12 @@ import {
   CardContent,
   Grid,
   InputAdornment,
-  Divider
+  Divider,
+  FormControl,
+  FormLabel,
+  RadioGroup,
+  FormControlLabel,
+  Radio
 } from '@mui/material';
 import { Add, Edit, AssignmentReturn, Search, PersonAdd, CheckCircle, Print, Description, PrintOutlined } from '@mui/icons-material';
 import { useData } from '../context/DataContext';
@@ -64,7 +69,8 @@ function EmprestimosPage() {
     livroId: '',
     dataEmprestimo: new Date().toISOString().split('T')[0],
     dataDevolucaoPrevista: '',
-    observacoes: ''
+    observacoes: '',
+    categoriaLeitor: ''
   });
   
   // Dados para cadastro rápido de leitor
@@ -281,8 +287,14 @@ function EmprestimosPage() {
 
   const handleSelecionarLeitor = (leitor) => {
     console.log('🎯 handleSelecionarLeitor chamado:', leitor);
+    const cat = (leitor.categoria || leitor.tipo || '').toLowerCase();
+    let categoriaAuto = '';
+    if (/professor/.test(cat)) categoriaAuto = 'professor';
+    else if (/aluno|estudante/.test(cat)) categoriaAuto = 'estudante';
+    else if (/funcion|servidor|bibliotec|coordenador|diretor|gestor|admin/.test(cat)) categoriaAuto = 'funcionario';
+    else if (/comunidade/.test(cat)) categoriaAuto = 'comunidade';
     setFormData(prev => {
-      const newFormData = { ...prev, clienteId: leitor.id };
+      const newFormData = { ...prev, clienteId: leitor.id, categoriaLeitor: categoriaAuto || prev.categoriaLeitor };
       console.log('📝 Novo formData:', newFormData);
       return newFormData;
     });
@@ -919,6 +931,21 @@ function EmprestimosPage() {
 
                     {/* Campos de empréstimo */}
                     <Grid container spacing={2}>
+                      <Grid item xs={12}>
+                        <FormControl component="fieldset" required>
+                          <FormLabel component="legend">Categoria do Leitor</FormLabel>
+                          <RadioGroup
+                            row
+                            value={formData.categoriaLeitor}
+                            onChange={(e) => setFormData(prev => ({ ...prev, categoriaLeitor: e.target.value }))}
+                          >
+                            <FormControlLabel value="estudante" control={<Radio size="small" />} label="Estudante" />
+                            <FormControlLabel value="professor" control={<Radio size="small" />} label="Professor" />
+                            <FormControlLabel value="funcionario" control={<Radio size="small" />} label="Funcionário" />
+                            <FormControlLabel value="comunidade" control={<Radio size="small" />} label="Comunidade" />
+                          </RadioGroup>
+                        </FormControl>
+                      </Grid>
                       <Grid item xs={12} sm={6}>
                         <TextField
                           label="Data do Empréstimo"

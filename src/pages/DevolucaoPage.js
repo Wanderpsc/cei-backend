@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import Layout from '../components/Layout';
 import {
   Alert,
@@ -27,13 +27,16 @@ import {
   TableHead,
   TableRow,
   TextField,
+  Tooltip,
   Typography
 } from '@mui/material';
 import {
   AssignmentReturn,
   Autorenew,
   CheckCircle,
-  Close
+  Close,
+  Delete,
+  Print
 } from '@mui/icons-material';
 import { useData } from '../context/DataContext';
 
@@ -130,7 +133,7 @@ const obterRotuloTurmaAluno = (aluno, turmasAcademicasMap) => {
 };
 
 function DevolucaoPage() {
-  const { emprestimos, livros, clientes, devolverLivro, renovarEmprestimo, turmasAcademicas } = useData();
+  const { emprestimos, livros, clientes, devolverLivro, renovarEmprestimo, removerEmprestimo, turmasAcademicas } = useData();
   const [buscaNome, setBuscaNome] = useState('');
   const [buscaISBN, setBuscaISBN] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -143,6 +146,7 @@ function DevolucaoPage() {
   const [selecoesLote, setSelecoesLote] = useState({});
   const [processandoLote, setProcessandoLote] = useState(false);
   const [resultadoLote, setResultadoLote] = useState(null);
+  const tabelaEncontradosRef = useRef(null);
 
   const turmasAcademicasMap = React.useMemo(() => {
     const map = new Map();
@@ -389,6 +393,70 @@ function DevolucaoPage() {
     return diffDays > 0 ? diffDays : 0;
   };
 
+  const handleExcluirEmprestimo = (emprestimo) => {
+    const clienteNome = getClienteNome(obterEmprestimoClienteId(emprestimo));
+    const livroInfo = getLivroInfo(emprestimo.livroId);
+    const confirma = window.confirm(
+      `Tem certeza que deseja EXCLUIR este empréstimo?\n\n` +
+      `Leitor: ${clienteNome}\n` +
+      `Livro: ${livroInfo.titulo}\n` +
+      `Data: ${new Date(emprestimo.dataEmprestimo).toLocaleDateString('pt-BR')}\n\n` +
+      `⚠️ Esta ação remove permanentemente o registro do empréstimo.`
+    );
+    if (confirma) {
+      removerEmprestimo(emprestimo.id);
+    }
+  };
+
+  const handleImprimirEncontrados = () => {
+    const rows = emprestimosEncontrados.map((emp) => {
+      const livroInfo = getLivroInfo(emp.livroId);
+      const diasAtraso = calcularDiasAtraso(emp.dataDevolucao);
+      return {
+        leitor: getClienteNome(obterEmprestimoClienteId(emp)),
+        livro: livroInfo.titulo,
+        isbn: livroInfo.isbn || '-',
+        dataEmprestimo: new Date(emp.dataEmprestimo).toLocaleDateString('pt-BR'),
+        dataDevolucao: new Date(emp.dataDevolucao).toLocaleDateString('pt-BR'),
+        status: diasAtraso > 0 ? `Atrasado ${diasAtraso} dias` : 'No prazo'
+      };
+    });
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      alert('Não foi possível abrir a janela de impressão. Verifique se o bloqueador de pop-ups está ativado.');
+      return;
+    }
+
+    const filtroTexto = [
+      buscaNome ? `Nome: "${buscaNome}"` : '',
+      buscaISBN ? `ISBN: "${buscaISBN}"` : ''
+    ].filter(Boolean).join(' | ') || 'Todos os empréstimos ativos';
+
+    printWindow.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Empréstimos Encontrados</title>
+      <style>
+        body { font-family: Arial, sans-serif; margin: 20px; font-size: 12px; }
+        h2 { margin-bottom: 4px; }
+        .filtro { color: #666; margin-bottom: 12px; font-size: 11px; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; }
+        th { background: #f5f5f5; font-weight: bold; }
+        .atrasado { color: #d32f2f; font-weight: bold; }
+        .no-prazo { color: #2e7d32; }
+        @media print { body { margin: 10px; } }
+      </style></head><body>
+      <h2>Empréstimos Encontrados (${rows.length})</h2>
+      <div class="filtro">Filtro: ${filtroTexto} — Impresso em ${new Date().toLocaleString('pt-BR')}</div>
+      <table>
+        <thead><tr><th>Leitor</th><th>Livro</th><th>ISBN</th><th>Data Empréstimo</th><th>Data Devolução</th><th>Status</th></tr></thead>
+        <tbody>${rows.map(r =>
+          `<tr><td>${r.leitor}</td><td>${r.livro}</td><td>${r.isbn}</td><td>${r.dataEmprestimo}</td><td>${r.dataDevolucao}</td><td class="${r.status.startsWith('Atrasado') ? 'atrasado' : 'no-prazo'}">${r.status}</td></tr>`
+        ).join('')}</tbody>
+      </table></body></html>`);
+    printWindow.document.close();
+    printWindow.print();
+  };
+
   const getClienteNome = (clienteId) => {
     const cliente = clientes.find((c) => String(c.id) === String(clienteId));
     return cliente ? cliente.nome : 'Desconhecido';
@@ -417,8 +485,7 @@ function DevolucaoPage() {
       <Box sx={{ mb: 3 }}>
         <Alert severity="info">
           <Typography variant="body2">
-            <strong>Como funciona:</strong> Busque o empréstimo pelo nome do leitor ou ISBN do livro e realize a devolução ou renovação.
-            Agora a página também permite devolução em lote por turma e por alunos.
+            <strong>Devoluções:</strong> Use a <strong>devolução em lote</strong> para processar turmas inteiras de uma vez, ou a <strong>busca individual</strong> para localizar empréstimos específicos por nome ou ISBN.
           </Typography>
         </Alert>
       </Box>
@@ -426,7 +493,10 @@ function DevolucaoPage() {
       <Card sx={{ mb: 3 }}>
         <CardContent>
           <Typography variant="h6" gutterBottom>
-            Devolução em lote por aluno(s) ou turma
+            📦 Devolução em Lote
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Selecione alunos por turma ou individualmente para devolver todos os seus livros de uma só vez.
           </Typography>
 
           <Grid container spacing={2}>
@@ -613,12 +683,17 @@ function DevolucaoPage() {
         )
       )}
 
-      <Divider sx={{ mb: 3 }} />
+      <Divider sx={{ mb: 3 }}>
+        <Chip label="Busca Individual" variant="outlined" />
+      </Divider>
 
       <Card sx={{ mb: 3 }}>
         <CardContent>
           <Typography variant="h6" gutterBottom>
-            Buscar empréstimo individual
+            Buscar empréstimo por leitor ou ISBN
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Localize empréstimos ativos digitando o nome do leitor ou o ISBN do livro. Os resultados aparecem automaticamente abaixo.
           </Typography>
 
           <Grid container spacing={2}>
@@ -629,7 +704,6 @@ function DevolucaoPage() {
                 value={buscaNome}
                 onChange={(e) => setBuscaNome(e.target.value)}
                 placeholder="Digite o nome do leitor"
-                helperText="Busca em tempo real"
               />
             </Grid>
 
@@ -640,7 +714,6 @@ function DevolucaoPage() {
                 value={buscaISBN}
                 onChange={(e) => setBuscaISBN(e.target.value)}
                 placeholder="Digite o ISBN ou parte dele"
-                helperText="Busca em tempo real"
               />
             </Grid>
           </Grid>
@@ -648,14 +721,24 @@ function DevolucaoPage() {
       </Card>
 
       {emprestimosEncontrados.length > 0 && (
-        <Card>
+        <Card ref={tabelaEncontradosRef}>
           <CardContent>
-            <Typography variant="h6" gutterBottom>
-              Empréstimos encontrados ({emprestimosEncontrados.length})
-            </Typography>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1, flexWrap: 'wrap', gap: 1 }}>
+              <Typography variant="h6">
+                Empréstimos encontrados ({emprestimosEncontrados.length})
+              </Typography>
+              <Button
+                variant="outlined"
+                size="small"
+                startIcon={<Print />}
+                onClick={handleImprimirEncontrados}
+              >
+                Imprimir lista
+              </Button>
+            </Box>
 
             <TableContainer component={Paper}>
-              <Table>
+              <Table size="small">
                 <TableHead>
                   <TableRow>
                     <TableCell>Leitor</TableCell>
@@ -691,21 +774,34 @@ function DevolucaoPage() {
                             <Chip label="No prazo" color="success" size="small" />
                           )}
                         </TableCell>
-                        <TableCell align="center">
-                          <IconButton
-                            color="success"
-                            onClick={() => abrirDialog(emp, 'devolver')}
-                            title="Devolver"
-                          >
-                            <CheckCircle />
-                          </IconButton>
-                          <IconButton
-                            color="primary"
-                            onClick={() => abrirDialog(emp, 'renovar')}
-                            title="Renovar"
-                          >
-                            <Autorenew />
-                          </IconButton>
+                        <TableCell align="center" sx={{ whiteSpace: 'nowrap' }}>
+                          <Tooltip title="Devolver">
+                            <IconButton
+                              color="success"
+                              size="small"
+                              onClick={() => abrirDialog(emp, 'devolver')}
+                            >
+                              <CheckCircle />
+                            </IconButton>
+                          </Tooltip>
+                          <Tooltip title="Renovar">
+                            <IconButton
+                              color="primary"
+                              size="small"
+                              onClick={() => abrirDialog(emp, 'renovar')}
+                            >
+                              <Autorenew />
+                            </IconButton>
+                          </Tooltip>
+                          <Tooltip title="Excluir empréstimo">
+                            <IconButton
+                              color="error"
+                              size="small"
+                              onClick={() => handleExcluirEmprestimo(emp)}
+                            >
+                              <Delete />
+                            </IconButton>
+                          </Tooltip>
                         </TableCell>
                       </TableRow>
                     );

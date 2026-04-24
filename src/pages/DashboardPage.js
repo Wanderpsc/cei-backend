@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { 
@@ -189,6 +189,26 @@ function DashboardPage() {
   }, [instituicaoInfo, usuarioLogado]);
 
   const emprestimosAtivos = emprestimos.filter(e => e.status === 'ativo').length;
+
+  const resumoAcervo = useMemo(() => {
+    const ativosMap = new Map();
+    emprestimos
+      .filter(e => String(e.status || '').toLowerCase() === 'ativo')
+      .forEach(e => {
+        const lid = String(e.livroId || '');
+        if (lid) ativosMap.set(lid, (ativosMap.get(lid) || 0) + 1);
+      });
+    let totalExemplares = 0;
+    let disponiveis = 0;
+    livros.forEach(livro => {
+      if (livro.baixa) return;
+      const qtd = Math.max(Number(livro.quantidade) || 0, 0);
+      totalExemplares += qtd;
+      disponiveis += Math.max(qtd - (ativosMap.get(String(livro.id)) || 0), 0);
+    });
+    return { totalExemplares, emprestados: emprestimosAtivos, disponiveis };
+  }, [livros, emprestimos, emprestimosAtivos]);
+
   const emprestimosVencidos = emprestimos.filter(e => {
     if (e.status !== 'ativo') return false;
     const hoje = new Date();
@@ -488,6 +508,36 @@ function DashboardPage() {
         </Box>
       )}
 
+      {/* Contadores de Estoque do Acervo */}
+      {usuarioLogado?.perfil !== 'SuperAdmin' && (
+        <Grid container spacing={2} sx={{ mb: 3 }}>
+          <Grid item xs={12} sm={4}>
+            <Card>
+              <CardContent>
+                <Typography variant="caption" color="text.secondary">Exemplares no acervo</Typography>
+                <Typography variant="h5" fontWeight={700}>{resumoAcervo.totalExemplares}</Typography>
+              </CardContent>
+            </Card>
+          </Grid>
+          <Grid item xs={12} sm={4}>
+            <Card>
+              <CardContent>
+                <Typography variant="caption" color="text.secondary">Empréstimos ativos</Typography>
+                <Typography variant="h5" fontWeight={700} color="warning.main">{resumoAcervo.emprestados}</Typography>
+              </CardContent>
+            </Card>
+          </Grid>
+          <Grid item xs={12} sm={4}>
+            <Card>
+              <CardContent>
+                <Typography variant="caption" color="text.secondary">Estoque disponível</Typography>
+                <Typography variant="h5" fontWeight={700} color="success.main">{resumoAcervo.disponiveis}</Typography>
+              </CardContent>
+            </Card>
+          </Grid>
+        </Grid>
+      )}
+
       {/* Título Estatísticas e Informações */}
       <Box sx={{ mb: 3, textAlign: 'center' }}>
         <Typography 
@@ -504,41 +554,43 @@ function DashboardPage() {
         </Typography>
       </Box>
 
-      <Grid container spacing={3} justifyContent="center">
-        {cards.map((card, index) => (
-          <Grid item xs={12} sm={6} md={4} lg={3} key={index}>
-            <Card 
-              sx={{ 
-                height: '100%', 
-                display: 'flex', 
-                flexDirection: 'column',
-                transition: 'all 0.3s',
-                cursor: 'pointer',
-                '&:hover': {
-                  transform: 'translateY(-8px)',
-                  boxShadow: 6,
-                  bgcolor: 'action.hover'
-                }
-              }}
-              onClick={() => navigate(card.path)}
-            >
-              <CardContent>
-                <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                  <Box sx={{ color: card.color }}>
-                    {card.icon}
+      <Box sx={{ maxHeight: '50vh', overflowY: 'auto', overflowX: 'hidden', pr: 1 }}>
+        <Grid container spacing={3} justifyContent="center">
+          {cards.map((card, index) => (
+            <Grid item xs={12} sm={6} md={4} lg={3} key={index}>
+              <Card 
+                sx={{ 
+                  height: '100%', 
+                  display: 'flex', 
+                  flexDirection: 'column',
+                  transition: 'all 0.3s',
+                  cursor: 'pointer',
+                  '&:hover': {
+                    transform: 'translateY(-8px)',
+                    boxShadow: 6,
+                    bgcolor: 'action.hover'
+                  }
+                }}
+                onClick={() => navigate(card.path)}
+              >
+                <CardContent>
+                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                    <Box sx={{ color: card.color }}>
+                      {card.icon}
+                    </Box>
+                    <Typography variant="h4" component="div" sx={{ ml: 2, fontWeight: 'bold' }}>
+                      {card.value}
+                    </Typography>
                   </Box>
-                  <Typography variant="h4" component="div" sx={{ ml: 2, fontWeight: 'bold' }}>
-                    {card.value}
+                  <Typography variant="h6" color="text.secondary">
+                    {card.title}
                   </Typography>
-                </Box>
-                <Typography variant="h6" color="text.secondary">
-                  {card.title}
-                </Typography>
-              </CardContent>
-            </Card>
-          </Grid>
-        ))}
-      </Grid>
+                </CardContent>
+              </Card>
+            </Grid>
+          ))}
+        </Grid>
+      </Box>
 
       {emprestimosVencidos > 0 && (
         <Box sx={{ mt: 3 }}>

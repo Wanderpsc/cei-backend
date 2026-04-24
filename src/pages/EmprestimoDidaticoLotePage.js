@@ -277,14 +277,30 @@ const isAlunoDaTurmaSelecionada = (aluno, turmaSelecionadaInfo, turmasAcademicas
     ? turmasAcademicasMap.get(chaveSelecionada)
     : null;
 
-  const turmaAlunoId = String(aluno?.turmaId || '').trim();
-  if (turmaSelecionadaAcademica && turmaAlunoId) {
-    return turmaAlunoId === chaveSelecionada;
+  const turmaAlunoResolvida = localizarTurmaAcademicaDoAluno(aluno, turmasAcademicasMap);
+  if (turmaAlunoResolvida?.id !== undefined && turmaAlunoResolvida?.id !== null) {
+    if (String(turmaAlunoResolvida.id) === chaveSelecionada) {
+      return true;
+    }
+
+    if (turmaSelecionadaAcademica) {
+      return turmasSaoCompativeis(turmaAlunoResolvida, turmaSelecionadaAcademica);
+    }
+
+    const chaveLegacyResolvida = buildLegacyTurmaKey(
+      turmaAlunoResolvida.nomeSerie,
+      turmaAlunoResolvida.nomeTurma
+    );
+
+    if (chaveLegacyResolvida === chaveSelecionada) {
+      return true;
+    }
   }
 
   const turmaSerieAluno = obterTurmaSerieTextoAluno(aluno);
   const turmaNomeAluno = String(turmaSerieAluno.turma || '').trim();
   const serieNomeAluno = String(turmaSerieAluno.serie || '').trim();
+  const chaveLegacyAluno = buildLegacyTurmaKey(serieNomeAluno, turmaNomeAluno);
   const turmaNomeSelecionada = String(
     turmaSelecionadaAcademica?.nomeTurma || turmaSelecionadaInfo?.nomeTurma || ''
   ).trim();
@@ -292,24 +308,18 @@ const isAlunoDaTurmaSelecionada = (aluno, turmaSelecionadaInfo, turmasAcademicas
     turmaSelecionadaAcademica?.nomeSerie || turmaSelecionadaInfo?.nomeSerie || ''
   ).trim();
 
+  if (chaveLegacyAluno === chaveSelecionada) {
+    return true;
+  }
+
   if (!turmaNomeAluno || !turmaNomeSelecionada) {
     return false;
   }
 
-  const nomeTurmaIgual = (
-    normalizarTexto(turmaNomeAluno) === normalizarTexto(turmaNomeSelecionada)
-    || compactarTexto(turmaNomeAluno) === compactarTexto(turmaNomeSelecionada)
+  return turmasSaoCompativeis(
+    { nomeTurma: turmaNomeAluno, nomeSerie: serieNomeAluno },
+    { nomeTurma: turmaNomeSelecionada, nomeSerie: serieNomeSelecionada }
   );
-
-  if (!nomeTurmaIgual) {
-    return false;
-  }
-
-  if (turmaSelecionadaAcademica && turmaAlunoId && turmaAlunoId !== chaveSelecionada) {
-    return false;
-  }
-
-  return seriesSaoCompativeis(serieNomeAluno, serieNomeSelecionada);
 };
 
 const localizarTurmaAcademicaDoAluno = (aluno, turmasAcademicasMap) => {
@@ -1107,6 +1117,53 @@ export default function EmprestimoDidaticoLotePage() {
     return { criarSolicitacoes, devolverSolicitacoes };
   };
 
+  const resumoOperacaoLote = useMemo(() => {
+    const { criarSolicitacoes, devolverSolicitacoes } = obterPlanoAlteracoes();
+    const criacoesPorLivro = {};
+    const devolucoesPorLivro = {};
+
+    criarSolicitacoes.forEach(({ livro }) => {
+      const livroId = String(livro.id);
+      criacoesPorLivro[livroId] = (criacoesPorLivro[livroId] || 0) + 1;
+    });
+
+    devolverSolicitacoes.forEach((emprestimo) => {
+      const livroId = String(emprestimo.livroId || '');
+      devolucoesPorLivro[livroId] = (devolucoesPorLivro[livroId] || 0) + 1;
+    });
+
+    const totalExemplaresSelecionados = livrosSelecionadosDados.reduce((sum, livro) => {
+      return sum + (Number(livro.quantidade) || 0);
+    }, 0);
+
+    const emprestadosAtualmente = livrosSelecionadosDados.reduce((sum, livro) => {
+      return sum + (disponibilidadePorLivro[String(livro.id)]?.ativos || 0);
+    }, 0);
+
+    const estoqueDisponivelAtual = livrosSelecionadosDados.reduce((sum, livro) => {
+      return sum + (disponibilidadePorLivro[String(livro.id)]?.disponiveis || 0);
+    }, 0);
+
+    const estoqueRestanteProjetado = livrosSelecionadosDados.reduce((sum, livro) => {
+      const livroId = String(livro.id);
+      const disponibilidadeAtual = disponibilidadePorLivro[livroId] || { disponiveis: 0 };
+      const devolucoes = devolucoesPorLivro[livroId] || 0;
+      const criacoes = criacoesPorLivro[livroId] || 0;
+
+      return sum + Math.max(disponibilidadeAtual.disponiveis + devolucoes - criacoes, 0);
+    }, 0);
+
+    return {
+      titulosSelecionados: livrosSelecionadosDados.length,
+      exemplaresSelecionados: totalExemplaresSelecionados,
+      quantidadeEmprestada: emprestadosAtualmente,
+      quantidadePrevista: criarSolicitacoes.length,
+      devolucoesPrevistas: devolverSolicitacoes.length,
+      estoqueDisponivelAtual,
+      estoqueRestanteProjetado
+    };
+  }, [disponibilidadePorLivro, livrosSelecionadosDados, selecoes, alunosSelecionados, emprestimoAtivoPorPar]);
+
   const abrirConfirmacaoEmprestimo = () => {
     if (modoSelecaoAlunos === 'turma' && !turmaSelecionada) {
       alert('Selecione uma turma para continuar.');
@@ -1323,6 +1380,12 @@ export default function EmprestimoDidaticoLotePage() {
       )}
       <Card sx={{ mb: 2 }}>
         <CardContent>
+          <Typography variant="h6" gutterBottom>
+            Etapa 1 — Configuração do Lote
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Defina o modo de seleção, turma, tipo de acervo, data de devolução e escolha os livros.
+          </Typography>
           <Grid container spacing={2}>
             <Grid item xs={12} md={3}>
               <FormControl fullWidth sx={campoPadraoSx}>
@@ -1424,10 +1487,11 @@ export default function EmprestimoDidaticoLotePage() {
             </Grid>
           </Grid>
 
-          <Box sx={{ mt: 2 }}>
-            <Typography variant="subtitle2" sx={{ mb: 0.5 }}>
-              Destinatários do lote (checkbox)
-            </Typography>
+          <Divider sx={{ my: 2 }} />
+          <Typography variant="h6" gutterBottom>
+            Etapa 2 — Selecionar Alunos
+          </Typography>
+          <Box sx={{ mt: 1 }}>
             <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
               {modoSelecaoAlunos === 'turma'
                 ? 'Selecione a turma e marque alunos específicos ou a turma inteira para receber os livros.'
@@ -1547,6 +1611,13 @@ export default function EmprestimoDidaticoLotePage() {
             </TableContainer>
           </Box>
 
+          <Divider sx={{ my: 2 }} />
+          <Typography variant="h6" gutterBottom>
+            Etapa 3 — Confirmar e Aplicar
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+            Marque ou desmarque na matriz abaixo quais livros cada aluno irá receber. Depois clique em <strong>Confirmar empréstimo</strong>.
+          </Typography>
           <Box sx={{ mt: 2, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
             <Button
               variant="outlined"
@@ -1603,6 +1674,56 @@ export default function EmprestimoDidaticoLotePage() {
           </Paper>
         </Grid>
       </Grid>
+
+      <Card sx={{ mb: 2, border: '1px solid', borderColor: 'divider' }}>
+        <CardContent>
+          <Typography variant="subtitle1" fontWeight="bold" sx={{ mb: 0.5 }}>
+            📊 Resumo do Lote
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            {turmaSelecionadaInfo?.rotulo
+              ? `Resumo operacional para ${turmaSelecionadaInfo.rotulo}.`
+              : 'Resumo operacional para os livros e alunos atualmente selecionados.'}
+          </Typography>
+
+          <Grid container spacing={2}>
+            <Grid item xs={12} sm={6} md={2.4}>
+              <Paper variant="outlined" sx={cartaoResumoSx}>
+                <Typography variant="caption" color="text.secondary">Títulos selecionados</Typography>
+                <Typography variant="h6">{resumoOperacaoLote.titulosSelecionados}</Typography>
+              </Paper>
+            </Grid>
+            <Grid item xs={12} sm={6} md={2.4}>
+              <Paper variant="outlined" sx={cartaoResumoSx}>
+                <Typography variant="caption" color="text.secondary">Quantidade emprestada</Typography>
+                <Typography variant="h6">{resumoOperacaoLote.quantidadeEmprestada}</Typography>
+              </Paper>
+            </Grid>
+            <Grid item xs={12} sm={6} md={2.4}>
+              <Paper variant="outlined" sx={cartaoResumoSx}>
+                <Typography variant="caption" color="text.secondary">Empréstimos previstos</Typography>
+                <Typography variant="h6">{resumoOperacaoLote.quantidadePrevista}</Typography>
+              </Paper>
+            </Grid>
+            <Grid item xs={12} sm={6} md={2.4}>
+              <Paper variant="outlined" sx={cartaoResumoSx}>
+                <Typography variant="caption" color="text.secondary">Estoque disponível agora</Typography>
+                <Typography variant="h6">{resumoOperacaoLote.estoqueDisponivelAtual}</Typography>
+              </Paper>
+            </Grid>
+            <Grid item xs={12} sm={6} md={2.4}>
+              <Paper variant="outlined" sx={cartaoResumoSx}>
+                <Typography variant="caption" color="text.secondary">Estoque restante projetado</Typography>
+                <Typography variant="h6">{resumoOperacaoLote.estoqueRestanteProjetado}</Typography>
+              </Paper>
+            </Grid>
+          </Grid>
+
+          <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 2 }}>
+            Exemplares nos títulos selecionados: {resumoOperacaoLote.exemplaresSelecionados} | Devoluções previstas: {resumoOperacaoLote.devolucoesPrevistas}
+          </Typography>
+        </CardContent>
+      </Card>
 
       <Dialog
         open={confirmacaoAberta}
@@ -1919,7 +2040,7 @@ export default function EmprestimoDidaticoLotePage() {
       <Box sx={{ mt: 2 }}>
         <Divider sx={{ mb: 1 }} />
         <Typography variant="caption" color="text.secondary">
-          Dica: marcar checkbox gera empréstimo ativo; desmarcar checkbox processa devolução em lote.
+          💡 Dica: Na Etapa 3, marcar um checkbox gera o empréstimo; desmarcar processa a devolução automaticamente ao confirmar.
         </Typography>
       </Box>
 

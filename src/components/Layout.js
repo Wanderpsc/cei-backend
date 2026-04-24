@@ -48,6 +48,7 @@ import AssignmentIcon from '@mui/icons-material/Assignment';
 import HistoryEduIcon from '@mui/icons-material/HistoryEdu';
 import FactCheckIcon from '@mui/icons-material/FactCheck';
 import CloudIcon from '@mui/icons-material/Cloud';
+import LabelIcon from '@mui/icons-material/Label';
 
 const drawerWidth = 240;
 const mobileDrawerWidth = 200;
@@ -85,7 +86,8 @@ export default function Layout({ children }) {
       { text: 'Relatório Usuários', icon: <AssessmentIcon />, path: '/relatorio-usuarios' },
       { text: 'Financeiro', icon: <AccountBalanceWalletIcon />, path: '/financeiro' },
       { text: 'Livros', icon: <MenuBookIcon />, path: '/livros' },
-      { text: 'Relatórios de Livros', icon: <LibraryBooksIcon />, path: '/relatorios-livros' },
+      { text: 'Planilha de Livros', icon: <LibraryBooksIcon />, path: '/relatorios-livros' },
+      { text: 'Etiquetas', icon: <LabelIcon />, path: '/etiquetas' },
       { text: 'Patrimônio', icon: <BusinessIcon />, path: '/patrimonio' },
       { text: 'Leitores', icon: <PeopleIcon />, path: '/clientes' },
       { text: 'Séries e Turmas', icon: <SchoolIcon />, path: '/series-turmas' },
@@ -136,7 +138,8 @@ export default function Layout({ children }) {
     { label: 'Devoluções', icon: <AssignmentReturnIcon />, path: '/devolucoes', color: '#d32f2f' },
     { label: 'Clube Leitura', icon: <EmojiEventsIcon />, path: '/clube-leitura', color: '#ffa726' },
     { label: 'Relatórios', icon: <AssessmentIcon />, path: '/relatorios', color: '#5c6bc0' },
-    { label: 'Rel. Livros', icon: <LibraryBooksIcon />, path: '/relatorios-livros', color: '#26a69a' },
+    { label: 'Planilha de Livros', icon: <LibraryBooksIcon />, path: '/relatorios-livros', color: '#26a69a' },
+    { label: 'Etiquetas', icon: <LabelIcon />, path: '/etiquetas', color: '#8e24aa' },
     { label: 'Busca', icon: <SearchIcon />, path: '/busca', color: '#ab47bc' },
     { label: 'Financeiro', icon: <AccountBalanceWalletIcon />, path: '/financeiro', color: '#66bb6a' },
   ] : [];
@@ -439,19 +442,19 @@ export default function Layout({ children }) {
             ml: { sm: `${drawerWidth}px` },
             bgcolor: '#f5f7fa',
             boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
-            py: { xs: 0.9, sm: 1.1 },
+            py: { xs: 1, sm: 1.2 },
             px: { xs: 1, sm: 2 },
             zIndex: 1100,
           }}
         >
-          <Grid container spacing={{ xs: 0.7, sm: 1 }} justifyContent="center">
+          <Grid container spacing={{ xs: 0.8, sm: 1.1 }} justifyContent="center">
             {quickAccessItems.map((card, index) => (
               <Grid item key={index}>
                 <Card
                   sx={{
                     position: 'relative',
-                    width: { xs: 120, sm: 138 },
-                    minHeight: { xs: 46, sm: 52 },
+                    width: { xs: 135, sm: 155 },
+                    minHeight: { xs: 50, sm: 58 },
                     boxShadow: location.pathname === card.path ? 4 : 1,
                     transition: 'all 0.2s',
                     border: location.pathname === card.path ? `2px solid ${card.color}` : 'none',
@@ -469,15 +472,15 @@ export default function Layout({ children }) {
                     }}
                     title={card.shortcut ? `Atalho: Alt+${card.shortcut}` : undefined}
                     sx={{ 
-                      px: { xs: 0.8, sm: 1 }, 
-                      py: 0,
+                      px: { xs: 0.9, sm: 1.1 }, 
+                      py: { xs: 0.5, sm: 0.6 },
                       width: '100%',
                       height: '100%',
                       display: 'flex',
-                      flexDirection: 'row',
+                      flexDirection: 'column',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      gap: { xs: 0.55, sm: 0.7 },
+                      gap: { xs: 0.4, sm: 0.5 },
                     }}
                   >
                     <Box sx={{ 
@@ -487,20 +490,21 @@ export default function Layout({ children }) {
                       transform: location.pathname === card.path ? 'scale(1.1)' : 'scale(1)',
                       transition: 'transform 0.2s'
                     }}>
-                      {React.cloneElement(card.icon, { sx: { fontSize: { xs: 18, sm: 20 } } })}
+                      {React.cloneElement(card.icon, { sx: { fontSize: { xs: 20, sm: 22 } } })}
                     </Box>
                     <Typography 
                       variant="caption" 
                       fontWeight={location.pathname === card.path ? 700 : 600}
                       sx={{ 
-                        fontSize: { xs: '0.67rem', sm: '0.72rem' },
-                        lineHeight: 1.1,
+                        fontSize: { xs: '0.75rem', sm: '0.8rem' },
+                        lineHeight: 1.2,
                         whiteSpace: 'normal',
+                        textAlign: 'center',
                         display: '-webkit-box',
                         WebkitLineClamp: 2,
                         WebkitBoxOrient: 'vertical',
                         overflow: 'hidden',
-                        maxWidth: { xs: 75, sm: 90 },
+                        maxWidth: { xs: 105, sm: 125 },
                         color: location.pathname === card.path ? card.color : 'inherit',
                       }}
                     >
@@ -585,7 +589,7 @@ export default function Layout({ children }) {
         <Toolbar />
         {/* Espaço adicional quando há barra de atalhos - altura para 2 linhas */}
         {quickAccessItems.length > 0 && (
-          <Box sx={{ height: quickAccessBarHeight > 0 ? `${quickAccessBarHeight + 8}px` : { xs: 118, sm: 130 } }} />
+          <Box sx={{ height: quickAccessBarHeight > 0 ? `${quickAccessBarHeight + 12}px` : { xs: 130, sm: 145 } }} />
         )}
         <Box sx={{ flexGrow: 1 }}>
           {/* Aviso de Licença */}
