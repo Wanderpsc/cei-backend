@@ -3592,6 +3592,9 @@ export const DataProvider = ({ children }) => {
       dataCadastro: new Date().toISOString()
     };
     setLivros([...livros, novoLivro]);
+    if (isCloudEnabled && novoLivro.instituicaoId && novoLivro.instituicaoId !== 0) {
+      syncToCloud('livros', [novoLivro], novoLivro.instituicaoId).catch(() => {});
+    }
     registrarLog('adicionar', 'livros', `Livro "${novoLivro.titulo || novoLivro.codigoIdentificacao || novoLivro.id}" cadastrado`, {
       livroId: novoLivro.id
     });
@@ -3599,7 +3602,12 @@ export const DataProvider = ({ children }) => {
   };
 
   const atualizarLivro = (id, dadosAtualizados) => {
-    setLivros(livros.map(l => l.id === id ? { ...l, ...dadosAtualizados } : l));
+    const livroAtualizado = { ...(livros.find(l => l.id === id) || {}), ...dadosAtualizados };
+    setLivros(livros.map(l => l.id === id ? livroAtualizado : l));
+    const _livroInstId = livroAtualizado.instituicaoId || instituicaoAtiva;
+    if (isCloudEnabled && _livroInstId && _livroInstId !== 0) {
+      syncToCloud('livros', [livroAtualizado], _livroInstId).catch(() => {});
+    }
     registrarLog('editar', 'livros', `Livro ID ${id} editado`, { livroId: id });
   };
 
@@ -3748,6 +3756,9 @@ export const DataProvider = ({ children }) => {
     localStorage.setItem('cei_lote_import_flag', String(Date.now()));
 
     setClientes((clientesAtuais) => [...clientesAtuais, novoCliente]);
+    if (isCloudEnabled && novoCliente.instituicaoId && novoCliente.instituicaoId !== 0) {
+      syncToCloud('clientes', [novoCliente], novoCliente.instituicaoId).catch(() => {});
+    }
     registrarLog('adicionar', 'clientes', `Leitor "${novoCliente.nome || novoCliente.id}" cadastrado`, {
       clienteId: novoCliente.id
     });
@@ -3944,9 +3955,14 @@ export const DataProvider = ({ children }) => {
   };
 
   const atualizarCliente = (id, dadosAtualizados) => {
+    const clienteAtualizado = { ...(clientes.find(c => c.id === id) || {}), ...dadosAtualizados };
     setClientes((clientesAtuais) =>
       clientesAtuais.map(c => c.id === id ? { ...c, ...dadosAtualizados } : c)
     );
+    const _clienteInstId = clienteAtualizado.instituicaoId || instituicaoAtiva;
+    if (isCloudEnabled && _clienteInstId && _clienteInstId !== 0) {
+      syncToCloud('clientes', [clienteAtualizado], _clienteInstId).catch(() => {});
+    }
     registrarLog('editar', 'clientes', `Leitor ID ${id} editado`, { clienteId: id });
   };
 
@@ -4816,6 +4832,9 @@ export const DataProvider = ({ children }) => {
     localStorage.setItem('cei_lote_import_flag', String(Date.now()));
 
     setEmprestimos((prev) => [...prev, novoEmprestimo]);
+    if (isCloudEnabled && novoEmprestimo.instituicaoId && novoEmprestimo.instituicaoId !== 0) {
+      syncToCloud('emprestimos', [novoEmprestimo], novoEmprestimo.instituicaoId).catch(() => {});
+    }
     registrarLog('emprestimo', 'emprestimos', `Empréstimo "${codigoEmprestimo}" criado`, {
       emprestimoId: novoEmprestimo.id,
       livroId: emprestimoData.livroId,
@@ -4825,7 +4844,12 @@ export const DataProvider = ({ children }) => {
   };
 
   const atualizarEmprestimo = (id, dadosAtualizados) => {
+    const emprestimoAtualizado = { ...(emprestimos.find(e => e.id === id) || {}), ...dadosAtualizados };
     setEmprestimos((prev) => prev.map(e => e.id === id ? { ...e, ...dadosAtualizados } : e));
+    const _empInstId = emprestimoAtualizado.instituicaoId || instituicaoAtiva;
+    if (isCloudEnabled && _empInstId && _empInstId !== 0) {
+      syncToCloud('emprestimos', [emprestimoAtualizado], _empInstId).catch(() => {});
+    }
     registrarLog('editar', 'emprestimos', `Empréstimo ID ${id} editado`, { emprestimoId: id });
   };
 
