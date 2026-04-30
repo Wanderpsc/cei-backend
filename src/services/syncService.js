@@ -178,7 +178,10 @@ const parseCloudData = (cloudItem) => {
       return {
         ...parsed,
         id: parsed?.id ?? cloudItem.id,
-        instituicaoId: parsed?.instituicaoId ?? cloudItem.instituicao_id,
+        // Sempre usar o instituicao_id do Supabase como fonte autoritativa,
+        // evitando que o campo dados (gravado com institution ID diferente)
+        // impeça o item de ser reconhecido na instituição correta.
+        instituicaoId: cloudItem.instituicao_id ?? parsed?.instituicaoId,
         dataCadastro: parsed?.dataCadastro || cloudItem.created_at,
         dataAtualizacao: parsed?.dataAtualizacao || cloudItem.updated_at
       };

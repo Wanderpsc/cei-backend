@@ -15,7 +15,7 @@ const { createClient } = require('@supabase/supabase-js');
 // ── Config Supabase (mesma do arquivo public/supabase-runtime-config.js) ──
 const SUPABASE_URL  = 'https://tnvjdmdhbpckciqflzcq.supabase.co';
 const SUPABASE_KEY  = 'sb_publishable_FlXtiXR_alXHlyTsGCQTgQ_bjlPqtIt';
-const INST_ID       = 1;   // Instituição com todos os livros/leitores (CETI Desembargador Amaral)
+const INST_ID       = 2;   // Login cetidesamaral usa instituicaoId=2
 const BACKUP_FILE   = path.join(__dirname, 'cei-backup-2026-04-30.json');
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -38,6 +38,7 @@ function dedupById(arr) {
 
 // ── Mapeamento item → linha da tabela (espelha o syncService do app) ─────────
 function mapLivro(item) {
+  const normalizado = { ...item, instituicaoId: INST_ID };
   return {
     id:             item.id,
     instituicao_id: INST_ID,
@@ -54,13 +55,14 @@ function mapLivro(item) {
     status:         item.status  || 'disponivel',
     capa_url:       item.capaUrl || item.capa || null,
     sinopse:        item.sinopse || null,
-    dados:          item,
+    dados:          normalizado,
     updated_at:     now(),
     created_at:     item.dataCadastro || now()
   };
 }
 
 function mapLeitor(item) {
+  const normalizado = { ...item, instituicaoId: INST_ID };
   return {
     id:             item.id,
     instituicao_id: INST_ID,
@@ -74,13 +76,14 @@ function mapLeitor(item) {
     matricula:      item.matricula || null,
     foto_url:       item.fotoUrl  || item.foto || null,
     ativo:          item.ativo !== false,
-    dados:          item,
+    dados:          normalizado,
     updated_at:     now(),
     created_at:     item.dataCadastro || now()
   };
 }
 
 function mapEmprestimo(item) {
+  const normalizado = { ...item, instituicaoId: INST_ID };
   const hojeISO = new Date().toISOString().slice(0, 10);
   const devISO  = new Date(Date.now() + 7*24*60*60*1000).toISOString().slice(0, 10);
   return {
@@ -94,7 +97,7 @@ function mapEmprestimo(item) {
     status:                item.status     || 'ativo',
     observacoes:           item.observacoes || null,
     multa:                 item.multa || 0,
-    dados:                 item,
+    dados:                 normalizado,
     updated_at:            now(),
     created_at:            item.dataCadastro || now()
   };
@@ -246,11 +249,13 @@ async function main() {
   }
   console.log('🏫 Instituição alvo:', instUnica.nomeInstituicao, '(ID', INST_ID, ')');
 
-  const livros     = dedupById((data.livros     || []).filter(i => i.instituicaoId === INST_ID || !i.instituicaoId));
-  const clientes   = dedupById((data.clientes   || []).filter(i => i.instituicaoId === INST_ID || !i.instituicaoId));
-  const emprestimos= dedupById((data.emprestimos|| []).filter(i => i.instituicaoId === INST_ID || !i.instituicaoId));
-  const patrimonio = dedupById((data.patrimonio || []).filter(i => i.instituicaoId === INST_ID || !i.instituicaoId));
-  const usuarios   = dedupById((data.usuarios   || []).filter(i => i.instituicaoId === INST_ID || i.perfil === 'SuperAdmin'));
+  // Pegar todos os registros do backup (independente do instituicaoId original)
+  // e reatribuir ao INST_ID correto para que o login cetidesamaral os enxergue
+  const livros     = dedupById(data.livros      || []);
+  const clientes   = dedupById(data.clientes    || []);
+  const emprestimos= dedupById(data.emprestimos || []);
+  const patrimonio = dedupById(data.patrimonio  || []);
+  const usuarios   = dedupById((data.usuarios   || []).filter(i => i.instituicaoId === INST_ID || i.instituicaoId === 1 || i.perfil === 'SuperAdmin'));
 
   console.log('\n📊 Registros a enviar:');
   console.log('   livros:', livros.length);
