@@ -2,7 +2,7 @@ import React, { createContext, useState, useContext, useEffect, useRef } from 'r
 import apiService from '../utils/apiService';
 import { initDataProtection, createBackup } from '../utils/dataProtection';
 import { isCloudEnabled } from '../services/supabaseClient';
-import { syncFromCloud, syncToCloud, deleteFromCloud } from '../services/syncService';
+import { syncFromCloud, syncToCloud, deleteFromCloud, keepAlive } from '../services/syncService';
 
 // Versão do sistema - IMPORTANTE: Incrementar a cada atualização significativa
 const SYSTEM_VERSION = '3.5.2';
@@ -411,6 +411,20 @@ export const DataProvider = ({ children }) => {
       dataCriacao: new Date().toISOString()
     },
     {
+      id: 1773670814525655,
+      nome: 'Michaela - Biblioteca CETI',
+      login: 'michaela@ceti.com',
+      senha: 'Biblio@2027',
+      perfil: 'Bibliotecário',
+      tipo: 'operacional',
+      permissoes: permissoesPadraoEscola,
+      instituicaoId: 1,
+      email: 'michaela@ceti.com',
+      cargo: 'Bibliotecária',
+      status: 'ativo',
+      dataCriacao: new Date('2026-03-16T14:20:12.159Z').toISOString()
+    },
+    {
       id: 999,
       nome: 'Usuário Demonstração',
       login: 'demo',
@@ -489,6 +503,7 @@ export const DataProvider = ({ children }) => {
   const patrimonioRef = useRef([]);
   const emprestimosRef = useRef([]);
   const usuarioAnteriorRef = useRef(null); // Para detectar novo login em outro dispositivo
+  const saveErrorShownRef = useRef(false); // Evita múltiplos alertas de erro de salvamento
 
   const dataTypesSync = ['instituicoes', 'usuarios', 'livros', 'clientes', 'patrimonio', 'emprestimos'];
   const localAcademicDataTypes = ['seriesAcademicas', 'turmasAcademicas'];
@@ -2200,10 +2215,19 @@ export const DataProvider = ({ children }) => {
     }
 
     setInstituicoes((prev) => {
-      const normalizedTargetInstitutionId = normalizeInstitutionId(institutionId);
-      const outras = prev.filter(
-        (item) => normalizeInstitutionId(item?.id) !== normalizedTargetInstitutionId
+      // Remover todos os IDs presentes no slice recebido (evita acúmulo de duplicatas)
+      const mergedInstIds = new Set(
+        (mergedData.instituicoes || [])
+          .map((i) => String(normalizeInstitutionId(i?.id)))
+          .filter(Boolean)
       );
+      const normalizedTargetInstitutionId = normalizeInstitutionId(institutionId);
+      const outras = prev.filter((item) => {
+        const sid = String(normalizeInstitutionId(item?.id));
+        return mergedInstIds.size > 0
+          ? !mergedInstIds.has(sid)
+          : sid !== String(normalizedTargetInstitutionId);
+      });
       return [...outras, ...(mergedData.instituicoes || [])];
     });
 
@@ -2483,6 +2507,11 @@ export const DataProvider = ({ children }) => {
   }, [instituicoes, usuarios, livros, clientes, seriesAcademicas, turmasAcademicas, patrimonio, emprestimos]);
 
   // Carregar dados do localStorage ao iniciar
+  // Keep-alive: pinga o Supabase ao iniciar para evitar pausa por inatividade
+  useEffect(() => {
+    keepAlive();
+  }, []);
+
   useEffect(() => {
     const carregarDados = async () => {
       console.log('🔄 [INIT] Iniciando carregamento de dados...');
@@ -2781,8 +2810,22 @@ export const DataProvider = ({ children }) => {
             console.log('♻️ Atualizando configuração da conta de demonstração para 20/20 e 30 dias');
           }
         });
-        setInstituicoes(instituicoesMerged);
-        console.log('✅ Total de instituições carregadas:', instituicoesMerged.length);
+        // Deduplicar por ID antes de aplicar ao estado (backup pode ter duplicatas acumuladas)
+        const instSeenOnLoad = new Map();
+        for (const inst of instituicoesMerged) {
+          const k = String(inst?.id ?? '');
+          if (!k) continue;
+          const ex = instSeenOnLoad.get(k);
+          if (!ex || new Date(inst?.dataAtualizacao || 0) >= new Date(ex?.dataAtualizacao || 0)) {
+            instSeenOnLoad.set(k, inst);
+          }
+        }
+        const instituicoesDedupOnLoad = Array.from(instSeenOnLoad.values());
+        if (instituicoesDedupOnLoad.length < instituicoesMerged.length) {
+          console.warn(`🧹 [LOAD] Deduplicadas ${instituicoesMerged.length - instituicoesDedupOnLoad.length} instituições repetidas`);
+        }
+        setInstituicoes(instituicoesDedupOnLoad);
+        console.log('✅ Total de instituições carregadas:', instituicoesDedupOnLoad.length);
         
         setLivros(dados.livros || []);
         setPatrimonio(dados.patrimonio || []);
@@ -2874,12 +2917,34 @@ export const DataProvider = ({ children }) => {
   }, [instituicoes, livros, patrimonio, clientes, seriesAcademicas, turmasAcademicas, emprestimos, usuarios, planos, notasFiscais, logAtividades, instituicaoAtiva, usuarioLogado?.perfil]);
 
   // Sincronização inicial da instituição com a nuvem (merge seguro sem perda)
+  // Também processa flag cei_needs_cloud_push deixada pela sessão anterior
   useEffect(() => {
     if (!dadosCarregados || !isCloudEnabled) return;
     if (!instituicaoAtiva || instituicaoAtiva === 0) return;
     if (usuarioLogado?.perfil === 'SuperAdmin') return;
 
-    sincronizarInstituicaoComNuvem(instituicaoAtiva, true);
+    // Limpar flag de push pendente — o sync abaixo já faz pull+push
+    try { localStorage.removeItem('cei_needs_cloud_push'); } catch (_) {}
+
+    // Verificar se há dados locais para esta instituição
+    const localTemDados =
+      livrosRef.current.some((l) => belongsToInstitution(l, instituicaoAtiva, { includeLegacyWithoutInstitution: true })) ||
+      clientesRef.current.some((c) => belongsToInstitution(c, instituicaoAtiva, { includeLegacyWithoutInstitution: true }));
+
+    // Indicar sincronização em andamento para feedback visual
+    setSincronizando(true);
+    window.dispatchEvent(new Event('sync-start'));
+
+    // Se local está vazio, preferir snapshot da nuvem (recuperação de dados)
+    // Se local tem dados, fazer merge bidirecional normal com push
+    sincronizarInstituicaoComNuvem(
+      instituicaoAtiva,
+      localTemDados,  // pushAfterMerge apenas quando há dados locais
+      localTemDados ? {} : { preferCloudSnapshot: true }
+    ).finally(() => {
+      setSincronizando(false);
+      window.dispatchEvent(new Event('sync-end'));
+    });
   }, [dadosCarregados, instituicaoAtiva, usuarioLogado?.perfil]);
 
   // ⭐ Sincronização ao fazer login em novo dispositivo (detecta login diferente)
@@ -2964,8 +3029,22 @@ export const DataProvider = ({ children }) => {
     
     const { sanitizedInstitutions, mediaByInstitution } = extractInstitutionMediaSnapshot(instituicoes);
 
+    // Deduplicar instituições por ID antes de persistir (evita overflow de quota)
+    const dedupInstituicoes = (lista) => {
+      const seen = new Map();
+      for (const inst of (lista || [])) {
+        const k = String(inst?.id ?? '');
+        if (!k) continue;
+        const ex = seen.get(k);
+        if (!ex || new Date(inst?.dataAtualizacao || 0) >= new Date(ex?.dataAtualizacao || 0)) {
+          seen.set(k, inst);
+        }
+      }
+      return Array.from(seen.values());
+    };
+
     const dados = {
-      instituicoes: sanitizedInstitutions,
+      instituicoes: dedupInstituicoes(sanitizedInstitutions),
       livros,
       patrimonio,
       clientes,
@@ -2982,6 +3061,23 @@ export const DataProvider = ({ children }) => {
         : []
     };
     
+    // Verificar disponibilidade do localStorage antes de tentar salvar
+    let localStorageDisponivel = true;
+    try {
+      localStorage.setItem('_cei_ls_test', '1');
+      localStorage.removeItem('_cei_ls_test');
+    } catch (lsTestError) {
+      localStorageDisponivel = false;
+    }
+
+    if (!localStorageDisponivel) {
+      if (!saveErrorShownRef.current) {
+        saveErrorShownRef.current = true;
+        alert('❌ ERRO CRÍTICO: O armazenamento local não está disponível neste navegador.\n\nPossíveis causas:\n• Modo privado/incógnito com armazenamento bloqueado\n• Configurações de privacidade do navegador bloqueando cookies/localStorage\n• Política de segurança do sistema operacional\n\nUse um navegador normal (não privado) para salvar seus dados.');
+      }
+      return;
+    }
+
     try {
       // Validar dados antes de salvar
       const dadosString = JSON.stringify(dados);
@@ -3011,6 +3107,7 @@ export const DataProvider = ({ children }) => {
       localStorage.setItem('cei_data', JSON.stringify(dadosComVersao));
       localStorage.removeItem('cei_data_emergency');
       localStorage.removeItem(EMERGENCY_DATA_SAVED_AT_KEY);
+      saveErrorShownRef.current = false; // Resetar guard após salvar com sucesso
 
       // Criar backup APÓS salvar com sucesso (cópia do dado já compacto)
       if (shouldBackup) {
@@ -3066,6 +3163,7 @@ export const DataProvider = ({ children }) => {
           localStorage.setItem('cei_data', JSON.stringify(dadosComVersaoCompacto));
           localStorage.removeItem('cei_data_emergency');
           localStorage.removeItem(EMERGENCY_DATA_SAVED_AT_KEY);
+          saveErrorShownRef.current = false; // Resetar guard após recuperação por quota
           console.warn('⚠️ [SAVE] Salvamento recuperado após compactação por quota.');
           return;
         } catch (retryError) {
@@ -3089,13 +3187,75 @@ export const DataProvider = ({ children }) => {
         localStorage.setItem('cei_data_emergency', JSON.stringify(dadosEmergencia));
         localStorage.setItem(EMERGENCY_DATA_SAVED_AT_KEY, emergencySavedAt);
         console.log('🚨 [SAVE] Dados salvos em backup de emergência');
-        alert('⚠️ Erro ao salvar dados principais. Backup de emergência criado. Verifique o espaço de armazenamento do navegador.');
+        if (!saveErrorShownRef.current) {
+          saveErrorShownRef.current = true;
+          alert('⚠️ Erro ao salvar dados principais. Backup de emergência criado. Verifique o espaço de armazenamento do navegador.');
+        }
       } catch (emergencyError) {
         console.error('❌ [SAVE] Erro crítico ao salvar backup de emergência:', emergencyError);
-        alert('❌ ERRO CRÍTICO: Não foi possível salvar seus dados. Exporte seus dados imediatamente!');
+        if (!saveErrorShownRef.current) {
+          saveErrorShownRef.current = true;
+          alert('❌ ERRO CRÍTICO: Não foi possível salvar seus dados. Exporte seus dados imediatamente!');
+        }
       }
     }
   }, [instituicoes, livros, patrimonio, clientes, seriesAcademicas, turmasAcademicas, emprestimos, usuarios, planos, notasFiscais, logAtividades, dadosCarregados]);
+
+  // ==================== PONTO DE RESTAURAÇÃO AO FECHAR ====================
+  // Salva backup nomeado e empurra dados à nuvem ao fechar/ocultar página
+  useEffect(() => {
+    if (!dadosCarregados) return;
+
+    // Ref para capturar o valor mais recente de instituicaoAtiva sem re-registrar listener
+    const instAtivaRef = { current: instituicaoAtiva };
+    instAtivaRef.current = instituicaoAtiva;
+
+    const salvarPontoRestauracao = () => {
+      try {
+        const rawData = localStorage.getItem('cei_data');
+        if (!rawData) return;
+
+        // Chave com data/hora (ex: cei_sessao_2026-05-20T14-30-00)
+        const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+        const backupKey = `cei_sessao_${ts}`;
+        localStorage.setItem(backupKey, rawData);
+        localStorage.setItem('cei_ultimo_ponto_restauracao', ts);
+
+        // Marcar que precisa de push na nuvem na próxima abertura
+        localStorage.setItem('cei_needs_cloud_push', '1');
+
+        // Manter apenas os 5 pontos mais recentes para não consumir espaço
+        const sessionKeys = Object.keys(localStorage)
+          .filter((k) => k.startsWith('cei_sessao_'))
+          .sort()
+          .reverse();
+        sessionKeys.slice(5).forEach((k) => localStorage.removeItem(k));
+
+        console.log('💾 [CLOSE] Ponto de restauração salvo:', backupKey);
+      } catch (e) {
+        console.warn('⚠️ [CLOSE] Ponto de restauração não salvo:', e?.message);
+      }
+    };
+
+    // visibilitychange é mais confiável que beforeunload (cobre mobile, troca de aba, etc.)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState !== 'hidden') return;
+      salvarPontoRestauracao();
+      // Disparar push à nuvem imediatamente ao ocultar a página
+      const instId = instAtivaRef.current;
+      if (isCloudEnabled && instId && instId !== 0) {
+        enviarDadosInstituicaoParaNuvem(instId).catch(() => {});
+      }
+    };
+
+    window.addEventListener('beforeunload', salvarPontoRestauracao);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener('beforeunload', salvarPontoRestauracao);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [dadosCarregados, instituicaoAtiva]);
 
   // ==================== VERIFICAÇÃO DE LICENÇAS EXPIRADAS ====================
   
@@ -5711,6 +5871,7 @@ export const DataProvider = ({ children }) => {
     planos,
     notasFiscais,
     sincronizando,
+    dadosCarregados,
     
     // Funções Instituições
     adicionarInstituicao,

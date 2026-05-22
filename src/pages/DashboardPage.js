@@ -58,7 +58,9 @@ function DashboardPage() {
     emprestimos, 
     usuarioLogado, 
     instituicoes, 
-    instituicaoAtiva, 
+    instituicaoAtiva,
+    sincronizando,
+    sincronizarNuvemAgora,
     calcularProximoVencimento,
     exportarDados,
     importarDados
@@ -446,6 +448,35 @@ function DashboardPage() {
               Copiar ID
             </Button>
           </Box>
+        </Alert>
+      )}
+
+      {/* Alerta de sincronização com a nuvem */}
+      {sincronizando && livros.length === 0 && clientes.length === 0 && (
+        <Alert severity="info" sx={{ mb: 2 }} icon={<CloudDownload />}>
+          <Typography variant="body2">
+            Carregando dados da nuvem... Aguarde um instante.
+          </Typography>
+        </Alert>
+      )}
+
+      {/* Dados zerados mas nuvem configurada — oferecer recuperação */}
+      {!sincronizando && livros.length === 0 && clientes.length === 0 && usuarioLogado && usuarioLogado.perfil !== 'SuperAdmin' && (
+        <Alert
+          severity="warning"
+          sx={{ mb: 2 }}
+          action={
+            <Button
+              color="inherit"
+              size="small"
+              startIcon={<CloudDownload />}
+              onClick={() => sincronizarNuvemAgora({ somenteBaixar: true })}
+            >
+              Baixar da nuvem
+            </Button>
+          }
+        >
+          Nenhum dado encontrado localmente. Se seus dados estão na nuvem, clique em "Baixar da nuvem" para recuperá-los.
         </Alert>
       )}
 

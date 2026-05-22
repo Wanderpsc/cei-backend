@@ -602,6 +602,34 @@ export const getSyncStatus = async () => {
   }
 };
 
+/**
+ * Ping keep-alive: evita que o projeto Supabase seja pausado por inatividade.
+ * Chamado automaticamente ao iniciar o sistema.
+ */
+export const keepAlive = async () => {
+  if (!isCloudEnabled || !supabase) return;
+
+  const KEEP_ALIVE_KEY = 'cei_supabase_last_keepalive';
+  const INTERVAL_MS = 3 * 24 * 60 * 60 * 1000; // 3 dias
+
+  try {
+    const last = parseInt(localStorage.getItem(KEEP_ALIVE_KEY) || '0', 10);
+    if (Date.now() - last < INTERVAL_MS) return; // Já pingou recentemente
+
+    const { error } = await supabase
+      .from('instituicoes')
+      .select('id')
+      .limit(1);
+
+    if (!error) {
+      localStorage.setItem(KEEP_ALIVE_KEY, String(Date.now()));
+      console.log('✅ [KEEPALIVE] Supabase mantido ativo');
+    }
+  } catch (e) {
+    // Silencioso — não interrompe o fluxo normal
+  }
+};
+
 export default {
   syncToCloud,
   syncFromCloud,
@@ -609,5 +637,6 @@ export default {
   smartSync,
   backupToCloud,
   restoreFromCloud,
-  getSyncStatus
+  getSyncStatus,
+  keepAlive
 };

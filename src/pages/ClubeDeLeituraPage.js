@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import Layout from '../components/Layout';
 import { useData } from '../context/DataContext';
 import CameraCapture from '../components/CameraCapture';
+import Autocomplete from '@mui/material/Autocomplete';
 import {
   Box,
   Card,
@@ -27,7 +28,10 @@ import {
   Alert,
   IconButton,
   Tabs,
-  Tab
+  Tab,
+  InputAdornment,
+  useMediaQuery,
+  useTheme
 } from '@mui/material';
 import {
   EmojiEvents,
@@ -35,11 +39,17 @@ import {
   CameraAlt,
   MenuBook,
   Person,
-  CheckCircle
+  CheckCircle,
+  DocumentScanner,
+  Search,
+  ZoomIn,
+  Upload
 } from '@mui/icons-material';
 
 export default function ClubeDeLeituraPage() {
   const { instituicaoLogada, livros, clientes } = useData();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const [dialogOpen, setDialogOpen] = useState(false);
   const [tabValue, setTabValue] = useState(0);
   const [fotoAluno, setFotoAluno] = useState(null);
@@ -57,6 +67,15 @@ export default function ClubeDeLeituraPage() {
     return salvos ? JSON.parse(salvos) : [];
   });
   const [cameraOpen, setCameraOpen] = useState(false);
+  const [cameraDocumentoOpen, setCameraDocumentoOpen] = useState(false);
+  const [documentoEscaneado, setDocumentoEscaneado] = useState(null);
+  const [buscaDocAluno, setBuscaDocAluno] = useState('');
+  const [buscaDocLivro, setBuscaDocLivro] = useState('');
+  const [docVisualizarOpen, setDocVisualizarOpen] = useState(false);
+  const [docSelecionado, setDocSelecionado] = useState(null);
+  const [clienteSelecionado, setClienteSelecionado] = useState(null);
+  const [buscaAluno, setBuscaAluno] = useState('');
+  const fileInputDocRef = useRef(null);
 
   const salvarResumo = () => {
     if (!resumo.clienteId || !resumo.livroId || !resumo.resumoTexto) {
@@ -71,6 +90,7 @@ export default function ClubeDeLeituraPage() {
       id: Date.now(),
       data: new Date().toISOString(),
       foto: fotoAluno,
+      documentoEscaneado: documentoEscaneado,
       clienteNome: clienteSelecionado?.nome || 'Leitor',
       status: 'aprovado'
     };
@@ -89,7 +109,10 @@ export default function ClubeDeLeituraPage() {
       pergunta3: '',
       nota: 0
     });
+    setClienteSelecionado(null);
+    setBuscaAluno('');
     setFotoAluno(null);
+    setDocumentoEscaneado(null);
     setDialogOpen(false);
     alert('✅ Resumo cadastrado com sucesso! Leitor adicionado ao ranking.');
   };
@@ -98,6 +121,27 @@ export default function ClubeDeLeituraPage() {
     setFotoAluno(imageData);
     setCameraOpen(false);
   };
+
+  const handleDocumentoCapture = (imageData) => {
+    setDocumentoEscaneado(imageData);
+    setCameraDocumentoOpen(false);
+  };
+
+  const handleDocumentoUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onloadend = () => setDocumentoEscaneado(reader.result);
+    reader.readAsDataURL(file);
+  };
+
+  const resumosComDocumento = resumos.filter(r => r.documentoEscaneado).filter(r => {
+    const nomeAluno = (clientes.find(c => String(c.id) === String(r.clienteId))?.nome || r.clienteNome || '').toLowerCase();
+    const tituloLivro = (livros.find(l => String(l.id) === String(r.livroId))?.titulo || '').toLowerCase();
+    const ba = buscaDocAluno.toLowerCase();
+    const bl = buscaDocLivro.toLowerCase();
+    return (!ba || nomeAluno.includes(ba)) && (!bl || tituloLivro.includes(bl));
+  });
 
   const getNomeClienteResumo = (resumoItem) => {
     const cliente = clientes.find((item) => String(item.id) === String(resumoItem?.clienteId));
@@ -152,6 +196,7 @@ export default function ClubeDeLeituraPage() {
       <Tabs value={tabValue} onChange={(e, v) => setTabValue(v)} sx={{ mb: 3 }}>
         <Tab label="🏆 Ranking de Leitores" />
         <Tab label="📖 Resumos Cadastrados" />
+        <Tab label="📄 Documentos Escaneados" />
       </Tabs>
 
       {/* TAB 1: RANKING */}
@@ -272,8 +317,96 @@ export default function ClubeDeLeituraPage() {
         </TableContainer>
       )}
 
+      {/* TAB 3: DOCUMENTOS ESCANEADOS */}
+      {tabValue === 2 && (
+        <Box>
+          {/* Barra de busca */}
+          <Box sx={{ display: 'flex', gap: 2, mb: 3, flexWrap: 'wrap' }}>
+            <TextField
+              size="small"
+              label="Buscar por aluno"
+              value={buscaDocAluno}
+              onChange={e => setBuscaDocAluno(e.target.value)}
+              InputProps={{ startAdornment: <Search sx={{ mr: 1, color: 'text.secondary' }} /> }}
+              sx={{ minWidth: 220 }}
+            />
+            <TextField
+              size="small"
+              label="Buscar por livro"
+              value={buscaDocLivro}
+              onChange={e => setBuscaDocLivro(e.target.value)}
+              InputProps={{ startAdornment: <Search sx={{ mr: 1, color: 'text.secondary' }} /> }}
+              sx={{ minWidth: 220 }}
+            />
+          </Box>
+
+          {resumosComDocumento.length === 0 ? (
+            <Alert severity="info">
+              {resumos.filter(r => r.documentoEscaneado).length === 0
+                ? 'Nenhum documento escaneado ainda. Ao registrar uma leitura, escaneie o resumo físico do aluno.'
+                : 'Nenhum documento encontrado para os filtros informados.'}
+            </Alert>
+          ) : (
+            <TableContainer component={Paper}>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Data</TableCell>
+                    <TableCell>Aluno</TableCell>
+                    <TableCell>Livro</TableCell>
+                    <TableCell>Nota</TableCell>
+                    <TableCell align="center">Documento</TableCell>
+                    <TableCell align="center">Ver</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {resumosComDocumento.map(r => (
+                    <TableRow key={r.id} hover>
+                      <TableCell>{new Date(r.data).toLocaleDateString('pt-BR')}</TableCell>
+                      <TableCell>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <Avatar src={r.foto} sx={{ width: 28, height: 28 }}><Person /></Avatar>
+                          {getNomeClienteResumo(r)}
+                        </Box>
+                      </TableCell>
+                      <TableCell>{livros.find(l => String(l.id) === String(r.livroId))?.titulo || 'Livro'}</TableCell>
+                      <TableCell><Rating value={r.nota} readOnly size="small" /></TableCell>
+                      <TableCell align="center">
+                        <Box
+                          component="img"
+                          src={r.documentoEscaneado}
+                          alt="Resumo escaneado"
+                          sx={{ width: 60, height: 60, objectFit: 'cover', borderRadius: 1, border: '1px solid #ccc', cursor: 'pointer' }}
+                          onClick={() => { setDocSelecionado(r); setDocVisualizarOpen(true); }}
+                        />
+                      </TableCell>
+                      <TableCell align="center">
+                        <IconButton
+                          color="primary"
+                          onClick={() => { setDocSelecionado(r); setDocVisualizarOpen(true); }}
+                          title="Ver documento"
+                        >
+                          <ZoomIn />
+                        </IconButton>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          )}
+        </Box>
+      )}
+
       {/* DIALOG: CADASTRAR RESUMO */}
-      <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="md" fullWidth>
+      <Dialog
+        open={dialogOpen}
+        onClose={() => setDialogOpen(false)}
+        maxWidth="md"
+        fullWidth
+        fullScreen={isMobile}
+        PaperProps={isMobile ? {} : { sx: { maxWidth: '900px' } }}
+      >
         <DialogTitle>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <MenuBook />
@@ -284,23 +417,69 @@ export default function ClubeDeLeituraPage() {
         </DialogTitle>
         <DialogContent>
           <Grid container spacing={2} sx={{ mt: 1 }}>
-            <Grid item xs={12} sm={6}>
-              <TextField
-                select
+            <Grid item xs={12}>
+              <Autocomplete
+                options={clientes}
+                getOptionLabel={(option) => option.nome || ''}
+                value={clienteSelecionado}
+                onChange={(e, newValue) => {
+                  setClienteSelecionado(newValue);
+                  setResumo({ ...resumo, clienteId: newValue?.id || '' });
+                }}
+                inputValue={buscaAluno}
+                onInputChange={(e, newInputValue) => setBuscaAluno(newInputValue)}
+                filterOptions={(options, { inputValue }) => {
+                  const termo = inputValue.toLowerCase();
+                  return options.filter(
+                    (c) =>
+                      c.nome?.toLowerCase().includes(termo) ||
+                      c.turma?.toLowerCase().includes(termo) ||
+                      c.serie?.toLowerCase().includes(termo)
+                  );
+                }}
+                renderOption={(props, option) => (
+                  <Box component="li" {...props} key={option.id} sx={{ display: 'flex', alignItems: 'center', gap: 1.5, py: 1, overflow: 'visible' }}>
+                    <Avatar sx={{ width: 36, height: 36, fontSize: 15, bgcolor: 'primary.main', flexShrink: 0 }}>
+                      {option.nome?.charAt(0)?.toUpperCase()}
+                    </Avatar>
+                    <Box sx={{ minWidth: 0, flex: 1 }}>
+                      <Typography variant="body1" fontWeight={500} sx={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>{option.nome}</Typography>
+                      {(option.turma || option.serie) && (
+                        <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'normal' }}>
+                          {[option.serie, option.turma].filter(Boolean).join(' — ')}
+                        </Typography>
+                      )}
+                    </Box>
+                  </Box>
+                )}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="Leitor *"
+                    placeholder="Digite o nome, turma ou série para buscar..."
+                    size="medium"
+                    InputProps={{
+                      ...params.InputProps,
+                      startAdornment: (
+                        <>
+                          <InputAdornment position="start">
+                            <Search fontSize="small" sx={{ color: 'text.secondary' }} />
+                          </InputAdornment>
+                          {params.InputProps.startAdornment}
+                        </>
+                      )
+                    }}
+                  />
+                )}
+                noOptionsText="Nenhum aluno encontrado"
+                clearText="Limpar"
+                openText="Abrir"
+                closeText="Fechar"
                 fullWidth
-                label="Leitor"
-                value={resumo.clienteId}
-                onChange={(e) => setResumo({ ...resumo, clienteId: e.target.value })}
-                SelectProps={{ native: true }}
-              >
-                <option value="">Selecione...</option>
-                {clientes.map(c => (
-                  <option key={c.id} value={c.id}>{c.nome}</option>
-                ))}
-              </TextField>
+              />
             </Grid>
 
-            <Grid item xs={12} sm={6}>
+            <Grid item xs={12}>
               <TextField
                 select
                 fullWidth
@@ -308,6 +487,7 @@ export default function ClubeDeLeituraPage() {
                 value={resumo.livroId}
                 onChange={(e) => setResumo({ ...resumo, livroId: e.target.value })}
                 SelectProps={{ native: true }}
+                InputLabelProps={{ shrink: true }}
               >
                 <option value="">Selecione...</option>
                 {livros.map(l => (
@@ -327,6 +507,58 @@ export default function ClubeDeLeituraPage() {
                 </Button>
                 {fotoAluno && (
                   <Avatar src={fotoAluno} sx={{ width: 100, height: 100, margin: '10px auto' }} imgProps={{ style: { objectFit: 'contain' } }} />
+                )}
+              </Box>
+            </Grid>
+
+            {/* ESCANEAR RESUMO FÍSICO */}
+            <Grid item xs={12}>
+              <Box sx={{ p: 2, border: '1px dashed #1976d2', borderRadius: 2, bgcolor: '#f0f7ff' }}>
+                <Typography variant="subtitle2" gutterBottom sx={{ color: '#1565c0', fontWeight: 'bold' }}>
+                  <DocumentScanner sx={{ verticalAlign: 'middle', mr: 1 }} />
+                  Escanear Resumo Físico (opcional)
+                </Typography>
+                <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
+                  Fotografe ou faça upload do resumo escrito a mão pelo aluno.
+                </Typography>
+                <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    startIcon={<CameraAlt />}
+                    onClick={() => setCameraDocumentoOpen(true)}
+                  >
+                    Fotografar Documento
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    startIcon={<Upload />}
+                    onClick={() => fileInputDocRef.current?.click()}
+                  >
+                    Upload de Imagem
+                  </Button>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    ref={fileInputDocRef}
+                    style={{ display: 'none' }}
+                    onChange={handleDocumentoUpload}
+                  />
+                  {documentoEscaneado && (
+                    <Button size="small" color="error" onClick={() => setDocumentoEscaneado(null)}>Remover</Button>
+                  )}
+                </Box>
+                {documentoEscaneado && (
+                  <Box sx={{ mt: 1 }}>
+                    <Box
+                      component="img"
+                      src={documentoEscaneado}
+                      alt="Documento escaneado"
+                      sx={{ maxWidth: '100%', maxHeight: 200, borderRadius: 1, border: '1px solid #90caf9', mt: 1 }}
+                    />
+                    <Chip label="✅ Documento pronto" color="success" size="small" sx={{ mt: 1, display: 'block', width: 'fit-content' }} />
+                  </Box>
                 )}
               </Box>
             </Grid>
@@ -402,13 +634,53 @@ export default function ClubeDeLeituraPage() {
         </DialogActions>
       </Dialog>
 
-      {/* Dialog de Captura de Câmera */}
+      {/* Dialog de Captura de Câmera - Foto do Leitor */}
       <CameraCapture
         open={cameraOpen}
         onClose={() => setCameraOpen(false)}
         onCapture={handleFotoCapture}
         title="Tirar Foto do Leitor"
       />
+
+      {/* Dialog de Captura - Documento/Resumo Físico */}
+      <CameraCapture
+        open={cameraDocumentoOpen}
+        onClose={() => setCameraDocumentoOpen(false)}
+        onCapture={handleDocumentoCapture}
+        title="Fotografar Resumo Físico do Aluno"
+      />
+
+      {/* Dialog de Visualização do Documento */}
+      <Dialog open={docVisualizarOpen} onClose={() => setDocVisualizarOpen(false)} maxWidth="md" fullWidth>
+        <DialogTitle>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <DocumentScanner />
+            <Typography variant="h6" component="span">
+              Resumo Escrito — {docSelecionado && getNomeClienteResumo(docSelecionado)}
+            </Typography>
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          {docSelecionado && (
+            <Box>
+              <Box sx={{ display: 'flex', gap: 2, mb: 2, flexWrap: 'wrap' }}>
+                <Chip label={`Aluno: ${getNomeClienteResumo(docSelecionado)}`} />
+                <Chip label={`Livro: ${livros.find(l => String(l.id) === String(docSelecionado.livroId))?.titulo || 'Livro'}`} color="primary" />
+                <Chip label={`Data: ${new Date(docSelecionado.data).toLocaleDateString('pt-BR')}`} variant="outlined" />
+              </Box>
+              <Box
+                component="img"
+                src={docSelecionado.documentoEscaneado}
+                alt="Resumo escaneado"
+                sx={{ width: '100%', borderRadius: 2, border: '1px solid #e0e0e0' }}
+              />
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDocVisualizarOpen(false)}>Fechar</Button>
+        </DialogActions>
+      </Dialog>
     </Layout>
   );
 }

@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Recuperar Dados - CEI</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: Arial, sans-serif;
+      background: linear-gradient(135deg, #1a73e8 0%, #0d47a1 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .card {
+      background: #fff;
+      border-radius: 12px;
+      padding: 36px 40px;
+      max-width: 600px;
+      width: 100%;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.25);
+    }
+    h1 { color: #1a73e8; font-size: 1.5rem; margin-bottom: 6px; }
+    p.subtitle { color: #555; margin-bottom: 24px; font-size: 0.95rem; }
+    .file-area {
+      border: 2px dashed #1a73e8;
+      border-radius: 8px;
+      padding: 32px 20px;
+      text-align: center;
+      cursor: pointer;
+      transition: background 0.2s;
+      margin-bottom: 20px;
+    }
+    .file-area:hover { background: #e8f0fe; }
+    .file-area input { display: none; }
+    .file-area svg { color: #1a73e8; margin-bottom: 10px; }
+    .file-area p { color: #555; font-size: 0.9rem; }
+    .file-area strong { color: #1a73e8; display: block; margin-bottom: 4px; }
+    .btn {
+      width: 100%;
+      padding: 14px;
+      background: #1a73e8;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: bold;
+      cursor: pointer;
+      transition: background 0.2s;
+      margin-top: 4px;
+    }
+    .btn:hover:not(:disabled) { background: #1558c0; }
+    .btn:disabled { background: #aaa; cursor: default; }
+    .log {
+      margin-top: 20px;
+      background: #f8f9fa;
+      border-radius: 8px;
+      padding: 16px;
+      font-size: 0.85rem;
+      max-height: 260px;
+      overflow-y: auto;
+      display: none;
+    }
+    .log.visible { display: block; }
+    .log-entry { padding: 3px 0; border-bottom: 1px solid #e0e0e0; }
+    .log-entry:last-child { border: none; }
+    .log-entry.ok  { color: #2e7d32; }
+    .log-entry.err { color: #c62828; font-weight: bold; }
+    .log-entry.inf { color: #1565c0; }
+    .log-entry.warn{ color: #e65100; }
+    .success-banner {
+      display: none;
+      margin-top: 20px;
+      background: #e8f5e9;
+      border: 1px solid #43a047;
+      border-radius: 8px;
+      padding: 16px;
+      color: #2e7d32;
+      text-align: center;
+    }
+    .success-banner a {
+      color: #1a73e8;
+      font-weight: bold;
+    }
+    #file-name { margin-top: 10px; font-size: 0.85rem; color: #1558c0; min-height: 18px; }
+  </style>
+</head>
+<body>
+<div class="card">
+  <h1>🔄 Recuperar Dados do CEI</h1>
+  <p class="subtitle">Restaura o banco de dados local a partir de um arquivo de backup JSON.</p>
+
+  <div class="file-area" onclick="document.getElementById('fileInput').click()">
+    <input type="file" id="fileInput" accept=".json" onchange="onFileSelected(event)">
+    <svg width="40" height="40" fill="currentColor" viewBox="0 0 24 24">
+      <path d="M19.35 10.04A7.49 7.49 0 0012 4C9.11 4 6.6 5.64 5.35 8.04A5.994 5.994 0 000 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/>
+    </svg>
+    <strong>Clique para selecionar o arquivo de backup</strong>
+    <p>Arquivos suportados: <code>cei-backup-*.json</code>, <code>backup-*.json</code></p>
+    <div id="file-name"></div>
+  </div>
+
+  <div id="session-backups" style="display:none;margin-bottom:16px;background:#f8f9fa;border-radius:8px;padding:16px;">
+    <strong style="color:#1a73e8;">📂 Pontos de restauração salvos neste navegador:</strong>
+    <ul id="session-list" style="margin:8px 0 0 16px;font-size:0.88rem;color:#333;"></ul>
+    <button class="btn" id="restoreSessionBtn" style="margin-top:12px;background:#2e7d32;" onclick="restaurarDeSessao()">Restaurar ponto selecionado</button>
+  </div>
+
+  <button class="btn" id="restoreBtn" onclick="restaurar()" disabled>Restaurar de arquivo JSON</button>
+
+  <div class="log" id="log"></div>
+
+  <div class="success-banner" id="successBanner">
+    ✅ <strong>Dados restaurados com sucesso!</strong><br><br>
+    <a href="index.html">👉 Clique aqui para abrir o Sistema CEI</a>
+  </div>
+</div>
+
+<script>
+  let parsedBackup = null;
+  let selectedSessionKey = null;
+
+  // Listar pontos de restauração salvos pelo beforeunload
+  (function listarSessoes() {
+    const keys = Object.keys(localStorage)
+      .filter((k) => k.startsWith('cei_sessao_'))
+      .sort()
+      .reverse();
+    if (keys.length === 0) return;
+    const section = document.getElementById('session-backups');
+    const list = document.getElementById('session-list');
+    section.style.display = 'block';
+    keys.forEach((k) => {
+      try {
+        const raw = localStorage.getItem(k);
+        const d = JSON.parse(raw);
+        const data = d.data || d;
+        const leitores = (data.clientes || []).length;
+        const livros = (data.livros || []).length;
+        const ts = k.replace('cei_sessao_', '').replace(/T/, ' ').replace(/-/g, (m, o) => o > 10 ? ':' : '-');
+        const li = document.createElement('li');
+        li.style.cssText = 'cursor:pointer;padding:4px 0;';
+        li.innerHTML = `<label style="cursor:pointer"><input type="radio" name="sessao" value="${k}"> <strong>${ts}</strong> — ${leitores} leitores, ${livros} livros</label>`;
+        li.querySelector('input').addEventListener('change', () => { selectedSessionKey = k; });
+        list.appendChild(li);
+      } catch (_) {}
+    });
+  })();
+
+  function log(msg, type = 'inf') {
+    const div = document.getElementById('log');
+    div.classList.add('visible');
+    const entry = document.createElement('div');
+    entry.className = `log-entry ${type}`;
+    entry.textContent = msg;
+    div.appendChild(entry);
+    div.scrollTop = div.scrollHeight;
+  }
+
+  function onFileSelected(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    document.getElementById('file-name').textContent = '📄 ' + file.name;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const raw = JSON.parse(e.target.result);
+        // Suporta formato { data: {...} } ou o próprio objeto de dados
+        parsedBackup = raw.data || raw;
+        const counts = {
+          livros: Array.isArray(parsedBackup.livros) ? parsedBackup.livros.length : 0,
+          clientes: Array.isArray(parsedBackup.clientes) ? parsedBackup.clientes.length : 0,
+          emprestimos: Array.isArray(parsedBackup.emprestimos) ? parsedBackup.emprestimos.length : 0,
+          usuarios: Array.isArray(parsedBackup.usuarios) ? parsedBackup.usuarios.length : 0,
+          instituicoes: Array.isArray(parsedBackup.instituicoes) ? parsedBackup.instituicoes.length : 0,
+        };
+        document.getElementById('log').innerHTML = '';
+        log(`Arquivo lido: ${file.name}`, 'ok');
+        log(`📚 Livros: ${counts.livros}`, 'inf');
+        log(`👤 Leitores/Alunos: ${counts.clientes}`, 'inf');
+        log(`🔄 Empréstimos: ${counts.emprestimos}`, 'inf');
+        log(`🏫 Instituições (bruto): ${counts.instituicoes}`, 'inf');
+        log(`👥 Usuários: ${counts.usuarios}`, 'inf');
+        document.getElementById('restoreBtn').disabled = false;
+      } catch (err) {
+        log('❌ Erro ao ler arquivo JSON: ' + err.message, 'err');
+        parsedBackup = null;
+        document.getElementById('restoreBtn').disabled = true;
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  function restaurarDeSessao() {
+    if (!selectedSessionKey) { log('Selecione um ponto de restauração.', 'warn'); return; }
+    try {
+      const raw = localStorage.getItem(selectedSessionKey);
+      if (!raw) { log('Ponto de restauração não encontrado.', 'err'); return; }
+      const parsed = JSON.parse(raw);
+      parsedBackup = parsed.data || parsed;
+      log(`Ponto "${selectedSessionKey}" carregado. Clique em "Restaurar de arquivo JSON" para aplicar.`, 'ok');
+      document.getElementById('restoreBtn').disabled = false;
+    } catch (e) { log('Erro ao carregar ponto: ' + e.message, 'err'); }
+  }
+
+  function restaurar() {
+    if (!parsedBackup) { log('Nenhum arquivo carregado.', 'err'); return; }
+    document.getElementById('restoreBtn').disabled = true;
+
+    try {
+      // 1. Desduplicar instituições — manter apenas a mais recente por ID
+      let instituicoes = Array.isArray(parsedBackup.instituicoes) ? parsedBackup.instituicoes : [];
+      const instMap = new Map();
+      for (const inst of instituicoes) {
+        const id = String(inst.id ?? '');
+        if (!id) continue;
+        const existing = instMap.get(id);
+        if (!existing) {
+          instMap.set(id, inst);
+        } else {
+          // Manter a que tem data de atualização mais recente ou mais campos preenchidos
+          const existDate = new Date(existing.dataAtualizacao || existing.dataCadastro || 0).getTime();
+          const newDate  = new Date(inst.dataAtualizacao || inst.dataCadastro || 0).getTime();
+          if (newDate >= existDate) instMap.set(id, inst);
+        }
+      }
+      const instituicoesDedup = Array.from(instMap.values());
+      log(`🏫 Instituições após desduplicação: ${instituicoesDedup.length} (eram ${instituicoes.length})`, 'ok');
+
+      // 2. Montar o objeto final de dados
+      const dadosRestaurados = {
+        instituicoes: instituicoesDedup,
+        livros:           parsedBackup.livros          || [],
+        patrimonio:       parsedBackup.patrimonio       || [],
+        clientes:         parsedBackup.clientes         || [],
+        seriesAcademicas: parsedBackup.seriesAcademicas || [],
+        turmasAcademicas: parsedBackup.turmasAcademicas || [],
+        emprestimos:      parsedBackup.emprestimos      || [],
+        usuarios:         parsedBackup.usuarios         || [],
+        planos:           parsedBackup.planos           || [],
+        notasFiscais:     parsedBackup.notasFiscais     || [],
+        logAtividades:    (parsedBackup.logAtividades || []).slice(-500),
+        _metadata: {
+          version: parsedBackup._metadata?.version || '3.5.0',
+          savedAt: new Date().toISOString(),
+          restoredFrom: 'manual-recovery'
+        }
+      };
+
+      // 3. Testar espaço disponível
+      const json = JSON.stringify(dadosRestaurados);
+      const sizeMB = (new Blob([json]).size / 1024 / 1024).toFixed(2);
+      log(`💾 Tamanho dos dados: ${sizeMB} MB`, 'inf');
+
+      if (parseFloat(sizeMB) > 9) {
+        log('⚠️ Dados muito grandes (>9MB). Truncando log de atividades...', 'warn');
+        dadosRestaurados.logAtividades = [];
+        const json2 = JSON.stringify(dadosRestaurados);
+        log(`💾 Tamanho após truncar log: ${(new Blob([json2]).size/1024/1024).toFixed(2)} MB`, 'inf');
+      }
+
+      // 4. Salvar no localStorage
+      localStorage.setItem('cei_data', JSON.stringify(dadosRestaurados));
+
+      // 5. Limpar flags de emergência que possam atrapalhar
+      ['cei_data_emergency', 'cei_lote_import_flag'].forEach(k => {
+        try { localStorage.removeItem(k); } catch(_) {}
+      });
+
+      // 6. Verificar se salvou corretamente
+      const verify = localStorage.getItem('cei_data');
+      if (!verify) throw new Error('Verificação falhou: chave não encontrada após salvar.');
+      const verifyParsed = JSON.parse(verify);
+      log(`✅ Leitores restaurados: ${(verifyParsed.clientes || []).length}`, 'ok');
+      log(`✅ Livros restaurados: ${(verifyParsed.livros || []).length}`, 'ok');
+      log(`✅ Empréstimos restaurados: ${(verifyParsed.emprestimos || []).length}`, 'ok');
+      log(`✅ Dados gravados com sucesso no localStorage!`, 'ok');
+
+      document.getElementById('successBanner').style.display = 'block';
+    } catch (err) {
+      log('❌ Erro ao restaurar: ' + err.message, 'err');
+      document.getElementById('restoreBtn').disabled = false;
+    }
+  }
+</script>
+</body>
+</html>

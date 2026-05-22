@@ -7,7 +7,7 @@ import { BrowserRouter } from 'react-router-dom';
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
   <React.StrictMode>
-    <BrowserRouter basename={window.location.hostname.endsWith('surge.sh') ? '/' : '/cei-backend'}>
+    <BrowserRouter basename="/">
       <App />
     </BrowserRouter>
   </React.StrictMode>
@@ -39,7 +39,7 @@ if ('serviceWorker' in navigator) {
     // Registrar novo Service Worker após limpar
     setTimeout(() => {
       navigator.serviceWorker
-        .register('/cei-backend/service-worker.js')
+        .register('/service-worker.js')
         .then((registration) => {
           console.log('✅ Service Worker registrado com sucesso:', registration.scope);
           
