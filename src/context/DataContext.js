@@ -3,6 +3,7 @@ import apiService from '../utils/apiService';
 import { initDataProtection, createBackup } from '../utils/dataProtection';
 import { isCloudEnabled } from '../services/supabaseClient';
 import { syncFromCloud, syncToCloud, deleteFromCloud, keepAlive, subscribeToRealtimeChanges, unsubscribeFromRealtime } from '../services/syncService';
+import { garantirSessaoSupabase, encerrarSessaoSupabase } from '../services/authService';
 
 // Versão do sistema - IMPORTANTE: Incrementar a cada atualização significativa
 const SYSTEM_VERSION = '3.5.2';
@@ -5604,6 +5605,13 @@ export const DataProvider = ({ children }) => {
         return next.slice(-MAX_LOG_ATIVIDADES);
       });
       
+      // Sessão Supabase Auth em segundo plano (base do isolamento RLS por escola)
+      garantirSessaoSupabase(usuario, senhaTrim).then((resultado) => {
+        if (!resultado?.success) {
+          console.warn('⚠️ [AUTH] Sessão Supabase não estabelecida:', resultado?.error || resultado?.message);
+        }
+      });
+
       return true;
     }
     
@@ -5618,6 +5626,9 @@ export const DataProvider = ({ children }) => {
         login: usuarioLogado.login
       });
     }
+
+    // Encerra a sessão Supabase Auth em segundo plano
+    encerrarSessaoSupabase();
 
     setUsuarioLogado(null);
     setInstituicaoAtiva(null);
