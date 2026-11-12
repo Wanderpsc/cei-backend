@@ -201,3 +201,7 @@ contratos_confidenciais/
 # 4. Trocar todas as credenciais expostas imediatamente
 
 # ═══════════════════════════════════════════════════════════════════════════
+
+# Excecao: scripts de migracao do Supabase devem ser versionados
+!supabase/migrations/*.sql
+!supabase-schema.sql
