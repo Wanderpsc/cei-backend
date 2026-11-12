@@ -37,7 +37,7 @@ import {
   FormControlLabel,
   FormLabel
 } from '@mui/material';
-import { Add, Edit, Delete, Search, PhotoCamera, Upload, Close, QrCodeScanner, GetApp, Description, PrintOutlined, Label } from '@mui/icons-material';
+import { Add, Edit, Delete, Search, PhotoCamera, Upload, Close, QrCodeScanner, GetApp, Description, PrintOutlined, Label, WarningAmber, LibraryAdd, AddCircleOutline } from '@mui/icons-material';
 import { useData } from '../context/DataContext';
 import TermoEmprestimo from '../components/TermoEmprestimo';
 
@@ -54,6 +54,7 @@ function LivrosPage() {
   const [termoOpen, setTermoOpen] = useState(false);
   const [dadosTermo, setDadosTermo] = useState(null);
   const [cameraOpen, setCameraOpen] = useState(false);
+  const [duplicataDialog, setDuplicataDialog] = useState({ open: false, livroExistente: null });
   const fileInputRef = useRef(null);
   
   // Estados para termo de empréstimo
@@ -200,45 +201,46 @@ function LivrosPage() {
   };
 
   const handleSubmit = () => {
-    // Verificar se livro já existe (por ISBN ou título+autor)
     if (!editando) {
-      const livroExistente = livros.find(l => 
-        (formData.isbn && l.isbn === formData.isbn) ||
-        (l.titulo.toLowerCase() === formData.titulo.toLowerCase() && 
-         l.autor.toLowerCase() === formData.autor.toLowerCase())
+      const livroExistente = livros.find(l =>
+        !l.baixa && (
+          (formData.isbn && formData.isbn.trim() && l.isbn === formData.isbn.trim()) ||
+          (l.titulo.toLowerCase().trim() === formData.titulo.toLowerCase().trim() &&
+           l.autor.toLowerCase().trim() === formData.autor.toLowerCase().trim())
+        )
       );
-      
+
       if (livroExistente) {
-        const aumentarQuantidade = window.confirm(
-          `O livro "${formData.titulo}" já está cadastrado!\n\n` +
-          `Quantidade atual: ${livroExistente.quantidade}\n\n` +
-          `Deseja aumentar a quantidade em ${formData.quantidade} unidade(s)?`
-        );
-        
-        if (aumentarQuantidade) {
-          const novaQuantidade = parseInt(livroExistente.quantidade) + parseInt(formData.quantidade);
-          atualizarLivro(livroExistente.id, { 
-            ...livroExistente, 
-            quantidade: novaQuantidade 
-          });
-          handleClose();
-          return;
-        } else {
-          return; // Não fazer nada se usuário cancelar
-        }
+        setDuplicataDialog({ open: true, livroExistente });
+        return;
       }
-      
+
       // Gerar código automático se for novo livro
       const numeroSequencial = (livros.length + 1).toString().padStart(6, '0');
-      const codigoLivro = `LIV${numeroSequencial}`;
-      formData.codigoIdentificacao = codigoLivro;
+      formData.codigoIdentificacao = `LIV${numeroSequencial}`;
     }
-    
+
     if (editando) {
       atualizarLivro(editando, formData);
     } else {
       adicionarLivro(formData);
     }
+    handleClose();
+  };
+
+  const handleDuplicataAdicionarExemplar = () => {
+    const { livroExistente } = duplicataDialog;
+    const novaQuantidade = parseInt(livroExistente.quantidade || 1) + parseInt(formData.quantidade || 1);
+    atualizarLivro(livroExistente.id, { ...livroExistente, quantidade: novaQuantidade });
+    setDuplicataDialog({ open: false, livroExistente: null });
+    handleClose();
+  };
+
+  const handleDuplicataNovoCadastro = () => {
+    const numeroSequencial = (livros.length + 1).toString().padStart(6, '0');
+    formData.codigoIdentificacao = `LIV${numeroSequencial}`;
+    adicionarLivro(formData);
+    setDuplicataDialog({ open: false, livroExistente: null });
     handleClose();
   };
 
@@ -674,8 +676,73 @@ function LivrosPage() {
         </DialogActions>
       </Dialog>
 
-      <BarcodeScannerDialog 
-        open={scannerOpen} 
+      {/* Dialog de Livro Duplicado */}
+      <Dialog
+        open={duplicataDialog.open}
+        onClose={() => setDuplicataDialog({ open: false, livroExistente: null })}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <WarningAmber color="warning" />
+          Livro Já Cadastrado
+        </DialogTitle>
+        <DialogContent>
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            <strong>"{ formData.titulo }"</strong> já existe no acervo.
+            {duplicataDialog.livroExistente?.isbn && (
+              <> ISBN: <strong>{duplicataDialog.livroExistente.isbn}</strong></>  
+            )}
+          </Alert>
+          <Box sx={{ bgcolor: 'grey.50', borderRadius: 1, p: 2, mb: 2 }}>
+            <Typography variant="body2" color="text.secondary" gutterBottom>Cadastro existente:</Typography>
+            <Typography variant="body1" fontWeight={700}>{duplicataDialog.livroExistente?.titulo}</Typography>
+            <Typography variant="body2">{duplicataDialog.livroExistente?.autor}</Typography>
+            <Typography variant="body2">Código: <strong>{duplicataDialog.livroExistente?.codigoIdentificacao}</strong></Typography>
+            <Typography variant="body2">Exemplares atuais: <strong>{duplicataDialog.livroExistente?.quantidade}</strong></Typography>
+          </Box>
+          <Typography variant="body2" color="text.secondary">
+            O que deseja fazer com <strong>{formData.quantidade} novo(s) exemplar(es)</strong>?
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ flexDirection: 'column', gap: 1, px: 3, pb: 3, alignItems: 'stretch' }}>
+          <Button
+            variant="contained"
+            color="primary"
+            startIcon={<AddCircleOutline />}
+            onClick={handleDuplicataAdicionarExemplar}
+            fullWidth
+          >
+            Adicionar ao cadastro existente
+            <Typography variant="caption" component="span" sx={{ ml: 1, opacity: 0.85 }}>
+              (total: {parseInt(duplicataDialog.livroExistente?.quantidade || 1) + parseInt(formData.quantidade || 1)} exemplares)
+            </Typography>
+          </Button>
+          <Button
+            variant="outlined"
+            color="secondary"
+            startIcon={<LibraryAdd />}
+            onClick={handleDuplicataNovoCadastro}
+            fullWidth
+          >
+            Cadastrar como novo título separado
+            <Typography variant="caption" component="span" sx={{ ml: 1, opacity: 0.75 }}>
+              (novo código + etiqueta)
+            </Typography>
+          </Button>
+          <Button
+            variant="text"
+            color="inherit"
+            onClick={() => setDuplicataDialog({ open: false, livroExistente: null })}
+            fullWidth
+          >
+            Cancelar
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <BarcodeScannerDialog
+        open={scannerOpen}
         onClose={() => setScannerOpen(false)}
         onBookFound={handleBookFound}
       />

@@ -82,7 +82,7 @@ const ROUTE_TITLES = {
   '/configuracoes/nuvem': 'Nuvem e Sincronização'
 };
 
-function PrivateRoute({ children }) {
+function PrivateRoute({ children, requiredProfile }) {
   const { usuarioLogado, autenticacaoCarregada, registrarAcessoPagina } = useData();
   const location = useLocation();
 
@@ -172,6 +172,11 @@ function PrivateRoute({ children }) {
     console.log('🔒 Usuário não autenticado, redirecionando para login');
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
+
+  if (requiredProfile && usuarioLogado.perfil !== requiredProfile) {
+    console.log('⛔ Acesso negado por perfil para rota:', location.pathname);
+    return <Navigate to="/" replace />;
+  }
   
   // Se está logado, verificar licença
   console.log('✅ Usuário autenticado:', usuarioLogado.nome, '- Verificando licença...');
@@ -215,7 +220,7 @@ function AppRoutes() {
       <Route path="/devolucoes" element={<PrivateRoute><DevolucaoPage /></PrivateRoute>} />
       <Route path="/relatorios" element={<PrivateRoute><RelatoriosPage /></PrivateRoute>} />
       <Route path="/busca" element={<PrivateRoute><BuscaPage /></PrivateRoute>} />
-      <Route path="/diagrama-sistema" element={<PrivateRoute><DiagramaSistemaPage /></PrivateRoute>} />
+      <Route path="/diagrama-sistema" element={<PrivateRoute requiredProfile="SuperAdmin"><DiagramaSistemaPage /></PrivateRoute>} />
       <Route path="/limpar-duplicatas" element={<PrivateRoute><LimparDuplicatasPage /></PrivateRoute>} />
       <Route path="/clube-leitura" element={<PrivateRoute><ClubeDeLeituraPage /></PrivateRoute>} />
       <Route path="/relatorios-livros" element={<PrivateRoute><RelatoriosLivrosPage /></PrivateRoute>} />

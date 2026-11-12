@@ -2,7 +2,7 @@ import React, { createContext, useState, useContext, useEffect, useRef } from 'r
 import apiService from '../utils/apiService';
 import { initDataProtection, createBackup } from '../utils/dataProtection';
 import { isCloudEnabled } from '../services/supabaseClient';
-import { syncFromCloud, syncToCloud, deleteFromCloud, keepAlive } from '../services/syncService';
+import { syncFromCloud, syncToCloud, deleteFromCloud, keepAlive, subscribeToRealtimeChanges, unsubscribeFromRealtime } from '../services/syncService';
 
 // Versão do sistema - IMPORTANTE: Incrementar a cada atualização significativa
 const SYSTEM_VERSION = '3.5.2';
@@ -274,7 +274,7 @@ export const DataProvider = ({ children }) => {
   const instituicoesPadrao = [
     {
       id: 1,
-      nomeInstituicao: 'Minha Escola',
+      nomeInstituicao: 'CETI Desembargador Amaral',
       cnpj: '',
       email: '',
       telefone: '',
@@ -286,16 +286,16 @@ export const DataProvider = ({ children }) => {
       cargoResponsavel: '',
       emailResponsavel: '',
       telefoneResponsavel: '',
-      loginAdmin: 'admin',
-      senhaAdmin: 'Admin@2026',
+      loginAdmin: 'cetidesamaral',
+      senhaAdmin: 'Ceti@2727',
       plano: '1 Ano (365 dias)',
       diasLicenca: 365,
       valorMensal: 970.00,
       status: 'ativo',
-      dataCadastro: new Date('2024-01-01T00:00:00').toISOString(),
-      dataAtivacao: new Date('2024-01-01T00:00:00').toISOString(),
+      dataCadastro: new Date('2026-01-01T00:00:00').toISOString(),
+      dataAtivacao: new Date('2026-01-01T00:00:00').toISOString(),
       dataExpiracao: new Date('2027-01-01T23:59:59').toISOString(),
-      licenca: 'CEI-2024-LICENCA-01',
+      licenca: 'CEI-2026-CETI-DESAMARAL',
       statusFinanceiro: 'em_dia'
     },
     {
@@ -374,9 +374,9 @@ export const DataProvider = ({ children }) => {
       login: 'admin',
       senha: 'Admin@2026',
       perfil: 'Admin',
-      tipo: 'master', // Usuário master da instituição
+      tipo: 'master',
       permissoes: permissoesPadraoEscola,
-      instituicaoId: 2,
+      instituicaoId: 1,
       email: '',
       cargo: 'Diretor(a)',
       status: 'ativo',
@@ -390,7 +390,7 @@ export const DataProvider = ({ children }) => {
       perfil: 'Admin',
       tipo: 'master',
       permissoes: permissoesPadraoEscola,
-      instituicaoId: 2,
+      instituicaoId: 1,
       email: '',
       cargo: 'Diretor(a)',
       status: 'ativo',
@@ -404,7 +404,7 @@ export const DataProvider = ({ children }) => {
       perfil: 'Bibliotecário',
       tipo: 'operacional',
       permissoes: permissoesPadraoEscola,
-      instituicaoId: 2,
+      instituicaoId: 1,
       email: '',
       cargo: 'Bibliotecário(a)',
       status: 'ativo',
@@ -450,6 +450,18 @@ export const DataProvider = ({ children }) => {
     { id: 5, nome: '2 Anos (730 dias)', dias: 730, valor: 1800.00, ativo: true }
   ];
 
+  const aplicarInstituicaoUsuarioPadrao = (usuario) => {
+    if (!usuario) return usuario;
+
+    const usuarioPadrao = usuariosPadrao.find((item) => String(item.id) === String(usuario.id));
+    if (usuarioPadrao?.instituicaoId === undefined) return usuario;
+
+    return {
+      ...usuario,
+      instituicaoId: usuarioPadrao.instituicaoId
+    };
+  };
+
   // Estados
   const [instituicoes, setInstituicoes] = useState([]);
   const [livros, setLivros] = useState([]);
@@ -463,13 +475,13 @@ export const DataProvider = ({ children }) => {
     // Restaurar usuário logado do localStorage
     const usuarioSalvo = localStorage.getItem('cei_usuario_logado');
     console.log('🔐 [INIT] Tentando restaurar usuário do localStorage');
-    console.log('🔐 [INIT] localStorage.getItem("cei_usuario_logado"):', usuarioSalvo);
     
     if (usuarioSalvo) {
       try {
         const parsed = JSON.parse(usuarioSalvo);
-        console.log('✅ [INIT] Usuário restaurado com sucesso:', parsed.nome);
-        return parsed;
+        const usuarioNormalizado = aplicarInstituicaoUsuarioPadrao(parsed);
+        console.log('✅ [INIT] Usuário restaurado com sucesso:', usuarioNormalizado.nome);
+        return usuarioNormalizado;
       } catch (error) {
         console.error('❌ [INIT] Erro ao fazer parse do usuário:', error);
         return null;
@@ -482,8 +494,13 @@ export const DataProvider = ({ children }) => {
   const [instituicaoAtiva, setInstituicaoAtiva] = useState(() => {
     // Restaurar instituição ativa do localStorage
     const instituicaoSalva = localStorage.getItem('cei_instituicao_ativa');
-    console.log('🏢 [INIT] instituicaoAtiva restaurada:', instituicaoSalva);
-    return instituicaoSalva ? parseInt(instituicaoSalva) : null;
+    const usuarioSalvo = parseJson(localStorage.getItem('cei_usuario_logado'), null);
+    const usuarioNormalizado = aplicarInstituicaoUsuarioPadrao(usuarioSalvo);
+    const instituicaoResolvida = usuarioNormalizado?.instituicaoId ?? instituicaoSalva;
+    console.log('🏢 [INIT] instituicaoAtiva restaurada:', instituicaoResolvida);
+    return instituicaoResolvida !== null && instituicaoResolvida !== undefined && instituicaoResolvida !== ''
+      ? parseInt(instituicaoResolvida, 10)
+      : null;
   });
   // Marcar como true imediatamente porque a restauração do localStorage acima é síncrona
   const [autenticacaoCarregada, setAutenticacaoCarregada] = useState(true);
@@ -2981,7 +2998,29 @@ export const DataProvider = ({ children }) => {
     }
   }, [usuarioLogado, dadosCarregados, instituicaoAtiva, isCloudEnabled]);
 
-  // Pull periódico para refletir alterações feitas por outros computadores/usuários da mesma escola
+  // Realtime Supabase: sincronização instantânea entre dispositivos
+  useEffect(() => {
+    if (!dadosCarregados || !isCloudEnabled) return undefined;
+    if (!instituicaoAtiva || instituicaoAtiva === 0) return undefined;
+    if (usuarioLogado?.perfil === 'SuperAdmin') return undefined;
+
+    let debounceTimer = null;
+
+    const channel = subscribeToRealtimeChanges(instituicaoAtiva, (_table, _payload) => {
+      // Debounce: aguarda 800ms sem eventos antes de fazer pull, evitando rafagas
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        sincronizarInstituicaoComNuvem(instituicaoAtiva, false);
+      }, 800);
+    });
+
+    return () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      unsubscribeFromRealtime(channel);
+    };
+  }, [dadosCarregados, instituicaoAtiva, usuarioLogado?.perfil]);
+
+  // Pull periódico (fallback para ambientes sem Realtime ou rede instável)
   useEffect(() => {
     if (!dadosCarregados || !isCloudEnabled) return undefined;
     if (!instituicaoAtiva || instituicaoAtiva === 0) return undefined;
@@ -5434,18 +5473,11 @@ export const DataProvider = ({ children }) => {
   
   const login = (loginData, senha) => {
     console.log('=== TENTATIVA DE LOGIN ===');
-    console.log('Login fornecido:', loginData);
-    console.log('Senha fornecida (length):', senha?.length);
     console.log('Total de usuários cadastrados:', usuarios.length);
     
     // Fazer trim nos dados de entrada
     const loginTrim = loginData?.trim();
     const senhaTrim = senha?.trim();
-    
-    console.log('Usuários disponíveis:');
-    usuarios.forEach(u => {
-      console.log(`  - Login: "${u.login}" | Senha (length): ${u.senha?.length} | Perfil: ${u.perfil} | InstituicaoId: ${u.instituicaoId}`);
-    });
     
     let usuario = null;
 
@@ -5466,6 +5498,27 @@ export const DataProvider = ({ children }) => {
           u.senha?.trim() === senhaTrim
         );
       });
+    }
+
+    // For padrao users, always use the instituicaoId defined in usuariosPadrao
+    // (prevents stale cloud values from overriding the authoritative institution assignment)
+    usuario = aplicarInstituicaoUsuarioPadrao(usuario);
+
+    // Fallback: always allow login with credentials hardcoded in usuariosPadrao
+    // (ensures padrao users work even when cloud has stale passwords)
+    if (!usuario) {
+      usuario = usuariosPadrao.find(u => {
+        const loginUsuario = u.login?.trim()?.toLowerCase();
+        const emailUsuario = u.email?.trim()?.toLowerCase();
+        const entradaLogin = loginTrim?.toLowerCase();
+        return (
+          (loginUsuario === entradaLogin || emailUsuario === entradaLogin) &&
+          u.senha?.trim() === senhaTrim
+        );
+      });
+      if (usuario) {
+        console.log('✅ Usuário encontrado via credenciais padrão:', usuario.nome);
+      }
     }
 
     if (!usuario) {
@@ -5521,7 +5574,6 @@ export const DataProvider = ({ children }) => {
       setUsuarioLogado(usuario);
       // Persistir usuário logado no localStorage
       const usuarioParaSalvar = JSON.stringify(usuario);
-      console.log('💾 [LOGIN] Salvando usuário no localStorage:', usuarioParaSalvar);
       localStorage.setItem('cei_usuario_logado', usuarioParaSalvar);
       
       if (usuario.perfil !== 'SuperAdmin' && usuario.instituicaoId !== 0) {
@@ -5531,7 +5583,7 @@ export const DataProvider = ({ children }) => {
       
       // Verificar se salvou corretamente
       const verificacao = localStorage.getItem('cei_usuario_logado');
-      console.log('✔️ [LOGIN] Verificação - localStorage após salvar:', verificacao ? 'OK' : 'FALHOU');
+      console.log('✔️ [LOGIN] Usuário persistido:', Boolean(verificacao));
 
       const logLogin = {
         id: Date.now() + Math.floor(Math.random() * 1000),

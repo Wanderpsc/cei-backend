@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import Layout from '../components/Layout';
 import { useData } from '../context/DataContext';
 import CameraCapture from '../components/CameraCapture';
+import ImageCropEditor from '../components/ImageCropEditor';
 import Autocomplete from '@mui/material/Autocomplete';
 import {
   Box,
@@ -43,7 +44,8 @@ import {
   DocumentScanner,
   Search,
   ZoomIn,
-  Upload
+  Upload,
+  DeleteForever
 } from '@mui/icons-material';
 
 export default function ClubeDeLeituraPage() {
@@ -76,6 +78,12 @@ export default function ClubeDeLeituraPage() {
   const [clienteSelecionado, setClienteSelecionado] = useState(null);
   const [buscaAluno, setBuscaAluno] = useState('');
   const fileInputDocRef = useRef(null);
+  // Editor de recorte para imagens carregadas por upload
+  const [imagemParaEditar, setImagemParaEditar] = useState(null);
+  const [imageEditorOpen, setImageEditorOpen] = useState(false);
+  // OCR — extração de texto do documento escaneado
+  const [ocrText, setOcrText] = useState('');
+  const [ocrLoading, setOcrLoading] = useState(false);
 
   const salvarResumo = () => {
     if (!resumo.clienteId || !resumo.livroId || !resumo.resumoTexto) {
@@ -130,9 +138,34 @@ export default function ClubeDeLeituraPage() {
   const handleDocumentoUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
+    // Zera o valor para permitir re-seleção do mesmo arquivo
+    e.target.value = '';
     const reader = new FileReader();
-    reader.onloadend = () => setDocumentoEscaneado(reader.result);
+    reader.onloadend = () => {
+      setImagemParaEditar(reader.result);
+      setImageEditorOpen(true);
+    };
     reader.readAsDataURL(file);
+  };
+
+  const handleExtractText = async () => {
+    if (!docSelecionado?.documentoEscaneado) return;
+    setOcrLoading(true);
+    setOcrText('');
+    try {
+      const { createWorker } = await import('tesseract.js');
+      const worker = await createWorker('por', 1, {
+        workerPath: 'https://unpkg.com/tesseract.js@5/dist/worker.min.js',
+        corePath: 'https://unpkg.com/tesseract.js-core@5/tesseract-core-simd-lstm.wasm.js',
+        langPath: 'https://tessdata.projectnaptha.com/4.0.0'
+      });
+      const { data: { text } } = await worker.recognize(docSelecionado.documentoEscaneado);
+      await worker.terminate();
+      setOcrText(text.trim() || '(Nenhum texto detectado na imagem)');
+    } catch (err) {
+      setOcrText('Erro ao extrair texto: ' + (err.message || String(err)));
+    }
+    setOcrLoading(false);
   };
 
   const resumosComDocumento = resumos.filter(r => r.documentoEscaneado).filter(r => {
@@ -416,10 +449,11 @@ export default function ClubeDeLeituraPage() {
           </Box>
         </DialogTitle>
         <DialogContent>
-          <Grid container spacing={2} sx={{ mt: 1 }}>
-            <Grid item xs={12}>
+          {/* Box column layout garante 100% de largura em qualquer versão do MUI Grid */}
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
+            <Box sx={{ width: '100%' }}>
               <Autocomplete
-                options={clientes}
+                options={clientes.filter(c => c.nome)}
                 getOptionLabel={(option) => option.nome || ''}
                 value={clienteSelecionado}
                 onChange={(e, newValue) => {
@@ -428,42 +462,87 @@ export default function ClubeDeLeituraPage() {
                 }}
                 inputValue={buscaAluno}
                 onInputChange={(e, newInputValue) => setBuscaAluno(newInputValue)}
+                disablePortal
+                fullWidth
+                sx={{ width: '100%' }}
+                componentsProps={{
+                  paper: { sx: { minWidth: 320 } }
+                }}
                 filterOptions={(options, { inputValue }) => {
+                  if (!inputValue.trim()) return options;
                   const termo = inputValue.toLowerCase();
                   return options.filter(
                     (c) =>
                       c.nome?.toLowerCase().includes(termo) ||
                       c.turma?.toLowerCase().includes(termo) ||
-                      c.serie?.toLowerCase().includes(termo)
+                      c.serie?.toLowerCase().includes(termo) ||
+                      c.matricula?.toLowerCase?.().includes(termo) ||
+                      String(c.matricula || '').includes(termo)
                   );
                 }}
-                renderOption={(props, option) => (
-                  <Box component="li" {...props} key={option.id} sx={{ display: 'flex', alignItems: 'center', gap: 1.5, py: 1, overflow: 'visible' }}>
-                    <Avatar sx={{ width: 36, height: 36, fontSize: 15, bgcolor: 'primary.main', flexShrink: 0 }}>
-                      {option.nome?.charAt(0)?.toUpperCase()}
-                    </Avatar>
-                    <Box sx={{ minWidth: 0, flex: 1 }}>
-                      <Typography variant="body1" fontWeight={500} sx={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>{option.nome}</Typography>
-                      {(option.turma || option.serie) && (
-                        <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'normal' }}>
-                          {[option.serie, option.turma].filter(Boolean).join(' — ')}
+                renderOption={(props, option) => {
+                  const { key, ...liProps } = props;
+                  return (
+                    <Box
+                      component="li"
+                      key={key}
+                      {...liProps}
+                      sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 1.5,
+                        py: 1,
+                        px: 1.5,
+                        width: '100%',
+                        boxSizing: 'border-box'
+                      }}
+                    >
+                      <Avatar sx={{ width: 34, height: 34, fontSize: 14, bgcolor: 'primary.main', flexShrink: 0 }}>
+                        {option.nome?.charAt(0)?.toUpperCase()}
+                      </Avatar>
+                      <Box sx={{ flex: 1, overflow: 'hidden' }}>
+                        <Typography
+                          variant="body2"
+                          fontWeight={600}
+                          sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                          title={option.nome}
+                        >
+                          {option.nome}
                         </Typography>
-                      )}
+                        {(option.turma || option.serie || option.matricula) && (
+                          <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block' }}>
+                            {[option.serie, option.turma, option.matricula ? `Matr: ${option.matricula}` : ''].filter(Boolean).join(' — ')}
+                          </Typography>
+                        )}
+                      </Box>
                     </Box>
-                  </Box>
-                )}
+                  );
+                }}
                 renderInput={(params) => (
                   <TextField
                     {...params}
-                    label="Leitor *"
-                    placeholder="Digite o nome, turma ou série para buscar..."
+                    label="🔍 Buscar Leitor"
+                    placeholder="Digite nome, turma ou série..."
+                    fullWidth
                     size="medium"
+                    sx={{
+                      width: '100%',
+                      '& .MuiInputBase-root': {
+                        fontSize: '1.08rem',
+                        minHeight: 62,
+                        borderRadius: 2,
+                        bgcolor: '#f0f7ff',
+                        width: '100%'
+                      },
+                      '& .MuiInputBase-input': { py: 1.5 },
+                      '& .MuiInputLabel-root': { fontSize: '1.05rem' }
+                    }}
                     InputProps={{
                       ...params.InputProps,
                       startAdornment: (
                         <>
                           <InputAdornment position="start">
-                            <Search fontSize="small" sx={{ color: 'text.secondary' }} />
+                            <Search sx={{ color: 'primary.main', fontSize: 22 }} />
                           </InputAdornment>
                           {params.InputProps.startAdornment}
                         </>
@@ -477,9 +556,9 @@ export default function ClubeDeLeituraPage() {
                 closeText="Fechar"
                 fullWidth
               />
-            </Grid>
+            </Box>
 
-            <Grid item xs={12}>
+            <Box sx={{ width: '100%' }}>
               <TextField
                 select
                 fullWidth
@@ -494,25 +573,37 @@ export default function ClubeDeLeituraPage() {
                   <option key={l.id} value={l.id}>{l.titulo}</option>
                 ))}
               </TextField>
-            </Grid>
+            </Box>
 
-            <Grid item xs={12}>
+            <Box sx={{ width: '100%' }}>
               <Box sx={{ textAlign: 'center', mb: 2 }}>
-                <Button
-                  variant="outlined"
-                  startIcon={<CameraAlt />}
-                  onClick={() => setCameraOpen(true)}
-                >
-                  {fotoAluno ? 'Alterar Foto' : 'Tirar Foto do Leitor'}
-                </Button>
+                <Box sx={{ display: 'flex', gap: 1, justifyContent: 'center', flexWrap: 'wrap' }}>
+                  <Button
+                    variant="outlined"
+                    startIcon={<CameraAlt />}
+                    onClick={() => setCameraOpen(true)}
+                  >
+                    {fotoAluno ? 'Alterar Foto' : 'Tirar Foto do Leitor'}
+                  </Button>
+                  {fotoAluno && (
+                    <Button
+                      variant="outlined"
+                      color="error"
+                      startIcon={<DeleteForever />}
+                      onClick={() => setFotoAluno(null)}
+                    >
+                      Excluir Foto
+                    </Button>
+                  )}
+                </Box>
                 {fotoAluno && (
                   <Avatar src={fotoAluno} sx={{ width: 100, height: 100, margin: '10px auto' }} imgProps={{ style: { objectFit: 'contain' } }} />
                 )}
               </Box>
-            </Grid>
+            </Box>
 
             {/* ESCANEAR RESUMO FÍSICO */}
-            <Grid item xs={12}>
+            <Box sx={{ width: '100%' }}>
               <Box sx={{ p: 2, border: '1px dashed #1976d2', borderRadius: 2, bgcolor: '#f0f7ff' }}>
                 <Typography variant="subtitle2" gutterBottom sx={{ color: '#1565c0', fontWeight: 'bold' }}>
                   <DocumentScanner sx={{ verticalAlign: 'middle', mr: 1 }} />
@@ -561,9 +652,9 @@ export default function ClubeDeLeituraPage() {
                   </Box>
                 )}
               </Box>
-            </Grid>
+            </Box>
 
-            <Grid item xs={12}>
+            <Box sx={{ width: '100%' }}>
               <TextField
                 fullWidth
                 multiline
@@ -573,15 +664,15 @@ export default function ClubeDeLeituraPage() {
                 onChange={(e) => setResumo({ ...resumo, resumoTexto: e.target.value })}
                 placeholder="Escreva um breve resumo do que você leu..."
               />
-            </Grid>
+            </Box>
 
-            <Grid item xs={12}>
+            <Box sx={{ width: '100%' }}>
               <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, mb: 1 }}>
                 📝 Perguntas de Comprovação:
               </Typography>
-            </Grid>
+            </Box>
 
-            <Grid item xs={12}>
+            <Box sx={{ width: '100%' }}>
               <TextField
                 fullWidth
                 multiline
@@ -590,9 +681,9 @@ export default function ClubeDeLeituraPage() {
                 value={resumo.pergunta1}
                 onChange={(e) => setResumo({ ...resumo, pergunta1: e.target.value })}
               />
-            </Grid>
+            </Box>
 
-            <Grid item xs={12}>
+            <Box sx={{ width: '100%' }}>
               <TextField
                 fullWidth
                 multiline
@@ -601,9 +692,9 @@ export default function ClubeDeLeituraPage() {
                 value={resumo.pergunta2}
                 onChange={(e) => setResumo({ ...resumo, pergunta2: e.target.value })}
               />
-            </Grid>
+            </Box>
 
-            <Grid item xs={12}>
+            <Box sx={{ width: '100%' }}>
               <TextField
                 fullWidth
                 multiline
@@ -612,9 +703,9 @@ export default function ClubeDeLeituraPage() {
                 value={resumo.pergunta3}
                 onChange={(e) => setResumo({ ...resumo, pergunta3: e.target.value })}
               />
-            </Grid>
+            </Box>
 
-            <Grid item xs={12}>
+            <Box sx={{ width: '100%' }}>
               <Typography variant="body2" gutterBottom>
                 Avalie o livro:
               </Typography>
@@ -623,8 +714,8 @@ export default function ClubeDeLeituraPage() {
                 onChange={(e, newValue) => setResumo({ ...resumo, nota: newValue })}
                 size="large"
               />
-            </Grid>
-          </Grid>
+            </Box>
+          </Box>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDialogOpen(false)}>Cancelar</Button>
@@ -633,6 +724,15 @@ export default function ClubeDeLeituraPage() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Editor de recorte para imagens carregadas por upload */}
+      <ImageCropEditor
+        open={imageEditorOpen}
+        imageData={imagemParaEditar}
+        title="Editar Documento — Cortar Margens"
+        onClose={() => { setImageEditorOpen(false); setImagemParaEditar(null); }}
+        onSave={(img) => { setDocumentoEscaneado(img); setImageEditorOpen(false); setImagemParaEditar(null); }}
+      />
 
       {/* Dialog de Captura de Câmera - Foto do Leitor */}
       <CameraCapture
@@ -651,7 +751,13 @@ export default function ClubeDeLeituraPage() {
       />
 
       {/* Dialog de Visualização do Documento */}
-      <Dialog open={docVisualizarOpen} onClose={() => setDocVisualizarOpen(false)} maxWidth="md" fullWidth>
+      <Dialog
+        open={docVisualizarOpen}
+        onClose={() => { setDocVisualizarOpen(false); setOcrText(''); }}
+        maxWidth="md"
+        fullWidth
+        fullScreen={isMobile}
+      >
         <DialogTitle>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <DocumentScanner />
@@ -660,25 +766,92 @@ export default function ClubeDeLeituraPage() {
             </Typography>
           </Box>
         </DialogTitle>
-        <DialogContent>
+        <DialogContent sx={{ p: { xs: 1, sm: 2 } }}>
           {docSelecionado && (
             <Box>
-              <Box sx={{ display: 'flex', gap: 2, mb: 2, flexWrap: 'wrap' }}>
+              <Box sx={{ display: 'flex', gap: 1, mb: 2, flexWrap: 'wrap' }}>
                 <Chip label={`Aluno: ${getNomeClienteResumo(docSelecionado)}`} />
                 <Chip label={`Livro: ${livros.find(l => String(l.id) === String(docSelecionado.livroId))?.titulo || 'Livro'}`} color="primary" />
                 <Chip label={`Data: ${new Date(docSelecionado.data).toLocaleDateString('pt-BR')}`} variant="outlined" />
               </Box>
+
+              {/* Imagem do documento com visualizador de zoom CSS */}
               <Box
-                component="img"
-                src={docSelecionado.documentoEscaneado}
-                alt="Resumo escaneado"
-                sx={{ width: '100%', borderRadius: 2, border: '1px solid #e0e0e0' }}
-              />
+                sx={{
+                  overflow: 'auto',
+                  maxHeight: { xs: 320, sm: 480 },
+                  border: '1px solid #e0e0e0',
+                  borderRadius: 2,
+                  bgcolor: '#f9f9f9',
+                  mb: 2,
+                  textAlign: 'center',
+                  cursor: 'zoom-in',
+                }}
+              >
+                <Box
+                  component="img"
+                  src={docSelecionado.documentoEscaneado}
+                  alt="Resumo escaneado"
+                  sx={{
+                    maxWidth: '100%',
+                    display: 'block',
+                    margin: '0 auto',
+                    transition: 'transform 0.2s',
+                    '&:hover': { transform: 'scale(1.6)', transformOrigin: 'center top', cursor: 'zoom-in' }
+                  }}
+                />
+              </Box>
+
+              {/* Painel de texto extraído por OCR */}
+              <Box sx={{ border: '1px dashed #1976d2', borderRadius: 2, p: 2, bgcolor: '#f0f7ff' }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1, flexWrap: 'wrap', gap: 1 }}>
+                  <Typography variant="subtitle2" sx={{ color: '#1565c0', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                    📄 Texto Extraído do Documento
+                  </Typography>
+                  <Button
+                    variant="contained"
+                    size="small"
+                    onClick={handleExtractText}
+                    disabled={ocrLoading}
+                    startIcon={ocrLoading ? null : <DocumentScanner />}
+                    sx={{ bgcolor: '#1976d2' }}
+                  >
+                    {ocrLoading ? 'Extraindo texto...' : 'Extrair Texto (OCR)'}
+                  </Button>
+                </Box>
+                {ocrLoading && (
+                  <Alert severity="info" sx={{ mb: 1 }}>
+                    Processando imagem com OCR... Isso pode levar alguns segundos.
+                  </Alert>
+                )}
+                {ocrText ? (
+                  <TextField
+                    multiline
+                    fullWidth
+                    rows={8}
+                    value={ocrText}
+                    onChange={(e) => setOcrText(e.target.value)}
+                    placeholder="Texto extraído aparecerá aqui..."
+                    variant="outlined"
+                    sx={{
+                      '& .MuiInputBase-root': { fontFamily: 'monospace', fontSize: '0.93rem', bgcolor: '#fff' }
+                    }}
+                    helperText="Texto gerado automaticamente por OCR. Pode conter erros — você pode editar aqui."
+                  />
+                ) : (
+                  !ocrLoading && (
+                    <Typography variant="caption" color="text.secondary">
+                      Clique em "Extrair Texto (OCR)" para tentar ler automaticamente o conteúdo escrito no documento.
+                      A precisão varia conforme a qualidade da imagem e caligrafia.
+                    </Typography>
+                  )
+                )}
+              </Box>
             </Box>
           )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setDocVisualizarOpen(false)}>Fechar</Button>
+          <Button onClick={() => { setDocVisualizarOpen(false); setOcrText(''); }}>Fechar</Button>
         </DialogActions>
       </Dialog>
     </Layout>

@@ -13,78 +13,38 @@ root.render(
   </React.StrictMode>
 );
 
-// Registrar Service Worker para PWA
+// Registrar Service Worker para PWA (offline support)
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    // Desregistrar todos os service workers antigos primeiro
-    navigator.serviceWorker.getRegistrations().then((registrations) => {
-      registrations.forEach(registration => {
-        registration.unregister().then(() => {
-          console.log('Service Worker antigo removido');
-        });
-      });
-    });
+    navigator.serviceWorker
+      .register('/service-worker.js')
+      .then((registration) => {
+        console.log('✅ Service Worker registrado:', registration.scope);
+        registration.update();
 
-    // Limpar todos os caches antigos
-    caches.keys().then((cacheNames) => {
-      cacheNames.forEach((cacheName) => {
-        if (cacheName.startsWith('cei-v')) {
-          caches.delete(cacheName).then(() => {
-            console.log('Cache antigo removido:', cacheName);
+        registration.addEventListener('updatefound', () => {
+          const newWorker = registration.installing;
+          newWorker.addEventListener('statechange', () => {
+            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+              newWorker.postMessage({ type: 'SKIP_WAITING' });
+              window.location.reload();
+            }
           });
-        }
-      });
-    });
-
-    // Registrar novo Service Worker após limpar
-    setTimeout(() => {
-      navigator.serviceWorker
-        .register('/service-worker.js')
-        .then((registration) => {
-          console.log('✅ Service Worker registrado com sucesso:', registration.scope);
-          
-          // Forçar atualização imediata
-          registration.update();
-          
-          // Verificar atualizações
-          registration.addEventListener('updatefound', () => {
-            const newWorker = registration.installing;
-            console.log('🔄 Nova versão do Service Worker detectada');
-            
-            newWorker.addEventListener('statechange', () => {
-              if (newWorker.state === 'installed') {
-                if (navigator.serviceWorker.controller) {
-                  // Nova versão disponível - atualizar automaticamente
-                  console.log('🔄 Atualizando para nova versão...');
-                  newWorker.postMessage({ type: 'SKIP_WAITING' });
-                  window.location.reload();
-                } else {
-                  // Primeira instalação
-                  console.log('✅ Service Worker instalado pela primeira vez');
-                }
-              }
-            });
-          });
-        })
-        .catch((error) => {
-          console.error('❌ Falha ao registrar Service Worker:', error);
         });
-    }, 500);
+      })
+      .catch((error) => {
+        console.error('❌ Falha ao registrar Service Worker:', error);
+      });
   });
 }
 
 // Detectar instalação da PWA
 window.addEventListener('beforeinstallprompt', (e) => {
-  // Previne o mini-infobar de aparecer no mobile
   e.preventDefault();
-  // Salva o evento para ser usado depois
   window.deferredPrompt = e;
-  
-  console.log('PWA pode ser instalada');
 });
 
 window.addEventListener('appinstalled', () => {
-  console.log('PWA foi instalada com sucesso');
   window.deferredPrompt = null;
 });
 

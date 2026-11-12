@@ -46,11 +46,13 @@ function EmprestimosPage() {
     atualizarEmprestimo,
     livros,
     clientes,
+    turmasAcademicas,
     adicionarCliente,
     adicionarLivro
   } = useData();
   const [open, setOpen] = useState(false);
-  
+  const [busca, setBusca] = useState('');
+
   // Estados para o fluxo de empréstimo
   const [isbnBusca, setIsbnBusca] = useState('');
   const [livroSelecionado, setLivroSelecionado] = useState(null);
@@ -472,6 +474,70 @@ function EmprestimosPage() {
     return 'Ativo';
   };
 
+  const emprestimosComDetalhes = useMemo(() => {
+    const livrosPorId = new Map(livros.map((livro) => [String(livro.id), livro]));
+    const leitoresPorId = new Map(clientes.map((cliente) => [String(cliente.id), cliente]));
+    const turmasPorId = new Map(turmasAcademicas.map((turma) => [String(turma.id), turma]));
+
+    return emprestimos.map((emprestimo) => {
+      const livro = livrosPorId.get(String(emprestimo.livroId)) || {};
+      const leitorId = emprestimo.clienteId ?? emprestimo.leitorId;
+      const leitor = leitoresPorId.get(String(leitorId)) || {};
+      const turma = turmasPorId.get(String(leitor.turmaId ?? emprestimo.turmaId)) || {};
+      const dadosHistoricos = emprestimo.dadosTermoEmprestimo || {};
+
+      const serie = String(
+        turma.nomeSerie
+        || leitor.serie
+        || leitor.nomeSerie
+        || emprestimo.serieNome
+        || dadosHistoricos.leitorSerie
+        || ''
+      ).trim();
+      const nomeTurma = String(
+        turma.nomeTurma
+        || leitor.turma
+        || leitor.nomeTurma
+        || emprestimo.turmaNome
+        || dadosHistoricos.leitorTurma
+        || ''
+      ).trim();
+      const anoSerieDireto = String(
+        leitor.anoSerieTurma
+        || leitor.serieTurma
+        || leitor.turmaSerie
+        || leitor.serie_turma
+        || ''
+      ).trim();
+
+      return {
+        ...emprestimo,
+        detalhes: {
+          leitorNome: leitor.nome || emprestimo.clienteNome || dadosHistoricos.leitorNome || 'Leitor não encontrado',
+          anoSerie: anoSerieDireto || [serie, nomeTurma].filter((valor) => valor && valor !== 'N/A').join(' - ') || 'Não informado',
+          livroTitulo: livro.titulo || emprestimo.livroTitulo || dadosHistoricos.livroTitulo || 'Livro não encontrado',
+          livroAutor: livro.autor || dadosHistoricos.livroAutor || 'Não informado',
+          livroIsbn: livro.isbn || dadosHistoricos.livroISBN || 'Não informado'
+        }
+      };
+    });
+  }, [emprestimos, livros, clientes, turmasAcademicas]);
+
+  const emprestimosFiltrados = useMemo(() => {
+    const termo = busca.trim().toLowerCase();
+    if (!termo) return emprestimosComDetalhes;
+    return emprestimosComDetalhes.filter((emp) => {
+      const codigo = String(emp.codigoEmprestimo || `EMP${String(emp.id).padStart(6, '0')}`).toLowerCase();
+      const leitor = String(emp.detalhes.leitorNome).toLowerCase();
+      const livro = String(emp.detalhes.livroTitulo).toLowerCase();
+      const autor = String(emp.detalhes.livroAutor).toLowerCase();
+      const isbn = String(emp.detalhes.livroIsbn).toLowerCase();
+      const anoSerie = String(emp.detalhes.anoSerie).toLowerCase();
+      const status = getStatusLabel(emp).toLowerCase();
+      return [codigo, leitor, livro, autor, isbn, anoSerie, status].some((valor) => valor.includes(termo));
+    });
+  }, [emprestimosComDetalhes, busca]);
+
   return (
     <Layout title="Empréstimos">
       <Grid container spacing={2} sx={{ mb: 2 }}>
@@ -544,13 +610,33 @@ function EmprestimosPage() {
         </Button>
       </Box>
 
+      <Box sx={{ mb: 2 }}>
+        <TextField
+          fullWidth
+          size="small"
+          placeholder="Buscar por leitor, ano/série, livro, autor, ISBN, código ou status..."
+          value={busca}
+          onChange={(e) => setBusca(e.target.value)}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <Search fontSize="small" sx={{ color: 'text.secondary' }} />
+              </InputAdornment>
+            )
+          }}
+        />
+      </Box>
+
       <TableContainer component={Paper}>
         <Table>
           <TableHead>
             <TableRow>
               <TableCell>Código</TableCell>
               <TableCell>Leitor</TableCell>
-              <TableCell>Livro</TableCell>
+              <TableCell>Ano/Série</TableCell>
+              <TableCell>Nome do Livro</TableCell>
+              <TableCell>Autor</TableCell>
+              <TableCell>Código ISBN</TableCell>
               <TableCell>Data Empréstimo</TableCell>
               <TableCell>Data Devolução</TableCell>
               <TableCell>Status</TableCell>
@@ -560,14 +646,22 @@ function EmprestimosPage() {
           <TableBody>
             {emprestimos.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} align="center">
+                <TableCell colSpan={10} align="center">
                   <Typography color="text.secondary">
                     Nenhum empréstimo registrado
                   </Typography>
                 </TableCell>
               </TableRow>
+            ) : emprestimosFiltrados.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={10} align="center">
+                  <Typography color="text.secondary">
+                    Nenhum empréstimo encontrado para "{busca}"
+                  </Typography>
+                </TableCell>
+              </TableRow>
             ) : (
-              emprestimos.map((emprestimo) => (
+              emprestimosFiltrados.map((emprestimo) => (
                 <TableRow key={emprestimo.id}>
                   <TableCell>
                     <Chip 
@@ -577,8 +671,11 @@ function EmprestimosPage() {
                       variant="outlined"
                     />
                   </TableCell>
-                  <TableCell>{emprestimo.clienteNome}</TableCell>
-                  <TableCell>{emprestimo.livroTitulo}</TableCell>
+                  <TableCell>{emprestimo.detalhes.leitorNome}</TableCell>
+                  <TableCell>{emprestimo.detalhes.anoSerie}</TableCell>
+                  <TableCell>{emprestimo.detalhes.livroTitulo}</TableCell>
+                  <TableCell>{emprestimo.detalhes.livroAutor}</TableCell>
+                  <TableCell sx={{ whiteSpace: 'nowrap' }}>{emprestimo.detalhes.livroIsbn}</TableCell>
                   <TableCell>
                     {new Date(emprestimo.dataEmprestimo).toLocaleDateString('pt-BR')}
                   </TableCell>

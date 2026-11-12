@@ -17,6 +17,7 @@ export default function SyncStatus() {
   const [syncing, setSyncing] = useState(false);
   const [lastSync, setLastSync] = useState(null);
   const [cloudConnected, setCloudConnected] = useState(false);
+  const [cloudErrorMsg, setCloudErrorMsg] = useState('');
 
   const getCloudScopeHint = () => {
     if (cloudConfigScope === 'browser-local') {
@@ -44,8 +45,10 @@ export default function SyncStatus() {
     try {
       const status = await getSyncStatus();
       setCloudConnected(Boolean(status?.connected));
+      setCloudErrorMsg(status?.connected ? '' : (status?.message || ''));
     } catch (error) {
       setCloudConnected(false);
+      setCloudErrorMsg(error.message || '');
     }
   };
 
@@ -111,7 +114,7 @@ export default function SyncStatus() {
         icon: <CloudOffIcon />,
         label: 'Nuvem indisponível',
         color: 'error',
-        tooltip: `Sem conexao com Supabase - verifique projeto, credenciais e rede.${getCloudScopeHint()}`
+        tooltip: `Sem conexao com Supabase — projeto deletado ou pausado. ${cloudErrorMsg ? '(' + cloudErrorMsg + ')' : ''} Acesse supabase.com e verifique o projeto, depois atualize as credenciais em Configurações → Nuvem.${getCloudScopeHint()}`
       };
     }
 

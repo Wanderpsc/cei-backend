@@ -8,7 +8,7 @@
  * ═══════════════════════════════════════════════════════════════════════════
  */
 
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Container,
@@ -22,7 +22,9 @@ import {
   Button,
   Alert,
   Chip,
-  Stack
+  Stack,
+  CircularProgress,
+  Tooltip
 } from '@mui/material';
 import {
   Print as PrintIcon,
@@ -34,157 +36,233 @@ import {
   Code as CodeIcon,
   AccountTree as AccountTreeIcon,
   Layers as LayersIcon,
-  IntegrationInstructions as IntegrationIcon
+  IntegrationInstructions as IntegrationIcon,
+  PictureAsPdf as PdfIcon
 } from '@mui/icons-material';
 import Layout from '../components/Layout';
+import SourceCodeExplorer from '../components/SourceCodeExplorer';
+
+const loadCurrentDiagramMetadata = async () => {
+  const cacheBust = Date.now();
+  const response = await fetch(
+    `${process.env.PUBLIC_URL || ''}/system-diagram.json?v=${cacheBust}`,
+    { cache: 'no-store' }
+  );
+  if (!response.ok) throw new Error('Metadados do diagrama não encontrados');
+  return response.json();
+};
 
 export default function DiagramaSistemaPage() {
   const navigate = useNavigate();
+  const contentRef = useRef(null);
+  const [downloading, setDownloading] = useState(false);
+  const [sourceExplorerOpen, setSourceExplorerOpen] = useState(false);
+  const [diagramMetadata, setDiagramMetadata] = useState({
+    version: '3.8.0',
+    generatedAt: null,
+    totalFiles: 0,
+    totalLines: 0,
+    totalPages: 0,
+    totalComponents: 0,
+    directoryTree: ''
+  });
 
-  const handleImprimir = () => {
+  useEffect(() => {
+    loadCurrentDiagramMetadata()
+      .then(setDiagramMetadata)
+      .catch((error) => console.warn('Não foi possível atualizar o diagrama:', error));
+  }, []);
+
+  const refreshDiagramMetadata = async () => {
+    try {
+      const currentMetadata = await loadCurrentDiagramMetadata();
+      setDiagramMetadata(currentMetadata);
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+    } catch (error) {
+      console.warn('Não foi possível atualizar o diagrama:', error);
+    }
+  };
+
+  const diagramUpdatedAt = diagramMetadata.generatedAt
+    ? new Date(diagramMetadata.generatedAt).toLocaleString('pt-BR')
+    : 'carregando...';
+
+  const handleImprimir = async () => {
+    await refreshDiagramMetadata();
     window.print();
+  };
+
+  const handleDownload = async () => {
+    if (!contentRef.current || downloading) return;
+    setDownloading(true);
+    try {
+      await refreshDiagramMetadata();
+      const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
+        import('html2canvas'),
+        import('jspdf'),
+      ]);
+
+      const element = contentRef.current;
+      const canvas = await html2canvas(element, {
+        scale: 1.2,
+        useCORS: true,
+        allowTaint: false,
+        backgroundColor: '#ffffff',
+        windowWidth: 1200,
+        logging: false,
+        onclone: (_doc, el) => {
+          el.style.width = '1180px';
+          el.style.maxWidth = '1180px';
+          el.style.padding = '24px';
+        },
+      });
+
+      const imgData = canvas.toDataURL('image/jpeg', 0.92);
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+      const pageW = pdf.internal.pageSize.getWidth();
+      const pageH = pdf.internal.pageSize.getHeight();
+      const margin = 12;
+      const contentW = pageW - 2 * margin;
+      const contentH = pageH - 2 * margin;
+      const imgRatio = canvas.height / canvas.width;
+      const fullH = contentW * imgRatio;
+
+      let pageTop = 0;
+      while (pageTop < fullH) {
+        if (pageTop > 0) pdf.addPage();
+        pdf.addImage(imgData, 'JPEG', margin, margin - pageTop, contentW, fullH);
+        pageTop += contentH;
+      }
+
+      pdf.save('diagrama-sistema-cei.pdf');
+    } catch (err) {
+      console.error('Erro ao gerar PDF:', err);
+      window.print();
+    } finally {
+      setDownloading(false);
+    }
   };
 
   // Estilos otimizados para impressão
   const printStyles = `
+    @page {
+      size: A4 portrait;
+      margin: 1.5cm;
+    }
+
     @media print {
-      /* Ocultar elementos desnecessários */
-      @page {
-        size: A4;
-        margin: 1.5cm;
-      }
-      
-      body {
-        -webkit-print-color-adjust: exact;
-        print-color-adjust: exact;
+      /* Forçar impressão de cores e fundos */
+      html, body, * {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+        color-scheme: light only !important;
       }
 
-      /* Quebras de página adequadas */
+      /* Ocultar navegação */
+      header,
+      nav,
+      footer,
+      .no-print,
+      .MuiAppBar-root,
+      .MuiDrawer-root,
+      .MuiDrawer-paper,
+      .MuiToolbar-root {
+        display: none !important;
+      }
+
+      /* Remover offset do sidebar — ocupar página toda */
+      body, #root {
+        overflow: visible !important;
+      }
+
+      main {
+        margin-left: 0 !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        padding: 0 !important;
+        background: #fff !important;
+      }
+
+      .MuiContainer-root {
+        max-width: 100% !important;
+        width: 100% !important;
+        padding-left: 4px !important;
+        padding-right: 4px !important;
+      }
+
+      /* Remover sombras */
+      * {
+        box-shadow: none !important;
+      }
+
+      /* Quebras de página */
       .page-break {
-        page-break-before: always;
-        break-before: page;
+        page-break-before: always !important;
+        break-before: page !important;
       }
 
       .avoid-break {
-        page-break-inside: avoid;
-        break-inside: avoid;
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
       }
 
-      /* Reduzir tamanho dos títulos na impressão */
-      h3 {
-        font-size: 18px !important;
-        page-break-after: avoid;
-        margin-top: 0px;
-      }
+      /* Tipografia reduzida */
+      .MuiTypography-h3 { font-size: 17px !important; page-break-after: avoid !important; }
+      .MuiTypography-h4 { font-size: 14px !important; page-break-after: avoid !important; }
+      .MuiTypography-h5 { font-size: 12px !important; page-break-after: avoid !important; }
+      .MuiTypography-h6 { font-size: 11px !important; page-break-after: avoid !important; }
+      .MuiTypography-body1 { font-size: 10px !important; }
+      .MuiTypography-body2 { font-size: 9px !important; }
+      .MuiTypography-caption { font-size: 8px !important; }
 
-      h4 {
-        font-size: 16px !important;
-        page-break-before: always;
-        page-break-after: avoid;
-        margin-top: 0px;
-        padding-top: 10px;
-      }
-
-      h5 {
-        font-size: 14px !important;
-        page-break-after: avoid;
-        margin-top: 15px;
-      }
-
-      h6 {
-        font-size: 12px !important;
-        page-break-after: avoid;
-        margin-top: 10px;
-      }
-
-      /* Subtítulos e corpo de texto */
-      .MuiTypography-h4 {
-        font-size: 16px !important;
-      }
-
-      .MuiTypography-h5 {
-        font-size: 14px !important;
-      }
-
-      .MuiTypography-h6 {
-        font-size: 12px !important;
-      }
-
-      .MuiTypography-body1 {
-        font-size: 11px !important;
-      }
-
-      .MuiTypography-body2 {
-        font-size: 10px !important;
-      }
-
-      /* Ajuste de cores para impressão */
+      /* Arte ASCII — reduzir fonte para caber na página */
       pre {
+        font-size: 5.5px !important;
+        line-height: 1.15 !important;
+        white-space: pre !important;
+        word-break: normal !important;
+        overflow: hidden !important;
+        max-width: 100% !important;
         background-color: #f5f5f5 !important;
-        color: #000000 !important;
-        border: 1px solid #cccccc !important;
-        page-break-inside: avoid;
-        font-size: 7px !important;
-        padding: 8px !important;
-        white-space: pre-wrap !important;
-        word-wrap: break-word !important;
-        line-height: 1.2 !important;
+        color: #1a1a1a !important;
+        border: 1px solid #ccc !important;
+        padding: 6px !important;
+        page-break-inside: avoid !important;
       }
 
-      /* Cards e papers */
-      .MuiCard-root, .MuiPaper-root {
-        box-shadow: none !important;
-        border: 1px solid #e0e0e0 !important;
-        page-break-inside: avoid;
+      /* Cards — manter cores de fundo */
+      .MuiCard-root,
+      .MuiPaper-root {
+        border: 1px solid #ccc !important;
+        page-break-inside: avoid !important;
       }
 
-      /* Chips e badges */
+      /* Chips — manter cores originais */
       .MuiChip-root {
-        border: 1px solid #666 !important;
-        background-color: transparent !important;
+        font-size: 8px !important;
+        height: 20px !important;
+      }
+
+      .MuiChip-root svg {
+        width: 12px !important;
+        height: 12px !important;
+      }
+
+      /* Alertas — manter cores */
+      .MuiAlert-root {
+        page-break-inside: avoid !important;
         font-size: 9px !important;
       }
 
-      /* Alertas */
-      .MuiAlert-root {
-        border: 2px solid #666 !important;
-        page-break-inside: avoid;
-        font-size: 10px !important;
-      }
-
-      /* Grid items */
+      /* Grid */
       .MuiGrid-item {
-        page-break-inside: avoid;
+        page-break-inside: avoid !important;
       }
 
       /* Diagramas ASCII */
       .diagram-box {
         font-family: 'Courier New', monospace !important;
-        background-color: #ffffff !important;
-        border: 2px solid #000000 !important;
-        padding: 10px !important;
-        margin: 10px 0 !important;
-        page-break-inside: avoid;
-      }
-
-      .diagram-box pre {
-        background-color: #ffffff !important;
-        color: #000000 !important;
-        font-size: 7px !important;
-        line-height: 1.2 !important;
-        margin: 0 !important;
-      }
-
-      /* Garantir que seções principais iniciem em nova página */
-      .page-break.avoid-break {
-        page-break-before: always;
-        margin-top: 0;
-        padding-top: 0;
-      }
-
-      /* Primeiro elemento não quebra antes */
-      .page-break.avoid-break:first-of-type {
-        page-break-before: avoid;
+        page-break-inside: avoid !important;
       }
     }
   `;
@@ -194,7 +272,7 @@ export default function DiagramaSistemaPage() {
       <style>{printStyles}</style>
       <Container maxWidth="lg" sx={{ py: 3 }}>
         {/* Botões de ação - não imprimem */}
-        <Box sx={{ mb: 3, display: 'flex', gap: 2, '@media print': { display: 'none' } }}>
+        <Box sx={{ mb: 3, display: 'flex', gap: 2, flexWrap: 'wrap', '@media print': { display: 'none' } }}>
           <Button
             variant="outlined"
             startIcon={<ArrowBackIcon />}
@@ -210,9 +288,32 @@ export default function DiagramaSistemaPage() {
           >
             Imprimir Diagrama
           </Button>
+          <Tooltip title="Gera um PDF com cores e layout completo">
+            <span>
+              <Button
+                variant="contained"
+                startIcon={downloading ? <CircularProgress size={18} color="inherit" /> : <PdfIcon />}
+                onClick={handleDownload}
+                disabled={downloading}
+                color="success"
+              >
+                {downloading ? 'Gerando PDF...' : 'Baixar PDF'}
+              </Button>
+            </span>
+          </Tooltip>
+          <Button
+            variant="contained"
+            startIcon={<CodeIcon />}
+            onClick={() => setSourceExplorerOpen(true)}
+            color="secondary"
+          >
+            Ver Códigos-Fonte
+          </Button>
         </Box>
 
-        <Paper elevation={3} sx={{ p: 4 }}>
+        <SourceCodeExplorer open={sourceExplorerOpen} onClose={() => setSourceExplorerOpen(false)} />
+
+        <Paper elevation={3} sx={{ p: 4 }} ref={contentRef}>
           {/* Cabeçalho */}
           <Box className="avoid-break" sx={{ textAlign: 'center', mb: 4 }}>
             <ArchitectureIcon sx={{ fontSize: 80, color: 'primary.main', mb: 2 }} />
@@ -223,7 +324,7 @@ export default function DiagramaSistemaPage() {
               CEI - Controle Escolar Inteligente
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              Versão 3.7.1 | Atualizado em: 25 de Março de 2026
+              Versão {diagramMetadata.version} | Gerado automaticamente em: {diagramUpdatedAt}
             </Typography>
             <Stack direction="row" spacing={1} justifyContent="center" sx={{ mt: 1, flexWrap: 'wrap', gap: 1 }}>
               <Chip label="☁️ Supabase Integrado" color="success" sx={{ fontWeight: 'bold' }} />
@@ -232,6 +333,8 @@ export default function DiagramaSistemaPage() {
               <Chip label="📊 Relatório de Leitores" color="info" sx={{ fontWeight: 'bold' }} />
               <Chip label="🔍 Análise de Registros" color="warning" sx={{ fontWeight: 'bold' }} />
               <Chip label="☑️ Exclusão Seletiva em Lote" color="error" sx={{ fontWeight: 'bold' }} />
+              <Chip label="🔄 Realtime Multi-dispositivo" color="success" sx={{ fontWeight: 'bold' }} />
+              <Chip label="🔐 Login Resiliente" color="primary" sx={{ fontWeight: 'bold' }} />
             </Stack>
             
             {/* Aviso de Autenticidade */}
@@ -269,7 +372,7 @@ export default function DiagramaSistemaPage() {
                 <Typography variant="body2" component="div" sx={{ lineHeight: 2 }}>
                   <strong>6.</strong> Módulos e Funcionalidades<br />
                   <strong>7.</strong> Informações Técnicas e Métricas<br />
-                  <strong>8.</strong> Inovações Tecnológicas v3.7.1<br />
+                  <strong>8.</strong> Inovações Tecnológicas<br />
                   <strong>9.</strong> Integração Supabase (Nuvem)<br />
                   <strong>10.</strong> Diagramas Visuais da Arquitetura<br />
                   <strong>11.</strong> Certificado de Autenticidade
@@ -623,7 +726,7 @@ export default function DiagramaSistemaPage() {
               
               <Box sx={{ mt: 3, fontFamily: 'monospace', fontSize: '0.85rem' }}>
                 <pre style={{ backgroundColor: '#263238', color: '#81c784', padding: '20px', borderRadius: '8px', overflow: 'auto' }}>
-{`📦 CEI - CONTROLE ESCOLAR INTELIGENTE v3.5.2
+{diagramMetadata.directoryTree || `📦 CEI - CONTROLE ESCOLAR INTELIGENTE v${diagramMetadata.version}
 │
 ├── 📂 public/                      # Arquivos públicos estáticos
 │   ├── index.html                 # HTML principal (SPA)
@@ -790,7 +893,7 @@ export default function DiagramaSistemaPage() {
               <Grid item xs={12} md={4}>
                 <Card variant="outlined" sx={{ textAlign: 'center', p: 2 }}>
                   <Typography variant="h3" color="primary" fontWeight="bold">
-                    15,000+
+                    {diagramMetadata.totalLines.toLocaleString('pt-BR')}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
                     Linhas de Código
@@ -800,7 +903,7 @@ export default function DiagramaSistemaPage() {
               <Grid item xs={12} md={4}>
                 <Card variant="outlined" sx={{ textAlign: 'center', p: 2 }}>
                   <Typography variant="h3" color="primary" fontWeight="bold">
-                    40+
+                    {diagramMetadata.totalFiles}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
                     Arquivos de Código
@@ -810,7 +913,7 @@ export default function DiagramaSistemaPage() {
               <Grid item xs={12} md={4}>
                 <Card variant="outlined" sx={{ textAlign: 'center', p: 2 }}>
                   <Typography variant="h3" color="primary" fontWeight="bold">
-                    22+
+                    {diagramMetadata.totalPages}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
                     Páginas Funcionais
@@ -852,18 +955,19 @@ export default function DiagramaSistemaPage() {
 
           <Divider sx={{ my: 4 }} />
 
-          {/* 8. INOVAÇÕES TECNOLÓGICAS - VERSÃO 3.7.1 */}
+          {/* 8. INOVAÇÕES TECNOLÓGICAS - VERSÃO 3.8.0 */}
           <Box className="page-break avoid-break" sx={{ mb: 4 }}>
             <Typography variant="h4" fontWeight="bold" gutterBottom sx={{ color: 'success.main' }}>
-              ⭐ 8. INOVAÇÕES TECNOLÓGICAS (Versão 3.7.1)
+              ⭐ 8. INOVAÇÕES TECNOLÓGICAS (Versão 3.8.0)
             </Typography>
 
             <Alert severity="success" sx={{ mb: 3 }}>
               <Typography variant="subtitle1" fontWeight="bold">
-                🚀 Atualizações Recentes — Março 2026
+                🚀 Atualizações — Agosto 2026
               </Typography>
               <Typography variant="body2">
-                Novas funcionalidades: campo Categoria nos leitores (Estudante/Professor/Funcionário/Comunidade), relatório de Leitores Cadastrados com agrupamento por categoria e turma, exclusão em lote de leitores, acesso rápido em 2 linhas centralizadas, correção dos empréstimos didáticos em lote, análise automática de registros (Teste vs Comprador), exclusão em lote com checkboxes individuais para seleção/desseleção de instituições na gestão SuperAdmin.
+                <strong>v3.8.0 (Agosto/2026):</strong> Correção crítica do Realtime Supabase — tabela de leitores agora assinada corretamente (<code>leitores</code> em vez de <code>clientes</code>), garantindo sincronização instantânea entre múltiplos computadores. Login resiliente: credenciais padrão sempre funcionam mesmo quando a nuvem armazena versões antigas de senha (fallback para usuariosPadrao).<br /><br />
+                <strong>v3.7.1 (Março/2026):</strong> campo Categoria nos leitores (Estudante/Professor/Funcionário/Comunidade), relatório de Leitores Cadastrados com agrupamento por categoria e turma, exclusão em lote de leitores, análise automática de registros (Teste vs Comprador), exclusão em lote com checkboxes individuais para seleção/desseleção de instituições na gestão SuperAdmin.
               </Typography>
             </Alert>
 
@@ -1039,6 +1143,56 @@ export default function DiagramaSistemaPage() {
                   </CardContent>
                 </Card>
               </Grid>
+
+              {/* Realtime Multi-dispositivo - v3.8.0 */}
+              <Grid item xs={12} md={6}>
+                <Card variant="outlined" sx={{ height: '100%', borderColor: 'success.main', borderWidth: 2 }}>
+                  <CardContent>
+                    <Typography variant="h6" fontWeight="bold" gutterBottom color="success.dark">
+                      🔄 Sincronização Realtime Multi-dispositivo
+                    </Typography>
+                    <Typography variant="body2" paragraph>
+                      <strong>Correção crítica v3.8.0:</strong> Realtime Supabase agora assina a tabela correta (<code>leitores</code>) em vez de <code>clientes</code>, ativando sincronização instantânea de leitores entre dispositivos.
+                    </Typography>
+                    <Typography variant="body2" component="div">
+                      <strong>Como funciona:</strong>
+                      <ul style={{ marginTop: 8, paddingLeft: 20 }}>
+                        <li>Computador A cadastra leitor → Supabase notifica em tempo real</li>
+                        <li>Computador B recebe o evento e puxa os dados em ≤800ms</li>
+                        <li>Canal subscrito nas tabelas: livros, leitores, empréstimos, patrimônio, usuários</li>
+                        <li>Fallback automático: pull periódico a cada 20 segundos</li>
+                        <li>Push imediato ao salvar qualquer dado (debounce 1,5s)</li>
+                        <li>Reconexão automática em caso de perda de conexão</li>
+                      </ul>
+                    </Typography>
+                    <Chip label="CORRIGIDO v3.8.0" color="success" size="small" sx={{ mt: 1 }} />
+                  </CardContent>
+                </Card>
+              </Grid>
+
+              {/* Login Resiliente - v3.8.0 */}
+              <Grid item xs={12} md={6}>
+                <Card variant="outlined" sx={{ height: '100%', borderColor: 'primary.main', borderWidth: 2 }}>
+                  <CardContent>
+                    <Typography variant="h6" fontWeight="bold" gutterBottom color="primary">
+                      🔐 Login Resiliente (Credenciais Padrão)
+                    </Typography>
+                    <Typography variant="body2" paragraph>
+                      <strong>Correção v3.8.0:</strong> A função de login agora inclui fallback automático para as credenciais padrão do sistema, garantindo acesso mesmo quando a nuvem armazena uma versão desatualizada da senha.
+                    </Typography>
+                    <Typography variant="body2" component="div">
+                      <strong>Mecanismo de fallback:</strong>
+                      <ol style={{ marginTop: 8, paddingLeft: 20 }}>
+                        <li>Busca o usuário na lista sincronizada (LocalStorage/Nuvem)</li>
+                        <li>Se não encontrar com a senha informada, consulta <code>usuariosPadrao</code></li>
+                        <li>Garante que credenciais padrão sempre funcionam</li>
+                        <li>Usuários criados pela UI continuam com suas senhas personalizadas</li>
+                      </ol>
+                    </Typography>
+                    <Chip label="CORRIGIDO v3.8.0" color="primary" size="small" sx={{ mt: 1 }} />
+                  </CardContent>
+                </Card>
+              </Grid>
             </Grid>
 
             {/* Resumo Técnico das Inovações */}
@@ -1049,7 +1203,7 @@ export default function DiagramaSistemaPage() {
               <Grid container spacing={2}>
                 <Grid item xs={12} sm={6} md={3}>
                   <Typography variant="body2" align="center">
-                    <strong>7</strong><br />Módulos Novos
+                    <strong>9</strong><br />Módulos Novos
                   </Typography>
                 </Grid>
                 <Grid item xs={12} sm={6} md={3}>
@@ -1064,7 +1218,7 @@ export default function DiagramaSistemaPage() {
                 </Grid>
                 <Grid item xs={12} sm={6} md={3}>
                   <Typography variant="body2" align="center">
-                    <strong>+50</strong><br />Novas Funcionalidades
+                    <strong>+55</strong><br />Novas Funcionalidades
                   </Typography>
                 </Grid>
               </Grid>
@@ -1717,9 +1871,9 @@ FLUXO DE SINCRONIZAÇÃO:
               <Grid item xs={12} md={6}>
                 <Typography variant="body2">
                   <strong>Sistema:</strong> CEI - Controle Escolar Inteligente<br />
-                  <strong>Versão:</strong> 3.7.1<br />
+                  <strong>Versão:</strong> {diagramMetadata.version}<br />
                   <strong>Data de Criação:</strong> Janeiro de 2026<br />
-                  <strong>Última Atualização:</strong> 25 de Março de 2026<br />
+                  <strong>Última Atualização:</strong> {diagramUpdatedAt}<br />
                   <strong>Tipo:</strong> Software Proprietário (SaaS)<br />
                   <strong>Modalidade:</strong> Web Application + Cloud Database
                 </Typography>

@@ -1,11 +1,15 @@
 {
   "name": "cei---controle-escolar-inteligente---biblioteca",
   "version": "1.0.0",
+  "systemVersion": "3.8.0",
   "description": "CEI - Controle Escolar Inteligente - Sistema de Gestão de Biblioteca",
   "homepage": ".",
   "main": "index.js",
   "scripts": {
+    "generate:sources": "node scripts/generate-source-catalog.cjs",
+    "prestart": "npm run generate:sources",
     "start": "react-scripts start",
+    "prebuild": "npm run generate:sources",
     "build": "react-scripts build",
     "postbuild": "copy build\\index.html build\\200.html && copy public\\service-worker.js build\\service-worker.js && copy public\\consoleProtection.js build\\consoleProtection.js",
     "predeploy": "npm run build",
@@ -42,14 +46,17 @@
     "date-fns": "^4.1.0",
     "dotenv": "^16.6.1",
     "express": "^4.22.1",
+    "html2canvas": "^1.4.1",
     "html5-qrcode": "^2.3.8",
+    "jspdf": "^4.2.1",
     "mercadopago": "^2.11.0",
     "nodemailer": "^6.10.1",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
     "react-router-dom": "^7.11.0",
     "react-scripts": "^5.0.1",
-    "react-to-print": "^3.2.0"
+    "react-to-print": "^3.2.0",
+    "tesseract.js": "^7.0.0"
   },
   "devDependencies": {
     "gh-pages": "^6.3.0"

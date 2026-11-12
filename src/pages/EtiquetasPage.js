@@ -57,7 +57,7 @@ export default function EtiquetasPage() {
   const [busca, setBusca] = useState('');
   const [selecionados, setSelecionados] = useState(new Set());
   const [incluirPatrimonio, setIncluirPatrimonio] = useState(false);
-  const [tamanhoEtiqueta, setTamanhoEtiqueta] = useState('pequena'); // pequena, media, grande
+  const [tamanhoEtiqueta, setTamanhoEtiqueta] = useState('molde'); // molde, pequena, media, grande
 
   const todosOsCodigos = useMemo(() => {
     const codigos = [];
@@ -107,6 +107,28 @@ export default function EtiquetasPage() {
     }
   };
 
+  const TIPOS_PADRAO = ['Didático', 'Paradidático', 'Livro do Professor'];
+
+  const selecionarPorTipo = (tipo) => {
+    const codigosDoTipo = codigosFiltrados.filter(c =>
+      c.tipoItem.toLowerCase() === tipo.toLowerCase()
+    );
+    const todosSelecionados = codigosDoTipo.length > 0 &&
+      codigosDoTipo.every(c => selecionados.has(c.codigoUnitario));
+
+    setSelecionados(prev => {
+      const next = new Set(prev);
+      codigosDoTipo.forEach(c => {
+        if (todosSelecionados) {
+          next.delete(c.codigoUnitario);
+        } else {
+          next.add(c.codigoUnitario);
+        }
+      });
+      return next;
+    });
+  };
+
   const selecionarPorItem = (itemId) => {
     const codigosDoItem = codigosFiltrados.filter(c => c.itemId === itemId);
     const todosJaSelecionados = codigosDoItem.every(c => selecionados.has(c.codigoUnitario));
@@ -127,6 +149,9 @@ export default function EtiquetasPage() {
   const etiquetasSelecionadas = codigosFiltrados.filter(c => selecionados.has(c.codigoUnitario));
 
   const dimensoes = {
+    molde: { w: 23, h: 15, fontSize: 4, titleSize: 4, codeSize: 6,
+      cols: 7, rows: 18, colGap: 6, rowGap: 0,
+      marginTop: 13, marginLeft: 5 },
     pequena: { w: 50, h: 25, fontSize: 7, titleSize: 6, codeSize: 9 },
     media: { w: 70, h: 35, fontSize: 8, titleSize: 7, codeSize: 11 },
     grande: { w: 90, h: 45, fontSize: 9, titleSize: 8, codeSize: 13 }
@@ -140,7 +165,6 @@ export default function EtiquetasPage() {
     }
 
     const dim = dimensoes[tamanhoEtiqueta];
-    const colsPerRow = Math.floor(210 / (dim.w + 4)); // A4 width ~210mm
 
     const win = window.open('', '_blank');
     if (!win) {
@@ -148,16 +172,82 @@ export default function EtiquetasPage() {
       return;
     }
 
-    const etiquetasHtml = items.map(item => `
-      <div class="etiqueta">
-        <div class="titulo">${item.titulo.length > 30 ? item.titulo.substring(0, 28) + '...' : item.titulo}</div>
-        ${item.autor ? `<div class="autor">${item.autor.length > 25 ? item.autor.substring(0, 23) + '...' : item.autor}</div>` : ''}
-        <div class="codigo">${item.codigoUnitario}</div>
-        <div class="tipo">${item.tipoItem}${item.isbn ? ` | ${item.isbn}` : ''}</div>
-      </div>
-    `).join('');
+    if (tamanhoEtiqueta === 'molde') {
+      // Layout exato para o molde: 7 colunas × 18 linhas, 23×15mm por etiqueta
+      const etiquetasHtml = items.map(item => {
+        const titulo = item.titulo.length > 18 ? item.titulo.substring(0, 16) + '..' : item.titulo;
+        const autor = item.autor ? (item.autor.split(' ').pop() || item.autor).substring(0, 10) : '';
+        return `<div class="etiqueta"><div class="codigo">${item.codigoUnitario}</div><div class="titulo">${titulo}</div>${autor ? `<div class="autor">${autor}</div>` : ''}</div>`;
+      }).join('');
 
-    win.document.write(`<!DOCTYPE html>
+      win.document.write(`<!DOCTYPE html>
+<html><head><title>Etiquetas - CEI Biblioteca</title>
+<style>
+  @page { size: A4; margin: 0; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: Arial, Helvetica, sans-serif; width: 210mm; }
+  .container {
+    margin-top: ${dim.marginTop}mm;
+    margin-left: ${dim.marginLeft}mm;
+    display: grid;
+    grid-template-columns: repeat(${dim.cols}, ${dim.w}mm);
+    column-gap: ${dim.colGap}mm;
+    row-gap: ${dim.rowGap}mm;
+  }
+  .etiqueta {
+    width: ${dim.w}mm;
+    height: ${dim.h}mm;
+    border: 0.3pt solid #bbb;
+    padding: 0.8mm 1mm;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    overflow: hidden;
+    break-inside: avoid;
+  }
+  .codigo {
+    font-size: ${dim.codeSize}pt;
+    font-weight: bold;
+    font-family: 'Courier New', monospace;
+    line-height: 1.1;
+    letter-spacing: 0.3px;
+  }
+  .titulo {
+    font-size: ${dim.titleSize}pt;
+    font-weight: 600;
+    line-height: 1.1;
+    margin-top: 0.3mm;
+    overflow: hidden;
+    max-height: 4mm;
+  }
+  .autor {
+    font-size: ${dim.fontSize - 1}pt;
+    color: #555;
+    line-height: 1;
+    margin-top: 0.2mm;
+  }
+  @media print {
+    .etiqueta { border-color: transparent; }
+  }
+</style>
+</head><body>
+<div class="container">${etiquetasHtml}</div>
+</body></html>`);
+    } else {
+      const colsPerRow = Math.floor(210 / (dim.w + 4)); // A4 width ~210mm
+
+      const etiquetasHtml = items.map(item => `
+        <div class="etiqueta">
+          <div class="titulo">${item.titulo.length > 30 ? item.titulo.substring(0, 28) + '...' : item.titulo}</div>
+          ${item.autor ? `<div class="autor">${item.autor.length > 25 ? item.autor.substring(0, 23) + '...' : item.autor}</div>` : ''}
+          <div class="codigo">${item.codigoUnitario}</div>
+          <div class="tipo">${item.tipoItem}${item.isbn ? ` | ${item.isbn}` : ''}</div>
+        </div>
+      `).join('');
+
+      win.document.write(`<!DOCTYPE html>
 <html><head><title>Etiquetas - CEI Biblioteca</title>
 <style>
   @page { margin: 5mm; size: A4; }
@@ -203,6 +293,7 @@ export default function EtiquetasPage() {
 </head><body>
 <div class="container">${etiquetasHtml}</div>
 </body></html>`);
+    }
 
     win.document.close();
     setTimeout(() => win.print(), 300);
@@ -297,6 +388,7 @@ export default function EtiquetasPage() {
           SelectProps={{ native: true }}
           sx={{ minWidth: 120 }}
         >
+          <option value="molde">Molde PDF (23×15mm — 7 col × 18 lin)</option>
           <option value="pequena">Pequena (50×25mm)</option>
           <option value="media">Média (70×35mm)</option>
           <option value="grande">Grande (90×45mm)</option>
@@ -304,6 +396,22 @@ export default function EtiquetasPage() {
         <Button variant="outlined" startIcon={<SelectAll />} onClick={selecionarTodos} size="small">
           {selecionados.size === codigosFiltrados.length ? 'Desmarcar Todos' : 'Selecionar Todos'}
         </Button>
+        {TIPOS_PADRAO.map(tipo => {
+          const codigosDoTipo = codigosFiltrados.filter(c => c.tipoItem === tipo);
+          if (codigosDoTipo.length === 0) return null;
+          const todosSel = codigosDoTipo.every(c => selecionados.has(c.codigoUnitario));
+          return (
+            <Button
+              key={tipo}
+              variant={todosSel ? 'contained' : 'outlined'}
+              color="secondary"
+              size="small"
+              onClick={() => selecionarPorTipo(tipo)}
+            >
+              {tipo} ({codigosDoTipo.length})
+            </Button>
+          );
+        })}
         <Button
           variant="contained"
           startIcon={<Print />}

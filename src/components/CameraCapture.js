@@ -60,6 +60,15 @@ const CameraCapture = ({ open, onClose, onCapture, title = "Tirar Foto" }) => {
     }
   }, [open]);
 
+  // Conectar o stream ao <video> assim que o elemento estiver no DOM
+  // (startCamera roda enquanto loading=true, videoRef pode ser null naquele momento)
+  useEffect(() => {
+    if (stream && videoRef.current && !capturedImage) {
+      videoRef.current.srcObject = stream;
+      videoRef.current.play().catch(err => console.error('Erro ao reproduzir vídeo:', err));
+    }
+  }, [stream, capturedImage]);  // dispara após setLoading(false) re-renderizar o elemento
+
   const startCamera = async () => {
     try {
       setLoading(true);
@@ -86,16 +95,7 @@ const CameraCapture = ({ open, onClose, onCapture, title = "Tirar Foto" }) => {
       });
 
       setStream(mediaStream);
-      
-      // Conectar stream ao elemento de vídeo
-      if (videoRef.current) {
-        videoRef.current.srcObject = mediaStream;
-        // Forçar reprodução
-        videoRef.current.play().catch(err => {
-          console.error('Erro ao iniciar vídeo:', err);
-        });
-      }
-
+      // srcObject será atribuído pelo useEffect após setLoading(false) re-renderizar o <video>
       setLoading(false);
     } catch (err) {
       console.error('Erro ao acessar câmera:', err);
@@ -288,30 +288,33 @@ const CameraCapture = ({ open, onClose, onCapture, title = "Tirar Foto" }) => {
             overflow: 'hidden'
           }}>
 
-            {/* ── CÂMERA AO VIVO ── */}
+            {/* Vídeo sempre no DOM para que videoRef.current esteja disponível quando
+                o useEffect rodar após setLoading(false) */}
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              muted
+              onLoadedMetadata={(e) => {
+                e.target.play().catch(err => console.error('Play error:', err));
+              }}
+              style={{
+                display: capturedImage ? 'none' : 'block',
+                position: 'absolute',
+                top: 0, left: 0,
+                width: '100%', height: '100%',
+                objectFit: 'cover',
+                transform: facingMode === 'user'
+                  ? `scale(${zoomLevel}) scaleX(-1)`
+                  : `scale(${zoomLevel})`,
+                transformOrigin: 'center center',
+                transition: 'transform 0.08s'
+              }}
+            />
+
+            {/* ── CONTROLES CÂMERA AO VIVO ── */}
             {!capturedImage && (
               <>
-                <video
-                  ref={videoRef}
-                  autoPlay
-                  playsInline
-                  muted
-                  onLoadedMetadata={(e) => {
-                    e.target.play().catch(err => console.error('Play error:', err));
-                  }}
-                  style={{
-                    position: 'absolute',
-                    top: 0, left: 0,
-                    width: '100%', height: '100%',
-                    objectFit: 'cover',
-                    transform: facingMode === 'user'
-                      ? `scale(${zoomLevel}) scaleX(-1)`
-                      : `scale(${zoomLevel})`,
-                    transformOrigin: 'center center',
-                    transition: 'transform 0.08s'
-                  }}
-                />
-
                 {/* Botão de trocar câmera */}
                 {stream && (
                   <IconButton
@@ -328,7 +331,7 @@ const CameraCapture = ({ open, onClose, onCapture, title = "Tirar Foto" }) => {
                   </IconButton>
                 )}
 
-                {/* Controle de zoom */}
+                {/* Controle de zoom — somente quando há stream */}
                 {stream && (
                   <Box sx={{
                     position: 'absolute',

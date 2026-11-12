@@ -1,106 +1,89 @@
-// Service Worker para CEI - Controle Escolar Inteligente
-// 🛡️ Sistema de Atualização Automática com Proteção de Dados
-const CACHE_NAME = 'cei-v3.5.4-sw-path-fix'; // Corrige paths de cache para GitHub Pages em /cei-backend
-const APP_BASE = self.location.pathname.replace(/\/service-worker\.js$/, '');
-const withBase = (path) => `${APP_BASE}${path}`;
+// Service Worker CEI Biblioteca — Offline First
+// Versão incrementada a cada deploy para forçar atualização do cache
+const CACHE_VERSION = 'cei-v3.6.0';
+const STATIC_CACHE = `${CACHE_VERSION}-static`;
+const DYNAMIC_CACHE = `${CACHE_VERSION}-dynamic`;
 
-const urlsToCache = [
-  withBase('/'),
-  withBase('/index.html'),
-  withBase('/manifest.json'),
-  withBase('/logo192.png'),
-  withBase('/logo512.png')
+// Arquivos essenciais do app shell (pré-cacheados na instalação)
+const APP_SHELL = [
+  '/',
+  '/index.html',
+  '/200.html',
+  '/manifest.json',
+  '/logo192.png',
+  '/logo512.png',
+  '/favicon.ico',
 ];
 
-// Instalação do Service Worker
+// ── INSTALL: pré-cacheia o app shell ──────────────────────────────────────────
 self.addEventListener('install', (event) => {
-  console.log('🔧 [SW] Instalando nova versão...');
   event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then((cache) => {
-        console.log('📦 [SW] Cache aberto:', CACHE_NAME);
-        return cache.addAll(urlsToCache.map(url => new Request(url, {cache: 'reload'})))
-          .catch(err => {
-            console.log('⚠️ [SW] Erro ao adicionar recursos ao cache:', err);
-            // Continua mesmo com alguns erros de cache
-          });
-      })
+    caches.open(STATIC_CACHE).then((cache) => {
+      return cache.addAll(APP_SHELL.map(url => new Request(url, { cache: 'reload' })))
+        .catch(() => {}); // continua mesmo que algum recurso falhe
+    })
   );
-  // Ativa imediatamente a nova versão
   self.skipWaiting();
 });
 
-// Ativação do Service Worker
+// ── ACTIVATE: remove caches de versões antigas ────────────────────────────────
 self.addEventListener('activate', (event) => {
-  console.log('✅ [SW] Ativando nova versão...');
-  
   event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames.map((cacheName) => {
-          if (cacheName !== CACHE_NAME) {
-            console.log('🗑️ [SW] Removendo cache antigo:', cacheName);
-            return caches.delete(cacheName);
-          }
-        })
-      );
-    }).then(() => {
-      console.log('🎉 [SW] Nova versão ativada com sucesso!');
-      console.log('📌 [SW] Versão atual:', CACHE_NAME);
-      
-      // Notificar todos os clientes sobre a atualização
-      return self.clients.matchAll().then(clients => {
-        clients.forEach(client => {
-          client.postMessage({
-            type: 'SW_UPDATED',
-            version: CACHE_NAME,
-            message: 'Sistema atualizado! Seus dados foram preservados.'
-          });
-        });
-      });
-    })
+    caches.keys().then((keys) =>
+      Promise.all(
+        keys.filter(k => k.startsWith('cei-') && k !== STATIC_CACHE && k !== DYNAMIC_CACHE)
+          .map(k => caches.delete(k))
+      )
+    ).then(() => self.clients.claim())
   );
-  
-  // Assume controle de todos os clientes imediatamente
-  self.clients.claim();
 });
 
-// Interceptação de requisições
+// ── FETCH: Cache-First para assets estáticos, Network-First para o resto ──────
 self.addEventListener('fetch', (event) => {
-  event.respondWith(
-    caches.match(event.request)
-      .then((response) => {
-        // Cache hit - retorna a resposta do cache
-        if (response) {
-          return response;
-        }
+  const { request } = event;
+  const url = new URL(request.url);
 
-        return fetch(event.request).then(
-          (response) => {
-            // Verifica se recebemos uma resposta válida
-            if (!response || response.status !== 200 || response.type !== 'basic') {
-              return response;
-            }
+  // Ignora requisições não-GET e de outras origens (APIs externas)
+  if (request.method !== 'GET') return;
+  if (url.origin !== self.location.origin) return;
 
-            // Clona a resposta
-            const responseToCache = response.clone();
+  // Assets JS/CSS/imagens/fontes: Cache-First (nunca mudam sem novo hash no nome)
+  const isStaticAsset = /\.(js|css|png|jpg|jpeg|gif|svg|ico|woff2?|ttf)$/.test(url.pathname);
 
-            caches.open(CACHE_NAME)
-              .then((cache) => {
-                cache.put(event.request, responseToCache);
-              });
-
-            return response;
+  if (isStaticAsset) {
+    event.respondWith(
+      caches.match(request).then((cached) => {
+        if (cached) return cached;
+        return fetch(request).then((response) => {
+          if (response && response.status === 200) {
+            const clone = response.clone();
+            caches.open(DYNAMIC_CACHE).then(c => c.put(request, clone));
           }
-        ).catch(() => {
-          // Se falhar, tenta retornar a página principal do cache
-          return caches.match(withBase('/index.html'));
-        });
+          return response;
+        }).catch(() => caches.match('/index.html'));
+      })
+    );
+    return;
+  }
+
+  // Navegação e HTML: Network-First com fallback para index.html cached
+  event.respondWith(
+    fetch(request)
+      .then((response) => {
+        if (response && response.status === 200) {
+          const clone = response.clone();
+          caches.open(STATIC_CACHE).then(c => c.put(request, clone));
+        }
+        return response;
+      })
+      .catch(() => {
+        return caches.match(request)
+          .then(cached => cached || caches.match('/index.html'));
       })
   );
 });
 
-// Mensagens do Service Worker
+// ── MENSAGENS ─────────────────────────────────────────────────────────────────
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SKIP_WAITING') {
     self.skipWaiting();

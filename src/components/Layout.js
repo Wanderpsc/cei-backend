@@ -23,7 +23,8 @@ import {
   Card,
   CardContent,
   CardActionArea,
-  Grid
+  Grid,
+  Tooltip
 } from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
 import DashboardIcon from '@mui/icons-material/Dashboard';
@@ -49,6 +50,7 @@ import HistoryEduIcon from '@mui/icons-material/HistoryEdu';
 import FactCheckIcon from '@mui/icons-material/FactCheck';
 import CloudIcon from '@mui/icons-material/Cloud';
 import LabelIcon from '@mui/icons-material/Label';
+import GetAppIcon from '@mui/icons-material/GetApp';
 
 const drawerWidth = 240;
 const mobileDrawerWidth = 200;
@@ -56,6 +58,11 @@ const mobileDrawerWidth = 200;
 export default function Layout({ children }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [anchorEl, setAnchorEl] = useState(null);
+  const [installPrompt, setInstallPrompt] = useState(null);
+  const [isInstalled, setIsInstalled] = useState(
+    window.matchMedia('(display-mode: standalone)').matches ||
+    window.navigator.standalone === true
+  );
   const [quickAccessBarHeight, setQuickAccessBarHeight] = useState(0);
   const quickAccessBarRef = useRef(null);
   const { usuarioLogado, logout, instituicoes } = useData();
@@ -101,6 +108,21 @@ export default function Layout({ children }) {
   };
 
   const menuItems = getMenuItems();
+
+  // Capturar evento de instalação do PWA
+  useEffect(() => {
+    const handler = (e) => { e.preventDefault(); setInstallPrompt(e); };
+    window.addEventListener('beforeinstallprompt', handler);
+    window.addEventListener('appinstalled', () => { setIsInstalled(true); setInstallPrompt(null); });
+    return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
+
+  const handleInstallPWA = async () => {
+    if (!installPrompt) return;
+    installPrompt.prompt();
+    const { outcome } = await installPrompt.userChoice;
+    if (outcome === 'accepted') { setIsInstalled(true); setInstallPrompt(null); }
+  };
 
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen);
@@ -346,6 +368,24 @@ export default function Layout({ children }) {
             <SyncStatus />
           </Box>
 
+          {/* Botão de instalar PWA */}
+          {!isInstalled && installPrompt && (
+            <Tooltip title="Instalar App (funciona offline)">
+              <IconButton
+                color="inherit"
+                onClick={handleInstallPWA}
+                sx={{
+                  mr: 1,
+                  background: 'rgba(255, 255, 255, 0.15)',
+                  border: '1px solid rgba(255, 255, 255, 0.3)',
+                  '&:hover': { background: 'rgba(255, 255, 255, 0.25)' },
+                }}
+              >
+                <GetAppIcon />
+              </IconButton>
+            </Tooltip>
+          )}
+
           <IconButton 
             color="inherit"
             sx={{
@@ -435,6 +475,7 @@ export default function Layout({ children }) {
       {quickAccessItems.length > 0 && (
         <Box
           ref={quickAccessBarRef}
+          className="no-print"
           sx={{
             position: 'fixed',
             top: { xs: 56, sm: 64 },

@@ -610,7 +610,7 @@ export const keepAlive = async () => {
   if (!isCloudEnabled || !supabase) return;
 
   const KEEP_ALIVE_KEY = 'cei_supabase_last_keepalive';
-  const INTERVAL_MS = 3 * 24 * 60 * 60 * 1000; // 3 dias
+const INTERVAL_MS = 1 * 24 * 60 * 60 * 1000; // 1 dia
 
   try {
     const last = parseInt(localStorage.getItem(KEEP_ALIVE_KEY) || '0', 10);
@@ -630,6 +630,70 @@ export const keepAlive = async () => {
   }
 };
 
+/**
+ * Realtime: subscribes to all data tables for an institution.
+ * Returns a Supabase channel that can be removed via unsubscribeFromRealtime().
+ *
+ * @param {number|string} instituicaoId - Institution ID to filter by.
+ * @param {function} onChangeCallback - Called with (tableName, payload) when data changes.
+ * @returns {object|null} Supabase channel or null if Realtime unavailable.
+ */
+export const subscribeToRealtimeChanges = (instituicaoId, onChangeCallback) => {
+  if (!isCloudEnabled || !supabase) {
+    console.log('☁️ [REALTIME] Supabase não configurado — Realtime desabilitado');
+    return null;
+  }
+
+  const REALTIME_TABLES = ['livros', 'leitores', 'emprestimos', 'patrimonio', 'usuarios'];
+  const channelName = `cei-rt-${instituicaoId}-${Date.now()}`;
+
+  try {
+    let ch = supabase.channel(channelName, { config: { broadcast: { ack: false } } });
+
+    REALTIME_TABLES.forEach((table) => {
+      const filter = table !== 'instituicoes'
+        ? `instituicao_id=eq.${instituicaoId}`
+        : `id=eq.${instituicaoId}`;
+
+      ch = ch.on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table, filter },
+        (payload) => {
+          console.log(`🔄 [REALTIME] ${table} → ${payload.eventType}`);
+          onChangeCallback(table, payload);
+        }
+      );
+    });
+
+    ch.subscribe((status, err) => {
+      if (status === 'SUBSCRIBED') {
+        console.log(`✅ [REALTIME] Canal ${channelName} subscrito (inst. ${instituicaoId})`);
+      } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+        console.warn(`⚠️ [REALTIME] Canal ${channelName}: ${status}`, err);
+      }
+    });
+
+    return ch;
+  } catch (err) {
+    console.warn('⚠️ [REALTIME] Erro ao criar canal Realtime:', err);
+    return null;
+  }
+};
+
+/**
+ * Cancela a assinatura de um canal Realtime retornado por subscribeToRealtimeChanges.
+ * @param {object|null} channel - Canal Supabase retornado anteriormente.
+ */
+export const unsubscribeFromRealtime = (channel) => {
+  if (!channel || !supabase) return;
+  try {
+    supabase.removeChannel(channel);
+    console.log('🔕 [REALTIME] Canal removido');
+  } catch (err) {
+    // Silencioso
+  }
+};
+
 export default {
   syncToCloud,
   syncFromCloud,
@@ -638,5 +702,7 @@ export default {
   backupToCloud,
   restoreFromCloud,
   getSyncStatus,
-  keepAlive
+  keepAlive,
+  subscribeToRealtimeChanges,
+  unsubscribeFromRealtime
 };
