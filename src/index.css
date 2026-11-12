@@ -69,12 +69,13 @@ body {
   }
 
   .avoid-break,
-  .MuiCard-root,
-  .MuiPaper-root,
-  .MuiTableRow-root,
-  .MuiTableContainer-root {
+  .MuiTableRow-root {
     page-break-inside: avoid;
     break-inside: avoid;
+  }
+
+  thead {
+    display: table-header-group;
   }
 
   .MuiPaper-root {
@@ -111,7 +112,10 @@ body {
 
   body.print-scope-active .print-scope {
     position: absolute;
-    inset: 0;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: auto;
     width: 100%;
     margin: 0;
     padding: 0;

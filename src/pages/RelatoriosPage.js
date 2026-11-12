@@ -49,6 +49,29 @@ const normalizarTexto = (valor) => {
     .replace(/\s+/g, ' ');
 };
 
+const escapeHtml = (valor) => String(valor ?? '')
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;');
+
+const montarTabelaHtmlImpressao = (colunas, dados) => {
+  if (!dados || dados.length === 0) {
+    return '<p class="vazio">Nenhum dado disponível.</p>';
+  }
+
+  const cabecalho = colunas.map((col) => `<th>${escapeHtml(col)}</th>`).join('');
+  const linhas = dados.map((row) => {
+    const celulas = Object.entries(row)
+      .filter(([key]) => !key.startsWith('_'))
+      .map(([, valor]) => `<td>${escapeHtml(valor)}</td>`)
+      .join('');
+    return `<tr>${celulas}</tr>`;
+  }).join('');
+
+  return `<table class="dados"><thead><tr>${cabecalho}</tr></thead><tbody>${linhas}</tbody></table>`;
+};
+
 const buildLegacyTurmaKey = (serieNome, turmaNome) => {
   return `legacy:${normalizarTexto(serieNome)}|${normalizarTexto(turmaNome)}`;
 };
@@ -209,14 +232,20 @@ function RelatoriosPage() {
     logoUrl: ''
   });
   const logoInputRef = useRef(null);
+  // Guarda para qual instituição já inicializamos o cabeçalho,
+  // evitando que o sync periódico apague o que o usuário digitou.
+  const cabecalhoInitForRef = useRef(null);
 
-  // Carregar configuração salva da instituição
+  // Carregar configuração salva da instituição — somente uma vez por instituição ativa
   React.useEffect(() => {
+    if (cabecalhoInitForRef.current === instituicaoAtiva) return;
     const instituicao = instituicoes.find(i => i.id === instituicaoAtiva);
-    if (instituicao?.configRelatorios) {
+    if (!instituicao) return;
+    cabecalhoInitForRef.current = instituicaoAtiva;
+    if (instituicao.configRelatorios) {
       const logoFallback = instituicao.configRelatorios.logoUrl || instituicao.logoCabecalho || instituicao.logoEscola || '';
       setConfigCabecalho({ ...instituicao.configRelatorios, logoUrl: logoFallback });
-    } else if (instituicao) {
+    } else {
       setConfigCabecalho({
         titulo: instituicao.nomeInstituicao || '',
         subtitulo: `${instituicao.cidade || ''}, ${instituicao.estado || ''}`,
@@ -1049,12 +1078,118 @@ function RelatoriosPage() {
     }
   };
 
+  const gerarHtmlImpressao = () => {
+    const instituicao = instituicoes.find(i => i.id === instituicaoAtiva);
+    const tituloEntidade = configCabecalho.titulo || instituicao?.nomeInstituicao || 'Sistema de Controle Escolar Inteligente';
+    const subtituloEntidade = configCabecalho.subtitulo
+      || [instituicao?.cidade, instituicao?.estado].filter(Boolean).join(', ');
+    const contatoEntidade = [
+      instituicao?.cnpj ? `CNPJ: ${escapeHtml(instituicao.cnpj)}` : '',
+      instituicao?.telefoneContato ? `Tel.: ${escapeHtml(instituicao.telefoneContato)}` : '',
+      instituicao?.emailContato ? escapeHtml(instituicao.emailContato) : ''
+    ].filter(Boolean).join(' &bull; ');
+    const logoHtml = configCabecalho.logoUrl
+      ? `<img src="${configCabecalho.logoUrl}" alt="Logo" />`
+      : '';
+
+    const resumoHtml = relatorio.resumo
+      ? `<div class="resumo">${Object.entries(relatorio.resumo).map(([key, value]) => {
+          const label = key.replace(/([A-Z])/g, ' $1').trim();
+          const valorFormatado = typeof value === 'number' && key.toLowerCase().includes('receita')
+            ? `R$ ${value.toFixed(2)}`
+            : value;
+          return `<div><span>${escapeHtml(label)}</span><b>${escapeHtml(valorFormatado)}</b></div>`;
+        }).join('')}</div>`
+      : '';
+
+    let corpoHtml;
+    if (relatorio.secoes) {
+      corpoHtml = relatorio.secoes.map((secao) => {
+        const conteudo = secao.subsecoes
+          ? secao.subsecoes.map((sub) =>
+              `<h4 class="subsecao">${escapeHtml(sub.titulo)} — ${sub.dados.length} registro(s)</h4>${montarTabelaHtmlImpressao(sub.colunas, sub.dados)}`
+            ).join('')
+          : montarTabelaHtmlImpressao(secao.colunas, secao.dados);
+        return `<h3 class="secao">${escapeHtml(secao.titulo)}</h3>${conteudo}`;
+      }).join('');
+    } else {
+      corpoHtml = montarTabelaHtmlImpressao(relatorio.colunas, relatorio.dados);
+    }
+
+    return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<title>${escapeHtml(relatorio.titulo)} - ${escapeHtml(tituloEntidade)}</title>
+<style>
+  @page { size: A4; margin: 1.2cm; }
+  body { font-family: Arial, Helvetica, sans-serif; color: #222; margin: 0; }
+  table.folha { width: 100%; border-collapse: collapse; }
+  .timbrado { text-align: center; border-bottom: 3px double #1565c0; padding-bottom: 8px; margin-bottom: 10px; }
+  .timbrado img { height: 70px; object-fit: contain; }
+  .timbrado h1 { margin: 4px 0 0; font-size: 18px; color: #1565c0; }
+  .timbrado p { margin: 2px 0 0; font-size: 12px; color: #555; }
+  h2.titulo-relatorio { font-size: 15px; margin: 10px 0 2px; }
+  p.gerado { font-size: 10px; color: #777; margin: 0 0 8px; }
+  .resumo { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 12px; }
+  .resumo div { border: 1px solid #ddd; border-radius: 4px; padding: 4px 10px; font-size: 10px; background: #f7f7f7; text-transform: capitalize; }
+  .resumo b { display: block; font-size: 13px; }
+  table.dados { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
+  table.dados thead { display: table-header-group; }
+  table.dados th { background: #1565c0; color: #fff; font-size: 10.5px; padding: 5px 6px; text-align: left; border: 1px solid #1565c0; }
+  table.dados td { font-size: 10.5px; padding: 4px 6px; border: 1px solid #ccc; vertical-align: top; }
+  table.dados tbody tr:nth-child(even) td { background: #f3f6fb; }
+  table.dados tr { page-break-inside: avoid; }
+  h3.secao { background: #1565c0; color: #fff; font-size: 12px; padding: 4px 8px; margin: 12px 0 4px; border-radius: 3px; }
+  h4.subsecao { background: #e3eaf5; font-size: 11px; padding: 3px 8px; margin: 8px 0 4px; }
+  p.vazio { font-size: 11px; color: #777; }
+  .rodape { margin-top: 14px; font-size: 10px; color: #666; text-align: right; border-top: 1px solid #ccc; padding-top: 4px; }
+</style>
+</head>
+<body>
+<table class="folha">
+  <thead>
+    <tr><td>
+      <div class="timbrado">
+        ${logoHtml}
+        <h1>${escapeHtml(tituloEntidade)}</h1>
+        ${subtituloEntidade ? `<p>${escapeHtml(subtituloEntidade)}</p>` : ''}
+        ${contatoEntidade ? `<p>${contatoEntidade}</p>` : ''}
+      </div>
+    </td></tr>
+  </thead>
+  <tbody>
+    <tr><td>
+      <h2 class="titulo-relatorio">${escapeHtml(relatorio.titulo)}</h2>
+      <p class="gerado">Gerado em: ${new Date().toLocaleString('pt-BR')}</p>
+      ${resumoHtml}
+      ${corpoHtml}
+      <p class="rodape">Total de registros: ${relatorio.dados.length}</p>
+    </td></tr>
+  </tbody>
+</table>
+</body>
+</html>`;
+  };
+
   const handleImprimir = () => {
-    imprimirEscopo();
+    if (!relatorio) return;
+
+    const win = window.open('', '_blank');
+    if (!win) {
+      // Popup bloqueado: cai para a impressão da própria página
+      imprimirEscopo();
+      return;
+    }
+
+    win.document.write(gerarHtmlImpressao());
+    win.document.close();
+    win.focus();
+    setTimeout(() => win.print(), 400);
   };
 
   const handleDownloadPDF = () => {
-    imprimirEscopo(); // Usar impressão do navegador para salvar em PDF
+    handleImprimir(); // Na janela de impressão, escolher "Salvar como PDF"
   };
 
   const handleDownloadExcel = () => {
@@ -1062,8 +1197,11 @@ function RelatoriosPage() {
 
     // Criar CSV (compatível com Excel)
     const headers = relatorio.colunas.join(',');
-    const rows = relatorio.dados.map(row => 
-      Object.values(row).map(val => `"${val}"`).join(',')
+    const rows = relatorio.dados.map(row =>
+      Object.entries(row)
+        .filter(([key]) => !key.startsWith('_'))
+        .map(([, val]) => `"${String(val ?? '').replace(/"/g, '""')}"`)
+        .join(',')
     ).join('\n');
     
     const csv = `${headers}\n${rows}`;
