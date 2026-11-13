@@ -27,6 +27,7 @@ import {
 } from '@mui/icons-material';
 import { useData } from '../context/DataContext';
 import { isCloudEnabled } from '../services/supabaseClient';
+import { comprimirImagemArquivo } from '../utils/imageUtils';
 
 export default function ConfiguracoesPage() {
   const { 
@@ -102,24 +103,29 @@ export default function ConfiguracoesPage() {
     }
   }, [instituicaoAtiva, instituicoes]);
 
-  const handleImagemUpload = (e, tipo) => {
+  const handleImagemUpload = async (e, tipo) => {
     const file = e.target.files[0];
-    if (file) {
-      if (file.size > 2 * 1024 * 1024) { // 2MB
-        setErro('A imagem deve ter no máximo 2MB');
-        return;
-      }
+    // Zera o valor para permitir re-seleção do mesmo arquivo
+    e.target.value = '';
+    if (!file) return;
 
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        if (tipo === 'logo') {
-          setConfigs(prev => ({ ...prev, logoCabecalho: reader.result, logoEscola: reader.result }));
-        } else if (tipo === 'emblema') {
-          setConfigs(prev => ({ ...prev, logoEscola: reader.result, logoCabecalho: reader.result }));
-        }
-        setErro('');
-      };
-      reader.readAsDataURL(file);
+    if (!file.type.startsWith('image/')) {
+      setErro('Selecione apenas arquivos de imagem');
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) { // 10MB (será comprimida abaixo)
+      setErro('A imagem deve ter no máximo 10MB');
+      return;
+    }
+
+    try {
+      // Comprime/redimensiona para não estourar a quota do localStorage.
+      const imagemComprimida = await comprimirImagemArquivo(file, { maxDimensao: 600 });
+      setConfigs(prev => ({ ...prev, logoCabecalho: imagemComprimida, logoEscola: imagemComprimida }));
+      setErro('');
+    } catch (error) {
+      console.error('Erro ao processar imagem do logo:', error);
+      setErro('Não foi possível processar a imagem selecionada');
     }
   };
 

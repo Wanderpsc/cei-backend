@@ -39,6 +39,7 @@ import {
 } from '@mui/icons-material';
 import { useData } from '../context/DataContext';
 import { imprimirEscopo } from '../utils/printUtils';
+import { comprimirImagemArquivo } from '../utils/imageUtils';
 
 const normalizarTexto = (valor) => {
   return String(valor || '')
@@ -1058,23 +1059,28 @@ function RelatoriosPage() {
     setDialogConfig(false);
   };
 
-  const handleUploadLogo = (event) => {
+  const handleUploadLogo = async (event) => {
     const file = event.target.files[0];
-    if (file) {
-      if (!file.type.startsWith('image/')) {
-        alert('Selecione apenas arquivos de imagem');
-        return;
-      }
-      if (file.size > 1 * 1024 * 1024) {
-        alert('A imagem deve ter no máximo 1MB');
-        return;
-      }
+    // Zera o valor para permitir re-seleção do mesmo arquivo
+    event.target.value = '';
+    if (!file) return;
 
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setConfigCabecalho({ ...configCabecalho, logoUrl: reader.result });
-      };
-      reader.readAsDataURL(file);
+    if (!file.type.startsWith('image/')) {
+      alert('Selecione apenas arquivos de imagem');
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) { // 10MB (será comprimida abaixo)
+      alert('A imagem deve ter no máximo 10MB');
+      return;
+    }
+
+    try {
+      // Comprime/redimensiona para não estourar a quota do localStorage.
+      const imagemComprimida = await comprimirImagemArquivo(file, { maxDimensao: 600 });
+      setConfigCabecalho({ ...configCabecalho, logoUrl: imagemComprimida });
+    } catch (error) {
+      console.error('Erro ao processar imagem do logo:', error);
+      alert('Não foi possível processar a imagem selecionada');
     }
   };
 

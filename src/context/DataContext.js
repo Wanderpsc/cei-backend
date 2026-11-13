@@ -4,6 +4,7 @@ import { initDataProtection, createBackup } from '../utils/dataProtection';
 import { isCloudEnabled } from '../services/supabaseClient';
 import { syncFromCloud, syncToCloud, deleteFromCloud, keepAlive, subscribeToRealtimeChanges, unsubscribeFromRealtime } from '../services/syncService';
 import { garantirSessaoSupabase, encerrarSessaoSupabase } from '../services/authService';
+import { comprimirImagemDataUrl } from '../utils/imageUtils';
 
 // Versão do sistema - IMPORTANTE: Incrementar a cada atualização significativa
 const SYSTEM_VERSION = '3.5.2';
@@ -24,6 +25,8 @@ const MAX_LOG_ATIVIDADES = 3000;
 const MAX_BACKUP_SNAPSHOTS = 3;
 const INSTITUTION_MEDIA_STORAGE_KEY = 'cei_institution_media_v1';
 const INSTITUTION_MEDIA_FIELDS = ['logoCabecalho', 'logoEscola'];
+// Marcador para não gravar a mesma imagem duas vezes no snapshot de mídia.
+const INSTITUTION_MEDIA_MESMO_LOGO = '@mesmo-que-logoCabecalho';
 const EMERGENCY_DATA_SAVED_AT_KEY = 'cei_data_emergency_saved_at';
 
 // Utilitário para parse seguro de JSON (evita crash silencioso em persistência)
@@ -170,6 +173,11 @@ export const DataProvider = ({ children }) => {
       };
     }
 
+    // logoEscola idêntico ao logoCabecalho ocupa o dobro do espaço à toa.
+    if (media.logoEscola && media.logoEscola === media.logoCabecalho) {
+      media.logoEscola = INSTITUTION_MEDIA_MESMO_LOGO;
+    }
+
     return {
       sanitizedInstitution,
       media: Object.keys(media).length > 0 ? media : null
@@ -224,15 +232,20 @@ export const DataProvider = ({ children }) => {
           return institution;
         }
 
+        const mediaResolvida = { ...media };
+        if (mediaResolvida.logoEscola === INSTITUTION_MEDIA_MESMO_LOGO) {
+          mediaResolvida.logoEscola = mediaResolvida.logoCabecalho || '';
+        }
+
         const institutionWithMedia = {
           ...institution,
-          ...media
+          ...mediaResolvida
         };
 
-        if (media.logoCabecalho) {
+        if (mediaResolvida.logoCabecalho) {
           institutionWithMedia.configRelatorios = {
             ...(institution.configRelatorios || {}),
-            logoUrl: media.logoCabecalho
+            logoUrl: mediaResolvida.logoCabecalho
           };
         }
 
@@ -3240,6 +3253,69 @@ export const DataProvider = ({ children }) => {
       }
     }
   }, [instituicoes, livros, patrimonio, clientes, seriesAcademicas, turmasAcademicas, emprestimos, usuarios, planos, notasFiscais, logAtividades, dadosCarregados]);
+
+  // ==================== AUTO-COMPRESSÃO DE LOGOS PESADOS ====================
+  // Logos enviados antes da compressão automática podem estourar a quota do
+  // localStorage. Ao detectar mídia acima do limite, recomprime uma única vez.
+  useEffect(() => {
+    if (!dadosCarregados) return;
+
+    const LIMITE_MEDIA_PESADA = 400 * 1024; // ~400KB em caracteres base64
+    const ehMediaPesada = (valor) =>
+      typeof valor === 'string' && valor.startsWith('data:image') && valor.length > LIMITE_MEDIA_PESADA;
+
+    const temMediaPesada = instituicoes.some((inst) =>
+      ehMediaPesada(inst?.logoCabecalho) ||
+      ehMediaPesada(inst?.logoEscola) ||
+      ehMediaPesada(inst?.configRelatorios?.logoUrl)
+    );
+    if (!temMediaPesada) return;
+
+    let cancelado = false;
+
+    (async () => {
+      const atualizadas = await Promise.all(instituicoes.map(async (inst) => {
+        let mudou = false;
+        const nova = { ...inst };
+
+        for (const campo of ['logoCabecalho', 'logoEscola']) {
+          const valor = inst?.[campo];
+          if (!ehMediaPesada(valor)) continue;
+          // Reaproveita a compressão do outro campo quando a imagem é a mesma.
+          if (campo === 'logoEscola' && valor === inst?.logoCabecalho && nova.logoCabecalho !== valor) {
+            nova.logoEscola = nova.logoCabecalho;
+            mudou = true;
+            continue;
+          }
+          const comprimida = await comprimirImagemDataUrl(valor, { maxDimensao: 600 });
+          if (comprimida !== valor) {
+            nova[campo] = comprimida;
+            mudou = true;
+          }
+        }
+
+        const logoUrlAtual = inst?.configRelatorios?.logoUrl;
+        if (ehMediaPesada(logoUrlAtual)) {
+          const logoUrlNova = logoUrlAtual === inst?.logoCabecalho
+            ? nova.logoCabecalho
+            : await comprimirImagemDataUrl(logoUrlAtual, { maxDimensao: 600 });
+          if (logoUrlNova !== logoUrlAtual) {
+            nova.configRelatorios = { ...(nova.configRelatorios || {}), logoUrl: logoUrlNova };
+            mudou = true;
+          }
+        }
+
+        return mudou ? nova : inst;
+      }));
+
+      if (!cancelado && atualizadas.some((nova, indice) => nova !== instituicoes[indice])) {
+        console.warn('🗜️ [MEDIA] Logos pesados recomprimidos para liberar espaço de armazenamento.');
+        setInstituicoes(atualizadas);
+      }
+    })();
+
+    return () => { cancelado = true; };
+  }, [dadosCarregados, instituicoes]);
 
   // ==================== PONTO DE RESTAURAÇÃO AO FECHAR ====================
   // Salva backup nomeado e empurra dados à nuvem ao fechar/ocultar página

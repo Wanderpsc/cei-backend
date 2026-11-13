@@ -39,6 +39,7 @@ import {
 } from '@mui/material';
 import { Add, Edit, Delete, Search, PhotoCamera, Upload, Close, QrCodeScanner, GetApp, Description, PrintOutlined, Label, WarningAmber, LibraryAdd, AddCircleOutline } from '@mui/icons-material';
 import { useData } from '../context/DataContext';
+import { comprimirImagemArquivo, comprimirImagemDataUrl } from '../utils/imageUtils';
 import TermoEmprestimo from '../components/TermoEmprestimo';
 
 function LivrosPage() {
@@ -163,31 +164,37 @@ function LivrosPage() {
     setOpen(true);
   };
 
-  const handleFileUpload = (event) => {
+  const handleFileUpload = async (event) => {
     const file = event.target.files[0];
-    if (file) {
-      // Verificar se é imagem
-      if (!file.type.startsWith('image/')) {
-        alert('Por favor, selecione apenas arquivos de imagem');
-        return;
-      }
-      
-      // Verificar tamanho (máximo 2MB)
-      if (file.size > 2 * 1024 * 1024) {
-        alert('A imagem deve ter no máximo 2MB');
-        return;
-      }
-      
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setFormData({ ...formData, fotoUrl: reader.result });
-      };
-      reader.readAsDataURL(file);
+    // Zera o valor para permitir re-seleção do mesmo arquivo
+    event.target.value = '';
+    if (!file) return;
+
+    // Verificar se é imagem
+    if (!file.type.startsWith('image/')) {
+      alert('Por favor, selecione apenas arquivos de imagem');
+      return;
+    }
+
+    // Verificar tamanho (máximo 10MB; será comprimida abaixo)
+    if (file.size > 10 * 1024 * 1024) {
+      alert('A imagem deve ter no máximo 10MB');
+      return;
+    }
+
+    try {
+      // Comprime/redimensiona para não estourar a quota do localStorage.
+      const imagemComprimida = await comprimirImagemArquivo(file, { maxDimensao: 600 });
+      setFormData({ ...formData, fotoUrl: imagemComprimida });
+    } catch (error) {
+      console.error('Erro ao processar imagem da capa:', error);
+      alert('Não foi possível processar a imagem selecionada');
     }
   };
 
-  const handleCameraCapture = (imageData) => {
-    setFormData({ ...formData, fotoUrl: imageData });
+  const handleCameraCapture = async (imageData) => {
+    const imagemComprimida = await comprimirImagemDataUrl(imageData, { maxDimensao: 600 });
+    setFormData({ ...formData, fotoUrl: imagemComprimida });
     setCameraOpen(false);
   };
 
